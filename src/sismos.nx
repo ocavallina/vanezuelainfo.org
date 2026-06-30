@@ -1,0 +1,243 @@
+// src/sismos.nx — Sismos recientes en Venezuela desde la API publica del EMSC.
+//
+// Fuente: EMSC (www.seismicportal.eu), formato FDSN "text". Se eligio EMSC
+// porque earthquake.usgs.gov esta interceptado/inalcanzable desde este host;
+// EMSC expone EXACTAMENTE las mismas columnas FDSN, asi que el parser no cambia.
+//
+// Formato de columnas FDSN estandar (0-based):
+//   0 EventID | 1 Time | 2 Latitude | 3 Longitude | 4 Depth/km | 5 Author |
+//   6 Catalog | 7 Contributor | 8 ContributorID | 9 MagType | 10 Magnitude |
+//   11 MagAuthor | 12 EventLocationName
+// La primera linea es una cabecera que empieza con '#'.
+
+import "src/md"
+
+// Caché del cuerpo CRUDO de EMSC (no del HTML), para poder tanto renderizar la
+// lista como buscar un evento por id para su pagina de detalle. Holders de 1
+// elemento (el literal global de array no se materializa fiable; se asignan en
+// sismos_init() — mismo patron que __serve_app en nyx-serve).
+var __emsc_body: Array = [""]
+var __emsc_ts: Array = [0]
+
+// TTL de caché en segundos (5 minutos).
+const CACHE_TTL: int = 300
+
+pub fn sismos_init() {
+    __emsc_body = [""]
+    __emsc_ts = [0]
+}
+
+fn emsc_url() -> String {
+    // EMSC FDSN: ruta /event/1/ y parametros minmag/minlat/maxlat/minlon/maxlon.
+    // Bounding box de Venezuela: lat 0..13, lon -74..-59. Por tiempo, mag>=3.0.
+    // EMSC no publica sismos M<3 en Venezuela (esos solo los registra FUNVISIS),
+    // asi que pedir menos de 3 no aporta nada. render_quakes ademas filtra a
+    // eventos cuyo lugar contiene VENEZUELA.
+    var u: String = "https://www.seismicportal.eu/fdsnws/event/1/query?format=text"
+    u = u + "&orderby=time&limit=200&minmag=3.0"
+    u = u + "&minlat=0&maxlat=13&minlon=-74&maxlon=-59"
+    return u
+}
+
+// Cuerpo FDSN cacheado; descarga del EMSC si esta vacio o vencido.
+fn emsc_body() -> String {
+    let now: int = time()
+    let last: int = __emsc_ts[0]
+    var body: String = __emsc_body[0]
+    if body.length() == 0 or now - last > CACHE_TTL {
+        let fresh: String = https_get(emsc_url())
+        if fresh.length() > 0 {
+            __emsc_body[0] = fresh
+            __emsc_ts[0] = now
+            body = fresh
+        }
+    }
+    return body
+}
+
+// Epoch (segundos) de la ultima descarga exitosa.
+pub fn sismos_ts() -> int {
+    return __emsc_ts[0]
+}
+
+fn attr_escape(s: String) -> String {
+    return html_escape(s).replace("\"", "&quot;")
+}
+
+// "2026-06-28T12:34:56.789Z" -> "2026-06-28 12:34"
+pub fn format_time(t: String) -> String {
+    let tp: int = t.indexOf("T")
+    if tp < 0 {
+        return t
+    }
+    let date: String = t.substring(0, tp)
+    let rest: String = t.substring(tp + 1, t.length())
+    var hm: String = rest
+    if rest.length() >= 5 {
+        hm = rest.substring(0, 5)
+    }
+    return date + " " + hm
+}
+
+fn fmt_depth(d: String) -> String {
+    if d.length() == 0 {
+        return "-"
+    }
+    return d + " km"
+}
+
+// Parser puro: cuerpo FDSN text -> tabla HTML. "" si no hay nada parseable.
+pub fn render_quakes(body: String) -> String {
+    if body.length() == 0 {
+        return ""
+    }
+    let lines: Array = body.split("\n")
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<table class=\"quakes\">\n")
+    sb.append("<thead><tr><th>Fecha</th><th>Magnitud</th><th>Profundidad</th><th>Lugar</th><th>Distancia</th></tr></thead>\n")
+    sb.append("<tbody>\n")
+    var i: int = 0
+    var count: int = 0
+    while i < lines.length() {
+        let line: String = lines[i]
+        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
+            let parts: Array = line.split("|")
+            if parts.length() >= 13 {
+                let eid: String = md_trim(parts[0])
+                let t: String = md_trim(parts[1])
+                let lat: String = md_trim(parts[2])
+                let lon: String = md_trim(parts[3])
+                let depth: String = md_trim(parts[4])
+                let mtype: String = md_trim(parts[9])
+                let mag: String = md_trim(parts[10])
+                let place: String = md_trim(parts[12])
+                if place.indexOf("VENEZUELA") >= 0 {
+                let ft: String = format_time(t)
+                let sp: int = ft.indexOf(" ")
+                var fdia: String = ft
+                var fhora: String = ""
+                if sp >= 0 {
+                    fdia = ft.substring(0, sp)
+                    fhora = ft.substring(sp + 1, ft.length())
+                }
+                sb.append("<tr data-id=\"")
+                sb.append(attr_escape(eid))
+                sb.append("\" data-lat=\"")
+                sb.append(attr_escape(lat))
+                sb.append("\" data-lon=\"")
+                sb.append(attr_escape(lon))
+                sb.append("\" data-mag=\"")
+                sb.append(attr_escape(mag))
+                sb.append("\" data-type=\"")
+                sb.append(attr_escape(mtype))
+                sb.append("\" data-depth=\"")
+                sb.append(attr_escape(depth))
+                sb.append("\" data-time=\"")
+                sb.append(attr_escape(ft))
+                sb.append("\" data-iso=\"")
+                sb.append(attr_escape(t))
+                sb.append("\" data-place=\"")
+                sb.append(attr_escape(place))
+                sb.append("\"><td class=\"fh\"><span class=\"f-dia\">")
+                sb.append(html_escape(fdia))
+                sb.append("</span><span class=\"f-hora\">")
+                sb.append(html_escape(fhora))
+                sb.append("</span></td><td class=\"mag\">")
+                sb.append(html_escape(mag))
+                sb.append("</td><td>")
+                sb.append(html_escape(fmt_depth(depth)))
+                sb.append("</td><td>")
+                sb.append(html_escape(place))
+                sb.append("</td><td class=\"dist\">&mdash;</td></tr>\n")
+                count = count + 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    sb.append("</tbody>\n</table>\n")
+    if count == 0 {
+        return "<p>No hay sismos recientes registrados en la zona.</p>"
+    }
+    return sb.to_string()
+}
+
+// HTML de la lista (usa el cuerpo cacheado).
+pub fn sismos_section() -> String {
+    let body: String = emsc_body()
+    if body.length() == 0 {
+        return "<p class=\"error\">No se pudieron cargar los sismos en este momento. Intenta de nuevo en unos minutos.</p>"
+    }
+    return render_quakes(body)
+}
+
+// Slides para el rotador de la portada: los N sismos mas recientes de Venezuela.
+pub fn sismos_rotator_html(maxn: int) -> String {
+    let body: String = emsc_body()
+    if body.length() == 0 {
+        return ""
+    }
+    let lines: Array = body.split("\n")
+    var sb: StringBuilder = StringBuilder.new()
+    var i: int = 0
+    var cnt: int = 0
+    while i < lines.length() and cnt < maxn {
+        let line: String = lines[i]
+        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
+            let parts: Array = line.split("|")
+            if parts.length() >= 13 {
+                let place: String = md_trim(parts[12])
+                if place.indexOf("VENEZUELA") >= 0 {
+                    let mag: String = md_trim(parts[10])
+                    let t: String = md_trim(parts[1])
+                    sb.append("<div class=\"rot-slide\"><span class=\"news-src mag-badge\">M ")
+                    sb.append(html_escape(mag))
+                    sb.append("</span><span class=\"rot-title\">")
+                    sb.append(html_escape(place))
+                    sb.append("</span><time class=\"news-date\" data-ts=\"")
+                    sb.append(attr_escape(t))
+                    sb.append("\"></time></div>\n")
+                    cnt = cnt + 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+// Pre-calienta la caché de sismos (para el hilo de refresco).
+pub fn sismos_warm() {
+    let b: String = emsc_body()
+    if b.length() > 0 {
+        __emsc_ts[0] = time()
+    }
+}
+
+// Busca un evento por EventID en el cuerpo cacheado.
+// Devuelve [id, time, lat, lon, depth, mtype, mag, place] o [] si no existe.
+pub fn quake_by_id(id: String) -> Array {
+    let body: String = emsc_body()
+    if body.length() == 0 {
+        let e: Array = []
+        return e
+    }
+    let lines: Array = body.split("\n")
+    var i: int = 0
+    while i < lines.length() {
+        let line: String = lines[i]
+        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
+            let parts: Array = line.split("|")
+            if parts.length() >= 13 {
+                let eid: String = md_trim(parts[0])
+                if eid == id {
+                    let r: Array = [eid, md_trim(parts[1]), md_trim(parts[2]), md_trim(parts[3]), md_trim(parts[4]), md_trim(parts[9]), md_trim(parts[10]), md_trim(parts[12])]
+                    return r
+                }
+            }
+        }
+        i = i + 1
+    }
+    let e: Array = []
+    return e
+}

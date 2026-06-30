@@ -1,0 +1,490 @@
+// src/news.nx — Noticias: agrega RSS de medios venezolanos (server-side).
+//
+// Por que server-side: los RSS no mandan CORS, asi que un fetch client-side
+// fallaria. Se baja con https_get (TLS) y se parsea con un parser RSS minimo
+// (no hay XML en std; mismo enfoque de scanning que md.nx). Se cachea ~15 min.
+// Solo se muestra titular + resumen corto + enlace al original (no se republica).
+
+import "src/md"
+
+// Caché de HTML renderizado (holders init en news_init(); el literal de array
+// global multi-elemento se inicializa vacio -> hay que asignarlo en una funcion).
+var __news_full: Array = [""]
+var __news_prev: Array = [""]
+var __news_rot: Array = [""]
+var __news_ts: Array = [0]
+var __bvc_list: Array = [""]
+var __bvc_ibc: Array = [""]
+var __bvc_ts: Array = [0]
+
+const NEWS_TTL: int = 900
+
+pub fn news_init() {
+    __news_full = [""]
+    __news_prev = [""]
+    __news_rot = [""]
+    __news_ts = [0]
+    __bvc_list = [""]
+    __bvc_ibc = [""]
+    __bvc_ts = [0]
+}
+
+pub fn news_ts() -> int {
+    return __news_ts[0]
+}
+
+fn aesc2(s: String) -> String {
+    return html_escape(s).replace("\"", "&quot;")
+}
+
+// indexOf con offset de inicio (std no lo trae).
+fn find_from(hay: String, needle: String, start: int) -> int {
+    if start >= hay.length() {
+        return -1
+    }
+    let sub: String = hay.substring(start, hay.length())
+    let i: int = sub.indexOf(needle)
+    if i < 0 {
+        return -1
+    }
+    return start + i
+}
+
+fn strip_cdata(s: String) -> String {
+    let a: int = s.indexOf("<![CDATA[")
+    if a < 0 {
+        return s
+    }
+    let rest: String = s.substring(a + 9, s.length())
+    let b: int = rest.indexOf("]]>")
+    if b < 0 {
+        return rest
+    }
+    return rest.substring(0, b)
+}
+
+// Texto entre <tag ...> y </tag> dentro de un item (primera aparicion).
+fn tag_text(item: String, tag: String) -> String {
+    let oi: int = item.indexOf("<" + tag)
+    if oi < 0 {
+        return ""
+    }
+    let gt: int = find_from(item, ">", oi)
+    if gt < 0 {
+        return ""
+    }
+    let ci: int = find_from(item, "</" + tag + ">", gt)
+    if ci < 0 {
+        return ""
+    }
+    let raw: String = item.substring(gt + 1, ci)
+    return md_trim(strip_cdata(raw))
+}
+
+// Quita etiquetas HTML (todo lo que va entre '<' y '>').
+fn strip_tags(s: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    var depth: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if c == 60 {
+            depth = depth + 1
+        } else if c == 62 {
+            if depth > 0 {
+                depth = depth - 1
+            }
+        } else {
+            if depth == 0 {
+                sb.append(s.substring(i, i + 1))
+            }
+        }
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+// Desescapa entidades comunes (a ASCII aproximado donde aplica).
+fn unescape(s: String) -> String {
+    var o: String = s.replace("&lt;", "<")
+    o = o.replace("&gt;", ">")
+    o = o.replace("&quot;", "\"")
+    o = o.replace("&#039;", "'")
+    o = o.replace("&#39;", "'")
+    o = o.replace("&#8217;", "'")
+    o = o.replace("&#8216;", "'")
+    o = o.replace("&#8220;", "\"")
+    o = o.replace("&#8221;", "\"")
+    o = o.replace("&#8211;", "-")
+    o = o.replace("&#8212;", "-")
+    o = o.replace("&#8230;", "...")
+    o = o.replace("&hellip;", "...")
+    o = o.replace("&nbsp;", " ")
+    o = o.replace("&amp;", "&")
+    return o
+}
+
+// Trunca en el ultimo espacio antes de maxb bytes (evita cortar a media palabra).
+fn truncate_txt(s: String, maxb: int) -> String {
+    if s.length() <= maxb {
+        return s
+    }
+    let cut: String = s.substring(0, maxb)
+    var k: int = cut.length() - 1
+    var found: int = -1
+    var go: bool = true
+    while go and k >= 0 {
+        if cut.charAt(k) == 32 {
+            found = k
+            go = false
+        }
+        k = k - 1
+    }
+    if found > 40 {
+        return cut.substring(0, found) + "..."
+    }
+    return cut + "..."
+}
+
+fn clean_desc(raw: String) -> String {
+    let t: String = unescape(strip_tags(raw))
+    return truncate_txt(md_trim(t), 180)
+}
+
+fn month_num(m: String) -> int {
+    if m == "Jan" { return 1 }
+    if m == "Feb" { return 2 }
+    if m == "Mar" { return 3 }
+    if m == "Apr" { return 4 }
+    if m == "May" { return 5 }
+    if m == "Jun" { return 6 }
+    if m == "Jul" { return 7 }
+    if m == "Aug" { return 8 }
+    if m == "Sep" { return 9 }
+    if m == "Oct" { return 10 }
+    if m == "Nov" { return 11 }
+    if m == "Dec" { return 12 }
+    return 0
+}
+
+// "Mon, 29 Jun 2026 23:58:00 +0000" -> 202606292358 (clave de orden desc)
+fn rfc822_key(s: String) -> int {
+    let parts: Array = s.split(" ")
+    if parts.length() < 5 {
+        return 0
+    }
+    let pday: String = parts[1]
+    let pmon: String = parts[2]
+    let pyr: String = parts[3]
+    let ptm: String = parts[4]
+    let day: int = string_to_int(md_trim(pday))
+    let mon: int = month_num(md_trim(pmon))
+    let yr: int = string_to_int(md_trim(pyr))
+    let tm: String = md_trim(ptm)
+    var hh: int = 0
+    var mm: int = 0
+    let c1: int = tm.indexOf(":")
+    if c1 > 0 {
+        hh = string_to_int(tm.substring(0, c1))
+        let rest: String = tm.substring(c1 + 1, tm.length())
+        let c2: int = rest.indexOf(":")
+        if c2 > 0 {
+            mm = string_to_int(rest.substring(0, c2))
+        } else {
+            mm = string_to_int(rest)
+        }
+    }
+    return ((yr * 100 + mon) * 100 + day) * 10000 + hh * 100 + mm
+}
+
+// Origin (esquema+host) de una URL: "https://x.com/a" -> "https://x.com".
+fn origin_of(url: String) -> String {
+    let p: int = url.indexOf("://")
+    if p < 0 {
+        return ""
+    }
+    let rest: String = url.substring(p + 3, url.length())
+    let s: int = rest.indexOf("/")
+    if s < 0 {
+        return url
+    }
+    return url.substring(0, p + 3 + s)
+}
+
+// Primera imagen del contenido (absolutizada y forzada a https).
+fn first_img(content: String, link: String) -> String {
+    let ii: int = content.indexOf("<img")
+    if ii < 0 {
+        return ""
+    }
+    let si: int = find_from(content, "src=\"", ii)
+    if si < 0 {
+        return ""
+    }
+    let after: String = content.substring(si + 5, content.length())
+    let q: int = after.indexOf("\"")
+    if q < 0 {
+        return ""
+    }
+    var url: String = after.substring(0, q)
+    if url.startsWith("//") {
+        url = "https:" + url
+    } else if url.startsWith("/") {
+        url = origin_of(link) + url
+    }
+    if url.startsWith("http://") {
+        url = "https://" + url.substring(7, url.length())
+    }
+    return url
+}
+
+// Parsea un cuerpo RSS y agrega items a `out`.
+// item = [title, link, pub, src, desc, key, img, excerpt].
+fn parse_feed(xml: String, source: String, out: Array, cap: int) {
+    var pos: int = 0
+    var n: int = 0
+    var go: bool = true
+    while go and n < cap {
+        let it: int = find_from(xml, "<item", pos)
+        if it < 0 {
+            go = false
+        } else {
+            let ite: int = find_from(xml, "</item>", it)
+            if ite < 0 {
+                go = false
+            } else {
+                let item: String = xml.substring(it, ite)
+                let title: String = unescape(tag_text(item, "title"))
+                let link: String = tag_text(item, "link")
+                let pdate: String = tag_text(item, "pubDate")
+                let desc: String = clean_desc(tag_text(item, "description"))
+                let content: String = tag_text(item, "content:encoded")
+                var img: String = ""
+                var excerpt: String = desc
+                if content.length() > 0 {
+                    img = first_img(content, link)
+                    excerpt = truncate_txt(md_trim(unescape(strip_tags(content))), 600)
+                }
+                if title.length() > 0 and link.length() > 0 {
+                    let key: int = rfc822_key(pdate)
+                    let row: Array = [title, link, pdate, source, desc, key, img, excerpt]
+                    out.push(row)
+                    n = n + 1
+                }
+                pos = ite + 7
+            }
+        }
+    }
+}
+
+fn fetch_into(out: Array, url: String, source: String) {
+    let xml: String = https_get(url)
+    if xml.length() > 0 {
+        parse_feed(xml, source, out, 15)
+    }
+}
+
+// Bubble sort por clave (item[5]) descendente.
+fn sort_desc(items: Array) {
+    let n: int = items.length()
+    var a: int = 0
+    while a < n {
+        var b: int = 0
+        while b + 1 < n {
+            let x: Array = items[b]
+            let y: Array = items[b + 1]
+            let kx: int = x[5]
+            let ky: int = y[5]
+            if kx < ky {
+                items[b] = y
+                items[b + 1] = x
+            }
+            b = b + 1
+        }
+        a = a + 1
+    }
+}
+
+fn render_list(items: Array, maxn: int, compact: bool) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = items.length()
+    var i: int = 0
+    while i < maxn and i < n {
+        let it: Array = items[i]
+        let title: String = it[0]
+        let link: String = it[1]
+        let pdate: String = it[2]
+        let src: String = it[3]
+        let desc: String = it[4]
+        let img: String = it[6]
+        let excerpt: String = it[7]
+        if compact {
+            sb.append("<a class=\"news-item\" href=\"")
+            sb.append(aesc2(link))
+            sb.append("\" target=\"_blank\" rel=\"noopener nofollow\"><span class=\"news-src\">")
+            sb.append(html_escape(src))
+            sb.append("</span><span class=\"news-title\">")
+            sb.append(html_escape(title))
+            sb.append("</span><time class=\"news-date\" data-ts=\"")
+            sb.append(aesc2(pdate))
+            sb.append("\"></time></a>\n")
+        } else {
+            sb.append("<article class=\"news-item\" tabindex=\"0\"><span class=\"news-src\">")
+            sb.append(html_escape(src))
+            sb.append("</span><span class=\"news-title\">")
+            sb.append(html_escape(title))
+            sb.append("</span><time class=\"news-date\" data-ts=\"")
+            sb.append(aesc2(pdate))
+            sb.append("\"></time>")
+            if desc.length() > 0 {
+                sb.append("<span class=\"news-sum\">")
+                sb.append(html_escape(desc))
+                sb.append("</span>")
+            }
+            sb.append("<div class=\"news-detail\">")
+            if img.length() > 0 {
+                sb.append("<img class=\"news-img\" loading=\"lazy\" alt=\"\" src=\"")
+                sb.append(aesc2(img))
+                sb.append("\">")
+            }
+            if excerpt.length() > 0 {
+                sb.append("<p class=\"news-full\">")
+                sb.append(html_escape(excerpt))
+                sb.append("</p>")
+            }
+            sb.append("<a class=\"btn-map\" href=\"")
+            sb.append(aesc2(link))
+            sb.append("\" target=\"_blank\" rel=\"noopener nofollow\">Leer completo en ")
+            sb.append(html_escape(src))
+            sb.append(" &rarr;</a></div></article>\n")
+        }
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+// Slides para el rotador de la portada (titular suelto, sin enlace propio).
+fn render_slides(items: Array, maxn: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = items.length()
+    var i: int = 0
+    while i < maxn and i < n {
+        let it: Array = items[i]
+        let title: String = it[0]
+        let pdate: String = it[2]
+        let src: String = it[3]
+        sb.append("<div class=\"rot-slide\"><span class=\"news-src\">")
+        sb.append(html_escape(src))
+        sb.append("</span><span class=\"rot-title\">")
+        sb.append(html_escape(title))
+        sb.append("</span><time class=\"news-date\" data-ts=\"")
+        sb.append(aesc2(pdate))
+        sb.append("\"></time></div>\n")
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+fn refresh() {
+    var items: Array = []
+    fetch_into(items, "https://efectococuyo.com/feed/", "Efecto Cocuyo")
+    fetch_into(items, "https://elpitazo.net/feed/", "El Pitazo")
+    fetch_into(items, "https://runrun.es/feed/", "Runrun.es")
+    fetch_into(items, "https://cronica.uno/feed/", "Cronica Uno")
+    fetch_into(items, "https://www.elnacional.com/feed/", "El Nacional")
+    sort_desc(items)
+    __news_full[0] = render_list(items, 60, false)
+    __news_prev[0] = render_list(items, 5, true)
+    __news_rot[0] = render_slides(items, 6)
+}
+
+fn ensure_fresh() {
+    let now: int = time()
+    let last: int = __news_ts[0]
+    let cur: String = __news_full[0]
+    if cur.length() == 0 or now - last > NEWS_TTL {
+        refresh()
+        __news_ts[0] = now
+    }
+}
+
+// HTML de la lista completa (para /noticias).
+pub fn news_full_html() -> String {
+    ensure_fresh()
+    let h: String = __news_full[0]
+    if h.length() == 0 {
+        return "<p class=\"error\">No se pudieron cargar las noticias en este momento.</p>"
+    }
+    return h
+}
+
+// HTML del avance (5 titulares, para la portada). "" si no hay datos.
+pub fn news_preview_html() -> String {
+    ensure_fresh()
+    return __news_prev[0]
+}
+
+// HTML de los slides para el rotador de la portada. "" si no hay datos.
+pub fn news_rotator_html() -> String {
+    ensure_fresh()
+    return __news_rot[0]
+}
+
+// ---- Bolsa de Caracas (comunicados + IBC) via RSS de bolsadecaracas.com ----
+fn bvc_refresh() {
+    var items: Array = []
+    let xml: String = https_get("https://www.bolsadecaracas.com/feed/")
+    if xml.length() > 0 {
+        parse_feed(xml, "BVC", items, 20)
+    }
+    __bvc_list[0] = render_list(items, 12, false)
+    var ibc: String = ""
+    var i: int = 0
+    var go: bool = true
+    while go and i < items.length() {
+        let it: Array = items[i]
+        let title: String = it[0]
+        if title.indexOf("Caracas cerr") >= 0 {
+            ibc = title
+            go = false
+        }
+        i = i + 1
+    }
+    __bvc_ibc[0] = ibc
+}
+
+fn bvc_ensure() {
+    let now: int = time()
+    let last: int = __bvc_ts[0]
+    let cur: String = __bvc_list[0]
+    if cur.length() == 0 or now - last > NEWS_TTL {
+        bvc_refresh()
+        __bvc_ts[0] = now
+    }
+}
+
+pub fn bvc_list_html() -> String {
+    bvc_ensure()
+    let h: String = __bvc_list[0]
+    if h.length() == 0 {
+        return "<p class=\"error\">No se pudieron cargar los comunicados de la BVC.</p>"
+    }
+    return h
+}
+
+// Titular del ultimo cierre del Indice Bursatil Caracas (o "").
+pub fn bvc_ibc_text() -> String {
+    bvc_ensure()
+    return __bvc_ibc[0]
+}
+
+// Fuerza el refresco de noticias + BVC (hilo de actualizacion periodica y
+// pre-calentado al arrancar).
+pub fn news_warm() {
+    refresh()
+    bvc_refresh()
+    let now: int = time()
+    __news_ts[0] = now
+    __bvc_ts[0] = now
+}

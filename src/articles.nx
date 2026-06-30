@@ -1,0 +1,180 @@
+// src/articles.nx — Carga de articulos desde content/ y render de portada/articulo.
+//
+// No existe un builtin de listado de directorios, asi que la lista de articulos
+// vive en content/index.txt (un slug por linea). Cada articulo es
+// content/articles/<slug>.md con front-matter (title/date/summary) + cuerpo.
+
+import "src/md"
+
+// Valida que el slug sea seguro para construir una ruta de archivo:
+// solo minusculas, digitos y guiones. Evita path traversal (../, /, .).
+fn is_valid_slug(s: String) -> bool {
+    let n: int = s.length()
+    if n == 0 or n > 80 {
+        return false
+    }
+    var i: int = 0
+    var ok: bool = true
+    while i < n {
+        let c: int = s.charAt(i)
+        let is_lower: bool = c >= 97 and c <= 122
+        let is_digit: bool = c >= 48 and c <= 57
+        let is_dash: bool = c == 45
+        if !(is_lower or is_digit or is_dash) {
+            ok = false
+        }
+        i = i + 1
+    }
+    return ok
+}
+
+// Convierte "2026-06-29" en 20260629 para poder ordenar cronologicamente.
+fn date_key(d: String) -> int {
+    if d.length() == 0 {
+        return 0
+    }
+    let digits: String = d.replace("-", "")
+    return string_to_int(digits)
+}
+
+// Lee content/index.txt y devuelve los slugs validos.
+fn load_slugs() -> Array {
+    let raw: String = read_file("content/index.txt")
+    var slugs: Array = []
+    if raw.length() == 0 {
+        return slugs
+    }
+    let lines: Array = raw.split("\n")
+    var i: int = 0
+    while i < lines.length() {
+        let s: String = md_trim(lines[i])
+        if s.length() > 0 and is_valid_slug(s) {
+            slugs.push(s)
+        }
+        i = i + 1
+    }
+    return slugs
+}
+
+// Devuelve [slug, title, date, summary] de un articulo, o [] si no existe.
+fn article_meta(slug: String) -> Array {
+    let raw: String = read_file("content/articles/" + slug + ".md")
+    if raw.length() == 0 {
+        let empty: Array = []
+        return empty
+    }
+    let fm: Array = parse_front_matter(raw)
+    // fm = [title, date, summary, body]
+    let title: String = fm[0]
+    let date: String = fm[1]
+    let summary: String = fm[2]
+    let meta: Array = [slug, title, date, summary]
+    return meta
+}
+
+// Lista de articulos [ [slug,title,date,summary], ... ] ordenada por fecha desc.
+pub fn list_articles() -> Array {
+    let slugs: Array = load_slugs()
+    var metas: Array = []
+    var i: int = 0
+    while i < slugs.length() {
+        let m: Array = article_meta(slugs[i])
+        if m.length() > 0 {
+            metas.push(m)
+        }
+        i = i + 1
+    }
+
+    // Bubble sort por date_key descendente (pocos articulos, simple y suficiente).
+    var a: int = 0
+    while a < metas.length() {
+        var b: int = 0
+        while b + 1 < metas.length() {
+            let m1: Array = metas[b]
+            let m2: Array = metas[b + 1]
+            let d1: int = date_key(m1[2])
+            let d2: int = date_key(m2[2])
+            if d1 < d2 {
+                metas[b] = m2
+                metas[b + 1] = m1
+            }
+            b = b + 1
+        }
+        a = a + 1
+    }
+    return metas
+}
+
+// HTML de la portada: hero + tarjetas de articulos.
+pub fn render_home() -> String {
+    let arts: Array = list_articles()
+    var sb: StringBuilder = StringBuilder.new()
+
+    sb.append("<section class=\"hero\">\n")
+    sb.append("<h1>Venezuela al dia</h1>\n")
+    sb.append("<p class=\"lede\">Noticias, informacion y monitoreo sismico en vivo.</p>\n")
+    sb.append("<a class=\"cta\" href=\"/sismos\">Ver sismos recientes &rarr;</a>\n")
+    sb.append("</section>\n")
+
+    sb.append("<section class=\"articles\">\n")
+    sb.append("<h2>Articulos</h2>\n")
+    if arts.length() == 0 {
+        sb.append("<p>Aun no hay articulos publicados.</p>\n")
+    }
+    sb.append("<div class=\"card-grid\">\n")
+    var i: int = 0
+    while i < arts.length() {
+        let art: Array = arts[i]
+        let slug: String = art[0]
+        let title: String = art[1]
+        let date: String = art[2]
+        let summary: String = art[3]
+        sb.append("<a class=\"card\" href=\"/articulo/")
+        sb.append(slug)
+        sb.append("\">\n<h3>")
+        sb.append(html_escape(title))
+        sb.append("</h3>\n")
+        if date.length() > 0 {
+            sb.append("<span class=\"card-date\">")
+            sb.append(html_escape(date))
+            sb.append("</span>\n")
+        }
+        sb.append("<p>")
+        sb.append(html_escape(summary))
+        sb.append("</p>\n</a>\n")
+        i = i + 1
+    }
+    sb.append("</div>\n</section>\n")
+    return sb.to_string()
+}
+
+// HTML de un articulo individual, o "" si el slug no es valido o no existe.
+pub fn render_article(slug: String) -> String {
+    if !is_valid_slug(slug) {
+        return ""
+    }
+    let raw: String = read_file("content/articles/" + slug + ".md")
+    if raw.length() == 0 {
+        return ""
+    }
+    let fm: Array = parse_front_matter(raw)
+    let title: String = fm[0]
+    let date: String = fm[1]
+    let body: String = fm[3]
+
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<article class=\"article\">\n")
+    sb.append("<a class=\"back\" href=\"/\">&larr; Volver al inicio</a>\n")
+    sb.append("<h1 class=\"article-title\">")
+    sb.append(html_escape(title))
+    sb.append("</h1>\n")
+    if date.length() > 0 {
+        sb.append("<p class=\"article-date\">")
+        sb.append(html_escape(date))
+        sb.append("</p>\n")
+    }
+    sb.append("<div class=\"article-body\">\n")
+    sb.append(render_markdown(body))
+    sb.append("</div>\n</article>\n")
+    return sb.to_string()
+}

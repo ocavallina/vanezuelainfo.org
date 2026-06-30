@@ -1,0 +1,5 @@
+/venezuelainfo-org
+*.bak
+*.bak.*
+*.o
+*.ll

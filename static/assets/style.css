@@ -1,0 +1,483 @@
+/* venezuelainfo.org — estilos. Paleta inspirada en la bandera de Venezuela. */
+:root {
+  --amarillo: #FCDD09;
+  --azul: #00247D;
+  --rojo: #CF142B;
+  --tinta: #14213d;
+  --gris: #5b6472;
+  --fondo: #f7f8fb;
+  --tarjeta: #ffffff;
+  --borde: #e6e8ef;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--tinta);
+  background: var(--fondo);
+  line-height: 1.6;
+}
+
+a { color: var(--azul); }
+
+/* ---- Header ---- */
+.flag-stripe {
+  height: 6px;
+  background: linear-gradient(to bottom,
+    var(--amarillo) 0 33.33%,
+    var(--azul) 33.33% 66.66%,
+    var(--rojo) 66.66% 100%);
+}
+.site-header {
+  background: var(--tarjeta);
+  border-bottom: 1px solid var(--borde);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-inner {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  font-weight: 800;
+  font-size: 1.35rem;
+  text-decoration: none;
+  color: var(--azul);
+  letter-spacing: -0.5px;
+}
+.brand span { color: var(--rojo); }
+.site-header nav a {
+  margin-left: 18px;
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--tinta);
+}
+.site-header nav a:hover { color: var(--rojo); }
+
+/* ---- Contenedor ---- */
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+/* ---- Hero ---- */
+.hero {
+  background: linear-gradient(135deg, var(--azul), #021a5c);
+  color: #fff;
+  border-radius: 16px;
+  padding: 44px 32px;
+  margin-bottom: 36px;
+}
+.hero h1 { margin: 0 0 8px; font-size: 2.2rem; }
+.hero .lede { margin: 0 0 20px; color: #d7e0f5; font-size: 1.1rem; }
+.cta {
+  display: inline-block;
+  background: var(--amarillo);
+  color: var(--tinta);
+  font-weight: 700;
+  padding: 11px 20px;
+  border-radius: 9px;
+  text-decoration: none;
+}
+.cta:hover { filter: brightness(0.95); }
+
+/* ---- Clima ---- */
+.weather {
+  background: linear-gradient(135deg, #0a3d91, #021a5c);
+  color: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+.weather-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.weather-head h2 { margin: 0; font-size: 1.15rem; }
+.w-city {
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+}
+.w-city option { color: #14213d; }
+.weather-body { margin-top: 10px; }
+.w-main { display: flex; align-items: center; gap: 12px; }
+.w-emoji { font-size: 2.4rem; line-height: 1; }
+.w-temp { font-size: 2.4rem; font-weight: 800; }
+.w-desc { font-size: 1.05rem; color: #d7e0f5; }
+.w-meta { margin-top: 4px; font-size: .85rem; color: #aebde6; }
+.weather-card { display: block; text-decoration: none; color: #fff; transition: transform .12s ease; }
+.weather-card:hover { transform: translateY(-2px); }
+.w-city-name { color: #d7e0f5; font-weight: 600; }
+.weather-more { margin-top: 10px; font-weight: 700; color: var(--amarillo); font-size: .9rem; }
+
+/* ---- Pagina /clima ---- */
+.clima h1 { color: var(--azul); margin: 6px 0 2px; }
+.clima .lede { color: var(--gris); margin-top: 0; }
+.clima-buscar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.clima-buscar input { flex: 1 1 200px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; }
+.clima-results { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.c-res { text-align: left; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 9px 12px; cursor: pointer; font: inherit; color: var(--tinta); }
+.c-res:hover { border-color: var(--azul); }
+.c-res small { color: var(--gris); }
+.clima-title { color: var(--azul); margin: 14px 0 6px; }
+.clima-h3 { color: var(--tinta); margin: 22px 0 8px; font-size: 1.05rem; }
+.clima-actual { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; }
+.ca-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ca-emoji { font-size: 2.6rem; }
+.ca-temp { font-size: 2.4rem; font-weight: 800; color: var(--tinta); }
+.ca-desc { color: var(--gris); font-size: 1.05rem; }
+.ca-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+.ca-grid > div { background: var(--fondo); border-radius: 8px; padding: 8px 10px; }
+.ca-grid span { display: block; color: var(--gris); font-size: .72rem; }
+.ca-grid b { color: var(--tinta); }
+.ca-sun { margin-top: 12px; color: var(--gris); font-size: .88rem; }
+.clima-horas { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.ch-item { flex: 0 0 auto; width: 64px; text-align: center; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 8px 4px; }
+.ch-h { display: block; font-size: .75rem; color: var(--gris); }
+.ch-e { display: block; font-size: 1.3rem; }
+.ch-t { display: block; font-weight: 700; }
+.ch-p { display: block; font-size: .72rem; color: var(--azul); }
+.clima-dias { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.cd-item { text-align: center; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 4px; }
+.cd-d { display: block; font-weight: 700; color: var(--azul); }
+.cd-e { display: block; font-size: 1.5rem; margin: 2px 0; }
+.cd-mx { font-weight: 700; }
+.cd-mn { color: var(--gris); margin-left: 4px; }
+.cd-p { display: block; font-size: .72rem; color: var(--azul); }
+.ca-aqi { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--tarjeta); border: 2px solid var(--borde); border-radius: 12px; padding: 12px 16px; }
+.aqi-num { font-size: 2rem; font-weight: 800; }
+.aqi-lab { font-weight: 700; color: var(--tinta); }
+.aqi-pm { color: var(--gris); font-size: .85rem; }
+
+/* ---- Finanzas (dolar BCV) ---- */
+.finanzas {
+  background: linear-gradient(135deg, #0f5132, #146c43);
+  color: #fff; border-radius: 16px; padding: 20px 24px; margin-bottom: 28px;
+}
+.fin-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fin-head h2 { margin: 0; font-size: 1.15rem; }
+.fin-tag { background: rgba(255,255,255,.18); padding: 3px 9px; border-radius: 6px; font-size: .72rem; font-weight: 700; }
+.fin-body { margin-top: 10px; }
+.fin-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.15); }
+.fin-row:last-of-type { border-bottom: 0; }
+.fin-lab { color: #d7f0e2; }
+.fin-val { font-size: 1.5rem; font-weight: 800; }
+.fin-brecha { margin-top: 6px; color: #ffe08a; font-weight: 700; font-size: .9rem; }
+.fin-meta { margin-top: 4px; color: #aed7be; font-size: .82rem; }
+.finanzas-card { display: block; text-decoration: none; color: #fff; transition: transform .12s ease; }
+.finanzas-card:hover { transform: translateY(-2px); }
+
+/* Pagina /finanzas */
+.finz h1 { color: var(--azul); margin: 6px 0 2px; }
+.finz .lede { color: var(--gris); margin-top: 0; }
+.finz-h { color: var(--tinta); margin: 22px 0 8px; font-size: 1.1rem; }
+.finz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.fz-item { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 12px 14px; }
+.fz-l { display: block; color: var(--gris); font-size: .78rem; }
+.fz-v { display: block; font-size: 1.4rem; font-weight: 800; color: var(--tinta); }
+.fz-s { display: block; color: var(--rojo); font-size: .78rem; font-weight: 600; }
+.finz-ibc { background: #0f5132; color: #fff; border-radius: 10px; padding: 12px 16px; font-weight: 700; margin-bottom: 10px; }
+
+/* ---- Articulos ---- */
+.articles h2 { font-size: 1.4rem; margin-bottom: 18px; }
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+}
+.card {
+  display: block;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(20,33,61,.08);
+  border-color: var(--amarillo);
+}
+.card h3 { margin: 0 0 6px; color: var(--azul); }
+.card-date { font-size: .82rem; color: var(--gris); }
+.card p { margin: 8px 0 0; color: var(--gris); }
+
+/* ---- Articulo ---- */
+.article { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 32px; }
+.back { display: inline-block; margin-bottom: 14px; text-decoration: none; font-weight: 600; }
+.article-title { margin: 0 0 4px; color: var(--azul); }
+.article-date { color: var(--gris); margin: 0 0 22px; font-size: .9rem; }
+.article-body h1, .article-body h2, .article-body h3 { color: var(--tinta); margin-top: 1.5em; }
+.article-body a { color: var(--rojo); }
+.article-body pre {
+  background: #0f1b3d; color: #e7ecf7; padding: 16px; border-radius: 10px; overflow-x: auto;
+}
+.article-body code { font-family: "SFMono-Regular", Consolas, monospace; font-size: .9em; }
+
+/* ---- Sismos ---- */
+.sismos h1 { color: var(--azul); margin-bottom: 4px; }
+.sismos .lede { color: var(--gris); margin-top: 0; }
+#sismos-map {
+  height: 400px;
+  width: 100%;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  margin: 18px 0 12px;
+  z-index: 0;
+}
+.sismo-detalle {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--azul);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--tinta);
+  font-size: .95rem;
+}
+.sismo-detalle.show { border-left-color: var(--rojo); }
+.sismos .hint { color: var(--gris); font-size: .85rem; margin: 8px 0 0; }
+
+/* barra de filtros */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 16px 0 0;
+  font-size: .9rem;
+}
+.filtros label { color: var(--tinta); display: inline-flex; align-items: center; gap: 6px; }
+.filtros select, .filtros input {
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  font: inherit;
+}
+.filtros input[type="number"] { width: 110px; }
+.filtros input:disabled { background: #f1f2f6; color: #9aa0ab; }
+.geo-btn {
+  background: var(--azul);
+  color: #fff;
+  border: 0;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.geo-btn:hover { filter: brightness(1.08); }
+.geo-status { color: var(--gris); font-size: .82rem; }
+.f-count { margin-left: auto; color: var(--gris); font-size: .82rem; }
+.f-dist-val { color: var(--azul); font-weight: 600; font-size: .82rem; min-width: 88px; display: inline-block; }
+.quakes td.dist { white-space: nowrap; color: var(--azul); font-weight: 600; }
+.quakes tbody tr { cursor: pointer; }
+/* Anchos de columna: Profundidad (3) y Distancia (5) estrechas; Lugar (4) se lleva el resto */
+.quakes th:nth-child(1), .quakes td:nth-child(1) { white-space: nowrap; width: 1%; }
+.quakes th:nth-child(2), .quakes td:nth-child(2) { white-space: nowrap; width: 1%; text-align: center; }
+.quakes th:nth-child(3), .quakes td:nth-child(3) { white-space: nowrap; width: 1%; text-align: right; }
+.quakes th:nth-child(4), .quakes td:nth-child(4) { width: 100%; white-space: normal; }
+.quakes th:nth-child(5), .quakes td:nth-child(5) { white-space: nowrap; width: 1%; text-align: right; }
+.quakes tbody tr.sel { background: #fff6f6; box-shadow: inset 3px 0 0 var(--rojo); }
+.tabla-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.quakes {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 18px;
+}
+.quakes th, .quakes td { padding: 3px 9px; text-align: left; border-bottom: 1px solid var(--borde); vertical-align: middle; }
+/* Magnitud (2) y Distancia (5) mas estrechas */
+.quakes th:nth-child(2), .quakes td:nth-child(2),
+.quakes th:nth-child(5), .quakes td:nth-child(5) { padding-left: 5px; padding-right: 5px; }
+.quakes .mag { font-size: .92rem; }
+.quakes td.dist { font-size: .82rem; }
+.quakes td.fh { line-height: 1.1; }
+.quakes td.fh .f-dia { display: block; font-weight: 600; }
+.quakes td.fh .f-hora { display: block; color: var(--gris); font-size: .8rem; }
+.quakes thead th { background: var(--azul); color: #fff; font-weight: 600; }
+.quakes tbody tr:hover { background: #fcfcff; }
+.quakes .mag { font-weight: 700; color: var(--rojo); }
+.error { background: #fff3f3; border: 1px solid #f3c2c2; color: #8a1f1f; padding: 14px 16px; border-radius: 10px; }
+
+/* ---- Sismos: encabezado, paginacion, detalle ---- */
+.sismos-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin: 6px 0 14px;
+}
+.s-count { font-weight: 700; color: var(--azul); }
+.s-updated { color: var(--gris); font-size: .85rem; }
+.filtros-btn {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--tarjeta); border: 1px solid var(--borde); color: var(--azul);
+  padding: 6px 12px; border-radius: 8px; font-weight: 600; cursor: pointer;
+}
+.filtros-btn:hover { border-color: var(--azul); }
+.filtros-btn.on { background: var(--azul); color: #fff; border-color: var(--azul); }
+.filtros[hidden] { display: none; }
+/* Banda de detalle desplegada dentro de la misma fila */
+.detalle-row > td { background: #fff6f6; padding: 0; }
+.detalle-band { padding: 14px 16px; border-left: 4px solid var(--rojo); line-height: 1.6; }
+.detalle-band .detalle-acciones { margin-top: 10px; }
+.sismo-detalle[hidden] { display: none; }
+.detalle-acciones { margin-top: 12px; }
+.btn-map {
+  display: inline-block; background: var(--azul); color: #fff;
+  padding: 9px 16px; border-radius: 8px; font-weight: 700; text-decoration: none;
+}
+.btn-map:hover { filter: brightness(1.08); }
+.pager {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px; margin: 16px 0 6px;
+}
+.pg-btn {
+  background: var(--tarjeta); border: 1px solid var(--borde); color: var(--azul);
+  padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer;
+}
+.pg-btn:disabled { color: #aab; cursor: default; opacity: .6; }
+.p-info { color: var(--gris); font-size: .9rem; min-width: 56px; text-align: center; }
+
+/* ---- Pagina de detalle de un sismo ---- */
+.sismo-detail h1 { color: var(--azul); margin: 6px 0 2px; }
+.sismo-detail .lede { color: var(--gris); margin-top: 0; }
+.qmap {
+  height: 62vh; min-height: 360px; width: 100%;
+  border: 1px solid var(--borde); border-radius: 12px; margin: 14px 0; z-index: 0;
+}
+.detail-info {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 8px;
+}
+.detail-info > div {
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 10px 14px;
+}
+.detail-info span { display: block; color: var(--gris); font-size: .78rem; }
+.detail-info strong { color: var(--tinta); font-size: 1.05rem; }
+
+/* ---- Tarjeta de sismo destacado (mas fuerte 24 h) ---- */
+.destacado {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #8a1020, var(--rojo));
+  color: #fff; border-radius: 12px; padding: 12px 16px; margin: 10px 0 14px;
+  text-decoration: none;
+}
+.destacado[hidden] { display: none; }
+.destacado-tag {
+  background: rgba(255,255,255,.22); padding: 3px 9px; border-radius: 6px;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+}
+.destacado-mag { font-size: 1.5rem; font-weight: 800; }
+.destacado-info { color: #ffe9ec; font-size: .9rem; }
+.destacado.vacio {
+  background: var(--tarjeta); color: var(--gris); border: 1px solid var(--borde);
+}
+.destacado.vacio .destacado-tag { background: var(--borde); color: var(--tinta); }
+
+/* ---- Noticias ---- */
+.news h1 { color: var(--azul); margin: 6px 0 2px; }
+.news .lede { color: var(--gris); margin-top: 0; }
+.news-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.news-item {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: baseline;
+  gap: 10px; background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 12px 14px; text-decoration: none; color: inherit;
+}
+.news-item:hover { border-color: var(--azul); }
+.news-src {
+  align-self: center; background: var(--azul); color: #fff; font-size: .68rem;
+  font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+}
+.news-title { color: var(--tinta); font-weight: 600; }
+.news-item:hover .news-title { color: var(--azul); }
+.news-date { color: var(--gris); font-size: .75rem; white-space: nowrap; }
+.news-sum { grid-column: 2 / 4; color: var(--gris); font-size: .88rem; margin-top: 2px; }
+.news-fuentes { color: var(--gris); font-size: .8rem; }
+/* detalle expandible de noticia */
+.news-list .news-item { cursor: pointer; }
+.news-detail { display: none; grid-column: 1 / -1; margin-top: 8px; }
+.news-item.open .news-detail { display: block; }
+.news-img { width: 100%; max-height: 320px; object-fit: cover; border-radius: 10px; margin-bottom: 10px; }
+.news-full { color: var(--tinta); line-height: 1.6; margin: 0 0 12px; }
+
+/* avance de noticias en la portada */
+.news-preview { margin-bottom: 28px; }
+.np-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.np-head h2 { margin: 0; color: var(--azul); font-size: 1.4rem; }
+.np-head a { font-weight: 700; text-decoration: none; }
+.news-list.compact .news-item { padding: 9px 12px; }
+
+/* configuracion/orden de tarjetas de la portada */
+.cards-cfg { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.cfg-btn { background: var(--tarjeta); border: 1px solid var(--borde); color: var(--azul); border-radius: 50%; width: 38px; height: 38px; font-size: 1.15rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.cfg-btn:hover { border-color: var(--azul); }
+.cfg-btn.on { background: var(--azul); color: #fff; border-color: var(--azul); }
+#home-cards.editing .home-card { outline: 2px dashed var(--amarillo); outline-offset: 3px; border-radius: 14px; cursor: grab; }
+#home-cards.editing .home-card:active { cursor: grabbing; }
+.home-card.dragging { opacity: .5; }
+/* boton Instalar app */
+.pwa-install { background: var(--amarillo); color: var(--tinta); border: 0; border-radius: 8px; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.pwa-install:hover { filter: brightness(.96); }
+
+/* tarjetas rotatorias (portada): noticias y sismos */
+.rot-card {
+  display: block; text-decoration: none; color: inherit; margin-bottom: 22px;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-left: 5px solid var(--azul);
+  border-radius: 14px; padding: 16px 18px; transition: transform .12s ease, box-shadow .12s ease;
+}
+.rot-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(20,33,61,.08); }
+.news-rot { border-left-color: var(--azul); }
+.sismos-card { border-left-color: var(--rojo); }
+.rot-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.rot-ico { font-size: 1.3rem; line-height: 1; display: inline-flex; align-items: center; }
+.rot-head h2 { margin: 0; color: var(--tinta); font-size: 1.3rem; }
+.rot-hint { margin-left: auto; font-weight: 700; font-size: .85rem; }
+.news-rot .rot-hint { color: var(--azul); }
+.sismos-card .rot-hint { color: var(--rojo); }
+.rot-stage { min-height: 48px; }
+.rot-slide { display: none; align-items: center; gap: 10px; }
+.rot-stage .rot-slide:first-child { display: flex; }
+.rot-title { font-weight: 600; color: var(--tinta); }
+.mag-badge { background: var(--rojo) !important; }
+.rot-slide .news-date { color: var(--gris); font-size: .75rem; white-space: nowrap; margin-left: auto; }
+@media (max-width: 560px) { .rot-slide { flex-wrap: wrap; } .rot-slide .news-date { margin-left: 0; } }
+
+@media (max-width: 560px) {
+  .news-item { grid-template-columns: auto 1fr; }
+  .news-date { grid-column: 2; }
+  .news-sum { grid-column: 1 / 3; }
+}
+
+/* ---- Footer ---- */
+.site-footer {
+  border-top: 1px solid var(--borde);
+  background: var(--tarjeta);
+  padding: 22px 20px;
+  text-align: center;
+  color: var(--gris);
+  font-size: .9rem;
+}
+
+@media (max-width: 560px) {
+  .hero { padding: 32px 22px; }
+  .hero h1 { font-size: 1.7rem; }
+  .quakes th, .quakes td { padding: 9px 8px; font-size: .9rem; }
+  /* Ocultar Profundidad en pantallas pequenas para dar mas sitio a Lugar y Distancia */
+  .quakes th:nth-child(3), .quakes td:nth-child(3) { display: none; }
+}

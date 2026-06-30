@@ -1,0 +1,15 @@
+[Unit]
+Description=venezuelainfo.org — portal de noticias e informacion sobre Venezuela (Nyx)
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/venezuelainfo.org
+ExecStart=/home/admin/venezuelainfo.org/venezuelainfo-org
+Environment=PORT=3010
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

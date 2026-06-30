@@ -1,0 +1,316 @@
+// src/md.nx — Renderizador Markdown -> HTML minimo para venezuelainfo.org.
+//
+// No pretende ser CommonMark completo: cubre front-matter, encabezados
+// (#, ##, ###), parrafos, listas (- / *), bloques de codigo (```) y formato
+// inline (negrita **, cursiva *, enlaces [texto](url)).
+//
+// Contrato de strings v0.14: TODA la API de String opera sobre bytes. Solo
+// inspeccionamos bytes ASCII (< 128) para detectar marcadores; los bytes de
+// secuencias UTF-8 (acentos, la enie) son >= 128, nunca colisionan con ASCII,
+// y se reemiten intactos byte a byte -> el texto se preserva.
+
+fn is_space(c: int) -> bool {
+    return c == 32 or c == 9 or c == 13 or c == 10
+}
+
+// Quita espacios/tabs/saltos al inicio y al final.
+pub fn md_trim(s: String) -> String {
+    var start: int = 0
+    var end: int = s.length()
+    var go: bool = true
+    while go and start < end {
+        if is_space(s.charAt(start)) {
+            start = start + 1
+        } else {
+            go = false
+        }
+    }
+    go = true
+    while go and end > start {
+        if is_space(s.charAt(end - 1)) {
+            end = end - 1
+        } else {
+            go = false
+        }
+    }
+    return s.substring(start, end)
+}
+
+// Quita saltos de linea (LF/CR) al inicio de un texto.
+fn trim_leading_newlines(s: String) -> String {
+    var start: int = 0
+    let n: int = s.length()
+    var go: bool = true
+    while go and start < n {
+        let c: int = s.charAt(start)
+        if c == 10 or c == 13 {
+            start = start + 1
+        } else {
+            go = false
+        }
+    }
+    return s.substring(start, n)
+}
+
+// Escapa los tres caracteres peligrosos de HTML. El '&' va primero para no
+// re-escapar las entidades que generamos despues.
+pub fn html_escape(s: String) -> String {
+    var out: String = s.replace("&", "&amp;")
+    out = out.replace("<", "&lt;")
+    out = out.replace(">", "&gt;")
+    return out
+}
+
+// ---- Front-matter ----
+// Bloque opcional al inicio del .md, delimitado por lineas "---":
+//   ---
+//   title: Mi titulo
+//   date: 2026-06-29
+//   summary: Resumen de una linea
+//   ---
+// Devuelve [title, date, summary, cuerpo].
+pub fn parse_front_matter(raw: String) -> Array {
+    var title: String = ""
+    var date: String = ""
+    var summary: String = ""
+    var body: String = raw
+
+    if raw.startsWith("---") {
+        let rest: String = raw.substring(3, raw.length())
+        let close: int = rest.indexOf("---")
+        if close >= 0 {
+            let header: String = rest.substring(0, close)
+            body = rest.substring(close + 3, rest.length())
+            let lines: Array = header.split("\n")
+            var i: int = 0
+            while i < lines.length() {
+                let line: String = lines[i]
+                let colon: int = line.indexOf(":")
+                if colon > 0 {
+                    let key: String = md_trim(line.substring(0, colon))
+                    let val: String = md_trim(line.substring(colon + 1, line.length()))
+                    if key == "title" {
+                        title = val
+                    }
+                    if key == "date" {
+                        date = val
+                    }
+                    if key == "summary" {
+                        summary = val
+                    }
+                }
+                i = i + 1
+            }
+        }
+    }
+    body = trim_leading_newlines(body)
+    let result: Array = [title, date, summary, body]
+    return result
+}
+
+// ---- Formato inline ----
+// Escapa HTML y luego aplica negrita, cursiva y enlaces sobre el texto ya
+// seguro. Los marcadores Markdown (*, [, ]) son ASCII y sobreviven al escape.
+pub fn render_inline(raw: String) -> String {
+    let s: String = html_escape(raw)
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if c == 91 {
+            // '[' -> posible enlace [texto](url)
+            let rest: String = s.substring(i, n)
+            let rb: int = rest.indexOf("]")
+            var handled: bool = false
+            if rb > 1 and i + rb + 1 < n and s.charAt(i + rb + 1) == 40 {
+                let after: String = s.substring(i + rb + 1, n)
+                let rp: int = after.indexOf(")")
+                if rp > 0 {
+                    let text: String = rest.substring(1, rb)
+                    let url: String = after.substring(1, rp)
+                    sb.append("<a href=\"")
+                    sb.append(url)
+                    sb.append("\">")
+                    sb.append(text)
+                    sb.append("</a>")
+                    i = i + rb + 1 + rp + 1
+                    handled = true
+                }
+            }
+            if !handled {
+                sb.append("[")
+                i = i + 1
+            }
+        } else if c == 42 {
+            // '*' -> negrita (**) o cursiva (*)
+            if i + 1 < n and s.charAt(i + 1) == 42 {
+                let rest: String = s.substring(i + 2, n)
+                let close: int = rest.indexOf("**")
+                if close >= 0 {
+                    sb.append("<strong>")
+                    sb.append(rest.substring(0, close))
+                    sb.append("</strong>")
+                    i = i + 2 + close + 2
+                } else {
+                    sb.append("*")
+                    i = i + 1
+                }
+            } else {
+                let rest: String = s.substring(i + 1, n)
+                let close: int = rest.indexOf("*")
+                if close >= 0 {
+                    sb.append("<em>")
+                    sb.append(rest.substring(0, close))
+                    sb.append("</em>")
+                    i = i + 1 + close + 1
+                } else {
+                    sb.append("*")
+                    i = i + 1
+                }
+            }
+        } else {
+            // cualquier otro byte (incluido UTF-8) se reemite tal cual
+            sb.append(s.substring(i, i + 1))
+            i = i + 1
+        }
+    }
+    return sb.to_string()
+}
+
+// Cierra el parrafo acumulado emitiendolo como <p>.
+fn emit_para(sb: StringBuilder, para: String) {
+    sb.append("<p>")
+    sb.append(render_inline(para))
+    sb.append("</p>\n")
+}
+
+// ---- Bloques ----
+// Convierte el cuerpo Markdown a HTML linea por linea.
+pub fn render_markdown(body: String) -> String {
+    let lines: Array = body.split("\n")
+    var sb: StringBuilder = StringBuilder.new()
+    var i: int = 0
+    var in_code: bool = false
+    var in_list: bool = false
+    var para: String = ""
+
+    while i < lines.length() {
+        var line: String = lines[i]
+        // normalizar CRLF
+        if line.length() > 0 and line.charAt(line.length() - 1) == 13 {
+            line = line.substring(0, line.length() - 1)
+        }
+
+        if in_code {
+            if line.startsWith("```") {
+                sb.append("</code></pre>\n")
+                in_code = false
+            } else {
+                sb.append(html_escape(line))
+                sb.append("\n")
+            }
+            i = i + 1
+        } else if line.startsWith("```") {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            sb.append("<pre><code>")
+            in_code = true
+            i = i + 1
+        } else if line.startsWith("### ") {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            sb.append("<h3>")
+            sb.append(render_inline(line.substring(4, line.length())))
+            sb.append("</h3>\n")
+            i = i + 1
+        } else if line.startsWith("## ") {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            sb.append("<h2>")
+            sb.append(render_inline(line.substring(3, line.length())))
+            sb.append("</h2>\n")
+            i = i + 1
+        } else if line.startsWith("# ") {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            sb.append("<h1>")
+            sb.append(render_inline(line.substring(2, line.length())))
+            sb.append("</h1>\n")
+            i = i + 1
+        } else if line.startsWith("- ") or line.startsWith("* ") {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if !in_list {
+                sb.append("<ul>\n")
+                in_list = true
+            }
+            sb.append("<li>")
+            sb.append(render_inline(line.substring(2, line.length())))
+            sb.append("</li>\n")
+            i = i + 1
+        } else if md_trim(line).length() == 0 {
+            if para.length() > 0 {
+                emit_para(sb, para)
+                para = ""
+            }
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            i = i + 1
+        } else {
+            if in_list {
+                sb.append("</ul>\n")
+                in_list = false
+            }
+            if para.length() > 0 {
+                para = para + " " + line
+            } else {
+                para = line
+            }
+            i = i + 1
+        }
+    }
+
+    // cierre final
+    if para.length() > 0 {
+        emit_para(sb, para)
+        para = ""
+    }
+    if in_list {
+        sb.append("</ul>\n")
+        in_list = false
+    }
+    if in_code {
+        sb.append("</code></pre>\n")
+        in_code = false
+    }
+    return sb.to_string()
+}

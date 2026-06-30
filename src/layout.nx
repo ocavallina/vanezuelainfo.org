@@ -1,0 +1,65 @@
+// src/layout.nx — Plantilla HTML compartida (header, footer, wrapper).
+// Tema visual con los colores de la bandera de Venezuela.
+
+fn page_v(title: String, content: String, viewport: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n")
+    sb.append("<meta charset=\"utf-8\">\n")
+    sb.append("<meta name=\"viewport\" content=\"")
+    sb.append(viewport)
+    sb.append("\">\n")
+    sb.append("<title>")
+    sb.append(title)
+    sb.append(" — VenezuelaInfo</title>\n")
+    sb.append("<meta name=\"description\" content=\"Noticias, informacion y monitoreo sismico de Venezuela.\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css\">\n")
+    // Iconos + PWA
+    sb.append("<link rel=\"icon\" href=\"/icon.svg\" type=\"image/svg+xml\">\n")
+    sb.append("<link rel=\"icon\" href=\"/icon-192.png\" type=\"image/png\" sizes=\"192x192\">\n")
+    sb.append("<link rel=\"apple-touch-icon\" href=\"/icon-192.png\">\n")
+    sb.append("<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n")
+    sb.append("<meta name=\"theme-color\" content=\"#00247D\">\n")
+    sb.append("<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\n")
+    sb.append("<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\n")
+    sb.append("<meta name=\"apple-mobile-web-app-title\" content=\"VenezuelaInfo\">\n")
+    sb.append("</head>\n<body>\n")
+
+    sb.append("<header class=\"site-header\">\n")
+    sb.append("<div class=\"flag-stripe\"></div>\n")
+    sb.append("<div class=\"header-inner\">\n")
+    sb.append("<a class=\"brand\" href=\"/\">Venezuela<span>Info</span></a>\n")
+    sb.append("<button id=\"pwa-install\" class=\"pwa-install\" type=\"button\" hidden>Instalar app</button>\n")
+    sb.append("</div>\n</header>\n")
+
+    sb.append("<main class=\"container\">\n")
+    sb.append(content)
+    sb.append("</main>\n")
+
+    sb.append("<footer class=\"site-footer\">\n")
+    sb.append("<p>venezuelainfo.org — Hecho con <a href=\"https://nyxlang.com\">Nyx</a>. ")
+    sb.append("Datos sismicos: <a href=\"https://www.seismicportal.eu\">EMSC</a>. ")
+    sb.append("Mapa: <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>.</p>\n")
+    sb.append("</footer>\n")
+    // Registro del service worker (PWA)
+    sb.append("<script>\n")
+    sb.append("if('serviceWorker' in navigator){\n")
+    sb.append("  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});\n")
+    sb.append("}\n")
+    sb.append("(function(){var dfp=null,ib=document.getElementById('pwa-install');\n")
+    sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;if(ib)ib.hidden=false;});\n")
+    sb.append("if(ib)ib.addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;ib.hidden=true;});});\n")
+    sb.append("window.addEventListener('appinstalled',function(){if(ib)ib.hidden=true;});})();\n")
+    sb.append("</script>\n")
+    sb.append("</body>\n</html>\n")
+    return sb.to_string()
+}
+
+pub fn page(title: String, content: String) -> String {
+    return page_v(title, content, "width=device-width, initial-scale=1")
+}
+
+// Igual que page() pero bloquea el zoom del usuario (paginas con tabla/mapa que
+// de otro modo obligan a alejar en movil).
+pub fn page_fixed(title: String, content: String) -> String {
+    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no")
+}

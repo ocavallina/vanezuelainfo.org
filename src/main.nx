@@ -1,0 +1,617 @@
+// src/main.nx — venezuelainfo.org: portal de noticias e informacion sobre
+// Venezuela, con seccion de sismos (datos del EMSC), PWA y pagina de detalle
+// por evento con mapa. Construido sobre nyx-serve. Entry point (ver nyx.toml).
+
+import "std/web"
+import "std/http"
+import "nyx-serve/src/server"
+import "nyx-serve/src/files"
+import "src/md"
+import "src/layout"
+import "src/articles"
+import "src/sismos"
+import "src/news"
+
+// Escapa un valor para un atributo HTML entre comillas dobles.
+fn aesc(s: String) -> String {
+    return html_escape(s).replace("\"", "&quot;")
+}
+
+// Respuesta HTML sin cachear (para que el gateway no sirva paginas viejas; los
+// assets/iconos si se cachean).
+fn html_nocache(status: int, html: String) -> Response {
+    let h: Array = ["Content-Type", "text/html; charset=utf-8", "Cache-Control", "no-cache", "Content-Security-Policy", "upgrade-insecure-requests"]
+    return Response { status: status, headers_flat: h, body: html }
+}
+
+// JS que formatea los <time class="news-date" data-ts="RFC822"> a "hace X" local.
+fn news_date_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("(function(){var els=document.querySelectorAll('.news-date[data-ts]');var now=Date.now();")
+    sb.append("function rel(ts){var d=Date.parse(ts);if(isNaN(d))return '';var s=Math.floor((now-d)/1000);if(s<0)s=0;")
+    sb.append("if(s<60)return 'hace '+s+' s';if(s<3600)return 'hace '+Math.floor(s/60)+' min';if(s<86400)return 'hace '+Math.floor(s/3600)+' h';return 'hace '+Math.floor(s/86400)+' d';}")
+    sb.append("for(var i=0;i<els.length;i++){var t=rel(els[i].getAttribute('data-ts'));if(t)els[i].textContent=t;}})();")
+    return sb.to_string()
+}
+
+// JS del rotador de noticias en la portada (muestra un titular a la vez).
+fn news_rotator_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("(function(){var st=document.querySelectorAll('.rot-stage');for(var x=0;x<st.length;x++){(function(stage){")
+    sb.append("var s=stage.querySelectorAll('.rot-slide');if(!s.length)return;var i=0;")
+    sb.append("for(var k=0;k<s.length;k++){s[k].style.display='none';}s[0].style.display='flex';")
+    sb.append("if(s.length>1){setInterval(function(){s[i].style.display='none';i=(i+1)%s.length;s[i].style.display='flex';},4500);}})(st[x]);}})();")
+    return sb.to_string()
+}
+
+// JS que despliega/colapsa el detalle de cada noticia (uno a la vez).
+fn news_expand_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("(function(){var it=document.querySelectorAll('.news-list .news-item');")
+    sb.append("for(var i=0;i<it.length;i++){it[i].addEventListener('click',function(e){if(e.target.closest&&e.target.closest('a'))return;")
+    sb.append("var op=this.classList.contains('open');for(var j=0;j<it.length;j++){it[j].classList.remove('open');}if(!op)this.classList.add('open');});}})();")
+    return sb.to_string()
+}
+
+// Codigo JS compartido: mapa de codigo WMO -> [texto, icono]. Se inyecta en la
+// tarjeta y en la pagina /clima.
+fn wmo_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("function wdesc(c){")
+    sb.append("if(c===0)return['Despejado','\\u2600'];")
+    sb.append("if(c===1||c===2)return['Parcialmente nublado','\\u26C5'];")
+    sb.append("if(c===3)return['Nublado','\\u2601'];")
+    sb.append("if(c===45||c===48)return['Niebla','\\u2601'];")
+    sb.append("if(c>=51&&c<=57)return['Llovizna','\\u2614'];")
+    sb.append("if(c>=61&&c<=67)return['Lluvia','\\u2614'];")
+    sb.append("if(c>=71&&c<=77)return['Nieve','\\u2744'];")
+    sb.append("if(c>=80&&c<=82)return['Chubascos','\\u2614'];")
+    sb.append("if(c>=95)return['Tormenta','\\u26C8'];")
+    sb.append("return['Clima','\\u2601'];}")
+    return sb.to_string()
+}
+
+// Tarjeta del clima (resumen) — enlaza a /clima. Datos de Open-Meteo, client-side.
+fn weather_card() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a href=\"/clima\" class=\"weather weather-card\">\n")
+    sb.append("<div class=\"weather-head\"><h2>Clima</h2><span id=\"w-city-name\" class=\"w-city-name\"></span></div>\n")
+    sb.append("<div id=\"w-body\" class=\"weather-body\">Cargando clima&hellip;</div>\n")
+    sb.append("<div class=\"weather-more\">Ver pronostico completo &rarr;</div>\n")
+    sb.append("</a>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){\n")
+    sb.append("  var body=document.getElementById('w-body'),nameEl=document.getElementById('w-city-name');\n")
+    sb.append("  if(!body){return;}\n")
+    sb.append("  " + wmo_js() + "\n")
+    sb.append("  var la='10.4806',lo='-66.9036',nm='Caracas';\n")
+    sb.append("  try{var sla=localStorage.getItem('w_lat'),slo=localStorage.getItem('w_lon'),snm=localStorage.getItem('w_name');if(sla&&slo){la=sla;lo=slo;if(snm)nm=snm;}else{var ula=localStorage.getItem('ulat'),ulo=localStorage.getItem('ulon');if(ula&&ulo){la=ula;lo=ulo;nm='Tu ubicacion';}}}catch(e){}\n")
+    sb.append("  function setName(n){nm=n;if(nameEl)nameEl.textContent=n;}\n")
+    sb.append("  setName(nm);\n")
+    sb.append("  function loadW(){fetch('https://api.open-meteo.com/v1/forecast?latitude='+la+'&longitude='+lo+'&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto')\n")
+    sb.append("    .then(function(r){return r.json();}).then(function(d){var c=d.current;if(!c){body.textContent='Sin datos de clima.';return;}var w=wdesc(c.weather_code);\n")
+    sb.append("      body.innerHTML='<div class=\"w-main\"><span class=\"w-emoji\">'+w[1]+'</span><span class=\"w-temp\">'+Math.round(c.temperature_2m)+'\\u00B0C</span></div>'\n")
+    sb.append("        +'<div class=\"w-desc\">'+w[0]+'</div>'\n")
+    sb.append("        +'<div class=\"w-meta\">Sensacion '+Math.round(c.apparent_temperature)+'\\u00B0C \\u00b7 Humedad '+c.relative_humidity_2m+'% \\u00b7 Viento '+Math.round(c.wind_speed_10m)+' km/h</div>';\n")
+    sb.append("    }).catch(function(){body.textContent='No se pudo cargar el clima.';});}\n")
+    sb.append("  function revGeo(a,o){fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+a+'&longitude='+o+'&localityLanguage=es').then(function(r){return r.json();}).then(function(g){var cc=g.city||g.locality||g.principalSubdivision;if(cc){setName(cc);try{localStorage.setItem('w_name',cc);}catch(e){}}}).catch(function(){});}\n")
+    sb.append("  loadW();\n")
+    sb.append("  if(nm==='Tu ubicacion'||nm==='Mi ubicacion'||!nm){revGeo(la,lo);}\n")
+    sb.append("  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(function(p){la=''+p.coords.latitude;lo=''+p.coords.longitude;try{localStorage.setItem('w_lat',la);localStorage.setItem('w_lon',lo);}catch(e){}loadW();revGeo(la,lo);},function(){});}\n")
+    sb.append("})();\n")
+    sb.append("</script>\n")
+    return sb.to_string()
+}
+
+// Tarjeta de finanzas (resumen) — BCV/paralelo/euro (DolarAPI) + BTC (CoinGecko),
+// client-side. Enlaza a /finanzas. JS parsea floats (std/json no soporta floats).
+fn finanzas_card() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a href=\"/finanzas\" class=\"finanzas finanzas-card\">\n")
+    sb.append("<div class=\"fin-head\"><h2>Finanzas</h2><span class=\"fin-tag\">BCV &middot; USDT &middot; COP</span></div>\n")
+    sb.append("<div id=\"fin-body\" class=\"fin-body\">Cargando&hellip;</div>\n")
+    sb.append("<div class=\"weather-more\">Ver finanzas completas &rarr;</div>\n")
+    sb.append("</a>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){var b=document.getElementById('fin-body');if(!b)return;var R={};\n")
+    sb.append("  function fmt(v){return Number(v).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}\n")
+    sb.append("  function row(l,v){return '<div class=\"fin-row\"><span class=\"fin-lab\">'+l+'</span><span class=\"fin-val\">'+v+'</span></div>';}\n")
+    sb.append("  function paint(){var h='';if(R.bcv)h+=row('BCV',' Bs '+fmt(R.bcv));if(R.uc)h+=row('USDT compra','Bs '+fmt(R.uc));if(R.uv)h+=row('USDT venta','Bs '+fmt(R.uv));if(R.eur)h+=row('Euro BCV','Bs '+fmt(R.eur));if(R.cop)h+=row('USD en COP','COP '+Number(R.cop).toLocaleString('es-CO',{maximumFractionDigits:0}));var base=(R.uc&&R.uv)?((R.uc+R.uv)/2):(R.bcv||0);if(base&&R.cop)h+=row('1.000 COP','Bs '+fmt(base/R.cop*1000));if(R.fch){var f=new Date(R.fch);if(!isNaN(f.getTime()))h+='<div class=\"fin-meta\">Actualizado '+f.toLocaleDateString('es-VE')+' '+('0'+f.getHours()).slice(-2)+':'+('0'+f.getMinutes()).slice(-2)+'</div>';}b.innerHTML=h||'Cargando\\u2026';}\n")
+    sb.append("  fetch('https://ve.dolarapi.com/v1/dolares').then(function(r){return r.json();}).then(function(d){for(var i=0;i<d.length;i++){if(d[i].fuente==='oficial'){R.bcv=d[i].promedio;R.fch=d[i].fechaActualizacion;}}paint();}).catch(function(){});\n")
+    sb.append("  fetch('https://criptoya.com/api/USDT/VES/1').then(function(r){return r.json();}).then(function(c){if(c.binancep2p){R.uc=c.binancep2p.ask;R.uv=c.binancep2p.bid;}paint();}).catch(function(){});\n")
+    sb.append("  fetch('https://ve.dolarapi.com/v1/euros').then(function(r){return r.json();}).then(function(d){for(var i=0;i<d.length;i++){if(d[i].fuente==='oficial')R.eur=d[i].promedio;}paint();}).catch(function(){});\n")
+    sb.append("  fetch('https://open.er-api.com/v6/latest/USD').then(function(r){return r.json();}).then(function(d){if(d&&d.rates&&d.rates.COP)R.cop=d.rates.COP;paint();}).catch(function(){});\n")
+    sb.append("})();\n")
+    sb.append("</script>\n")
+    return sb.to_string()
+}
+
+// Landing /finanzas — divisas (USD/EUR), cripto (USD) y Bolsa de Caracas.
+fn handle_finanzas(req: Request) -> Response {
+    let ibc: String = bvc_ibc_text()
+    let bvc: String = bvc_list_html()
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"finz\">\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("<h1>Finanzas</h1>\n")
+    sb.append("<p class=\"lede\">Tipos de cambio, cripto e informacion de la Bolsa de Valores de Caracas.</p>\n")
+    sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
+    sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
+    sb.append("<h2 class=\"finz-h\">Cripto (USD)</h2>\n")
+    sb.append("<div id=\"fz-cripto\" class=\"finz-grid\">Cargando&hellip;</div>\n")
+    sb.append("<h2 class=\"finz-h\">Bolsa de Valores de Caracas</h2>\n")
+    if ibc.length() > 0 {
+        sb.append("<div class=\"finz-ibc\">")
+        sb.append(html_escape(ibc))
+        sb.append("</div>\n")
+    }
+    sb.append("<div class=\"news-list\">")
+    sb.append(bvc)
+    sb.append("</div>\n")
+    sb.append("<p class=\"news-fuentes\">Divisas: DolarAPI &middot; USDT P2P: CriptoYa (Binance) &middot; USD/COP: open.er-api.com &middot; Cripto: CoinGecko &middot; Bolsa: bolsadecaracas.com</p>\n")
+    sb.append("</section>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){function fmt(v){return Number(v).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2});}\n")
+    sb.append("  function card(l,v,s){return '<div class=\"fz-item\"><span class=\"fz-l\">'+l+'</span><span class=\"fz-v\">'+v+'</span>'+(s?('<span class=\"fz-s\">'+s+'</span>'):'')+'</div>';}\n")
+    sb.append("  var dv=document.getElementById('fz-div'),D={};\n")
+    sb.append("  function paintDiv(){var h='';if(D.usd)h+=card('USD oficial (BCV)','Bs '+fmt(D.usd));if(D.eur)h+=card('EUR oficial (BCV)','Bs '+fmt(D.eur));if(D.uc)h+=card('USDT compra (P2P)','Bs '+fmt(D.uc),'Binance P2P');if(D.uv)h+=card('USDT venta (P2P)','Bs '+fmt(D.uv),'Binance P2P');if(D.cop)h+=card('USD en Colombia','COP '+Number(D.cop).toLocaleString('es-CO',{maximumFractionDigits:0}),'1 USD');\n")
+    sb.append("    var base=(D.uc&&D.uv)?((D.uc+D.uv)/2):(D.usd||0);if(base&&D.cop){var bpc=base/D.cop;h+=card('Peso \\u2194 Bol\\u00edvar','1.000 COP = Bs '+fmt(bpc*1000),'Bs 100 = '+Math.round(100/bpc).toLocaleString('es-CO')+' COP (v\\u00eda USDT)');}\n")
+    sb.append("    dv.innerHTML=h||'Cargando\\u2026';}\n")
+    sb.append("  fetch('https://ve.dolarapi.com/v1/dolares').then(function(r){return r.json();}).then(function(u){for(var i=0;i<u.length;i++){if(u[i].fuente==='oficial')D.usd=u[i].promedio;}paintDiv();}).catch(function(){});\n")
+    sb.append("  fetch('https://open.er-api.com/v6/latest/USD').then(function(r){return r.json();}).then(function(x){if(x&&x.rates&&x.rates.COP)D.cop=x.rates.COP;paintDiv();}).catch(function(){});\n")
+    sb.append("  fetch('https://ve.dolarapi.com/v1/euros').then(function(r){return r.json();}).then(function(e){for(var i=0;i<e.length;i++){if(e[i].fuente==='oficial')D.eur=e[i].promedio;}paintDiv();}).catch(function(){});\n")
+    sb.append("  fetch('https://criptoya.com/api/USDT/VES/1').then(function(r){return r.json();}).then(function(c){if(c.binancep2p){D.uc=c.binancep2p.ask;D.uv=c.binancep2p.bid;}paintDiv();}).catch(function(){});\n")
+    sb.append("  fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd').then(function(r){return r.json();}).then(function(c){var h='';function usd(v){return '$ '+Number(v).toLocaleString('es-VE');}\n")
+    sb.append("    if(c.bitcoin)h+=card('Bitcoin (BTC)',usd(c.bitcoin.usd));if(c.ethereum)h+=card('Ethereum (ETH)',usd(c.ethereum.usd));if(c.tether)h+=card('Tether (USDT)','$ '+Number(c.tether.usd).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:3}));\n")
+    sb.append("    document.getElementById('fz-cripto').innerHTML=h||'Sin datos.';}).catch(function(){document.getElementById('fz-cripto').textContent='No se pudo cargar cripto.';});\n")
+    sb.append("})();\n")
+    sb.append(news_expand_js())
+    sb.append(news_date_js())
+    sb.append("</script>\n")
+    return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
+}
+
+// JS: aplica el orden guardado de las tarjetas y permite reordenarlas (modo editar).
+fn cards_order_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("(function(){var cont=document.getElementById('home-cards');if(!cont)return;var cfg=document.getElementById('cfg-btn');var cards=Array.prototype.slice.call(cont.querySelectorAll('.home-card'));")
+    sb.append("function order(){return Array.prototype.map.call(cont.children,function(c){return c.getAttribute('data-key');});}")
+    sb.append("function save(){try{localStorage.setItem('card_order',order().join(','));}catch(e){}}")
+    sb.append("try{var s=localStorage.getItem('card_order');if(s){s.split(',').forEach(function(k){var el=cont.querySelector('.home-card[data-key=\"'+k+'\"]');if(el)cont.appendChild(el);});}}catch(e){}")
+    sb.append("cards.forEach(function(c){var a=c.querySelector('a');if(a)a.setAttribute('draggable','false');});")
+    sb.append("function setEdit(on){cont.classList.toggle('editing',on);if(cfg)cfg.classList.toggle('on',on);cards.forEach(function(c){if(on){c.setAttribute('draggable','true');}else{c.removeAttribute('draggable');}});}")
+    sb.append("if(cfg){cfg.addEventListener('click',function(){setEdit(!cont.classList.contains('editing'));});}")
+    sb.append("cont.addEventListener('click',function(e){if(cont.classList.contains('editing')){var a=e.target.closest&&e.target.closest('a');if(a)e.preventDefault();}});")
+    sb.append("var drag=null;")
+    sb.append("cont.addEventListener('dragstart',function(e){var c=e.target.closest&&e.target.closest('.home-card');if(!c||!cont.classList.contains('editing')){if(e.preventDefault)e.preventDefault();return;}drag=c;c.classList.add('dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','');}catch(_){}}});")
+    sb.append("cont.addEventListener('dragend',function(){if(drag){drag.classList.remove('dragging');drag=null;save();}});")
+    sb.append("function afterEl(y){var els=Array.prototype.slice.call(cont.querySelectorAll('.home-card:not(.dragging)'));var res=null,off=-1e9;els.forEach(function(ch){var b=ch.getBoundingClientRect();var o=y-b.top-b.height/2;if(o<0&&o>off){off=o;res=ch;}});return res;}")
+    sb.append("cont.addEventListener('dragover',function(e){if(!drag)return;e.preventDefault();var a=afterEl(e.clientY);if(a==null){cont.appendChild(drag);}else{cont.insertBefore(drag,a);}});")
+    sb.append("})();")
+    return sb.to_string()
+}
+
+fn rot_news_card(rot: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a href=\"/noticias\" class=\"rot-card news-rot\">\n")
+    sb.append("<div class=\"rot-head\"><span class=\"rot-ico news-ico\">&#128240;</span><h2>Noticias</h2><span class=\"rot-hint\">Ver todas &rarr;</span></div>\n")
+    sb.append("<div class=\"rot-stage\">")
+    sb.append(rot)
+    sb.append("</div>\n</a>\n")
+    return sb.to_string()
+}
+
+fn rot_sismos_card(srot: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a href=\"/sismos\" class=\"rot-card sismos-card\">\n")
+    sb.append("<div class=\"rot-head\"><span class=\"rot-ico alert-ico\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\"><path d=\"M12 2 L23 21 H1 Z\" fill=\"#f9a825\"/><rect x=\"11\" y=\"9\" width=\"2\" height=\"6\" fill=\"#7a1010\"/><rect x=\"11\" y=\"16.5\" width=\"2\" height=\"2\" fill=\"#7a1010\"/></svg></span><h2>Sismos</h2><span class=\"rot-hint\">Ver todos &rarr;</span></div>\n")
+    sb.append("<div class=\"rot-stage\">")
+    sb.append(srot)
+    sb.append("</div>\n</a>\n")
+    return sb.to_string()
+}
+
+fn handle_index(req: Request) -> Response {
+    let rot: String = news_rotator_html()
+
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<div class=\"cards-cfg\"><button id=\"cfg-btn\" type=\"button\" class=\"cfg-btn\" title=\"Ordenar tarjetas\" aria-label=\"Ordenar tarjetas\">&#9881;</button></div>\n")
+    sb.append("<div id=\"home-cards\">\n")
+    sb.append("<div class=\"home-card\" data-key=\"clima\">")
+    sb.append(weather_card())
+    sb.append("</div>\n")
+    sb.append("<div class=\"home-card\" data-key=\"finanzas\">")
+    sb.append(finanzas_card())
+    sb.append("</div>\n")
+    if rot.length() > 0 {
+        sb.append("<div class=\"home-card\" data-key=\"noticias\">")
+        sb.append(rot_news_card(rot))
+        sb.append("</div>\n")
+    }
+    sb.append("</div>\n")
+    sb.append("<script>")
+    if rot.length() > 0 {
+        sb.append(news_rotator_js())
+        sb.append(news_date_js())
+    }
+    sb.append(cards_order_js())
+    sb.append("</script>\n")
+    return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
+}
+
+// Pagina /noticias — feed completo agregado de medios venezolanos.
+fn handle_noticias(req: Request) -> Response {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"news\">\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("<h1>Noticias</h1>\n")
+    sb.append("<p class=\"lede\">Titulares de medios venezolanos. Toca uno para leerlo en su fuente original.</p>\n")
+    sb.append("<div class=\"news-list\">")
+    sb.append(news_full_html())
+    sb.append("</div>\n")
+    sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
+    sb.append("<script>")
+    sb.append(news_expand_js())
+    sb.append(news_date_js())
+    sb.append("</script>\n")
+    sb.append("</section>\n")
+    return html_nocache(200, page_fixed("Noticias", sb.to_string()))
+}
+
+// Landing /clima — pronostico completo de cualquier ciudad (buscador) o por
+// geolocalizacion. Todo client-side con Open-Meteo (forecast + air-quality +
+// geocoding). La ciudad se guarda en localStorage (compartida con la tarjeta).
+fn handle_clima(req: Request) -> Response {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"clima\">\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("<h1>Clima</h1>\n")
+    sb.append("<p class=\"lede\">Busca cualquier ciudad o usa tu ubicacion. Datos de Open-Meteo.</p>\n")
+    sb.append("<div class=\"clima-buscar\">\n")
+    sb.append("  <input id=\"c-q\" type=\"text\" placeholder=\"Buscar ciudad...\" autocomplete=\"off\">\n")
+    sb.append("  <button id=\"c-buscar\" type=\"button\" class=\"geo-btn\">Buscar</button>\n")
+    sb.append("  <button id=\"c-geo\" type=\"button\" class=\"geo-btn\">Mi ubicacion</button>\n")
+    sb.append("</div>\n")
+    sb.append("<div id=\"c-results\" class=\"clima-results\"></div>\n")
+    sb.append("<h2 id=\"c-title\" class=\"clima-title\"></h2>\n")
+    sb.append("<div id=\"c-actual\" class=\"clima-actual\">Cargando&hellip;</div>\n")
+    sb.append("<h3 class=\"clima-h3\">Proximas horas</h3>\n")
+    sb.append("<div id=\"c-horas\" class=\"clima-horas\"></div>\n")
+    sb.append("<h3 class=\"clima-h3\">Proximos dias</h3>\n")
+    sb.append("<div id=\"c-dias\" class=\"clima-dias\"></div>\n")
+    sb.append("<h3 class=\"clima-h3\">Calidad del aire</h3>\n")
+    sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
+    sb.append("</section>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){\n")
+    sb.append("  " + wmo_js() + "\n")
+    sb.append("  function pad(n){return ('0'+n).slice(-2);}\n")
+    sb.append("  function hm(iso){var d=new Date(iso);return isNaN(d.getTime())?'':pad(d.getHours())+':'+pad(d.getMinutes());}\n")
+    sb.append("  function compass(deg){var a=['N','NE','E','SE','S','SO','O','NO'];return a[Math.round(deg/45)%8];}\n")
+    sb.append("  function aqiLabel(v){if(v<=50)return['Buena','#2e7d32'];if(v<=100)return['Moderada','#f9a825'];if(v<=150)return['Danina (sensibles)','#ef6c00'];if(v<=200)return['Danina','#c62828'];if(v<=300)return['Muy danina','#6a1b9a'];return['Peligrosa','#4a148c'];}\n")
+    sb.append("  var la=10.4806,lo=-66.9036,nm='Caracas';\n")
+    sb.append("  try{var sla=parseFloat(localStorage.getItem('w_lat')),slo=parseFloat(localStorage.getItem('w_lon')),snm=localStorage.getItem('w_name');if(!isNaN(sla)&&!isNaN(slo)){la=sla;lo=slo;nm=snm||'Tu ciudad';}}catch(e){}\n")
+    sb.append("  var titleEl=document.getElementById('c-title'),actEl=document.getElementById('c-actual'),horasEl=document.getElementById('c-horas'),diasEl=document.getElementById('c-dias'),aireEl=document.getElementById('c-aire');\n")
+    sb.append("  function setCity(a,o,n){la=a;lo=o;nm=n;try{localStorage.setItem('w_lat',a);localStorage.setItem('w_lon',o);localStorage.setItem('w_name',n);}catch(e){}loadAll();}\n")
+    sb.append("  function loadAll(){titleEl.textContent=nm;actEl.textContent='Cargando\\u2026';\n")
+    sb.append("    fetch('https://api.open-meteo.com/v1/forecast?latitude='+la+'&longitude='+lo+'&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto')\n")
+    sb.append("      .then(function(r){return r.json();}).then(function(d){renderForecast(d);}).catch(function(){actEl.textContent='No se pudo cargar el clima.';});\n")
+    sb.append("    fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+la+'&longitude='+lo+'&current=pm2_5,pm10,us_aqi&timezone=auto')\n")
+    sb.append("      .then(function(r){return r.json();}).then(function(d){renderAire(d);}).catch(function(){aireEl.textContent='Sin datos de calidad del aire.';});\n")
+    sb.append("  }\n")
+    sb.append("  function renderForecast(d){var c=d.current||{};var w=wdesc(c.weather_code);var per=(c.is_day===0)?'Noche':'Dia';\n")
+    sb.append("    var h='<div class=\"ca-main\"><span class=\"ca-emoji\">'+w[1]+'</span><span class=\"ca-temp\">'+Math.round(c.temperature_2m)+'\\u00B0C</span><span class=\"ca-desc\">'+w[0]+'</span></div>';\n")
+    sb.append("    h+='<div class=\"ca-grid\">'\n")
+    sb.append("      +'<div><span>Sensacion</span><b>'+Math.round(c.apparent_temperature)+'\\u00B0</b></div>'\n")
+    sb.append("      +'<div><span>Humedad</span><b>'+c.relative_humidity_2m+'%</b></div>'\n")
+    sb.append("      +'<div><span>Viento</span><b>'+Math.round(c.wind_speed_10m)+' km/h '+compass(c.wind_direction_10m)+'</b></div>'\n")
+    sb.append("      +'<div><span>Rafagas</span><b>'+Math.round(c.wind_gusts_10m)+' km/h</b></div>'\n")
+    sb.append("      +'<div><span>Presion</span><b>'+Math.round(c.surface_pressure)+' hPa</b></div>'\n")
+    sb.append("      +'<div><span>Nubosidad</span><b>'+c.cloud_cover+'%</b></div>'\n")
+    sb.append("      +'<div><span>Precipitacion</span><b>'+(c.precipitation||0)+' mm</b></div>'\n")
+    sb.append("      +'<div><span>Periodo</span><b>'+per+'</b></div></div>';\n")
+    sb.append("    var dy=d.daily||{};if(dy.sunrise){h+='<div class=\"ca-sun\">Amanece '+hm(dy.sunrise[0])+' \\u00b7 Anochece '+hm(dy.sunset[0])+' \\u00b7 UV max '+dy.uv_index_max[0]+'</div>';}\n")
+    sb.append("    actEl.innerHTML=h;renderHoras(d.hourly);renderDias(dy);}\n")
+    sb.append("  function renderHoras(hr){if(!hr||!hr.time){horasEl.textContent='';return;}var now=Date.now(),out='',cnt=0;\n")
+    sb.append("    for(var i=0;i<hr.time.length&&cnt<12;i++){var t=new Date(hr.time[i]);if(t.getTime()<now-3600000)continue;var w=wdesc(hr.weather_code[i]);\n")
+    sb.append("      out+='<div class=\"ch-item\"><span class=\"ch-h\">'+pad(t.getHours())+':00</span><span class=\"ch-e\">'+w[1]+'</span><span class=\"ch-t\">'+Math.round(hr.temperature_2m[i])+'\\u00B0</span><span class=\"ch-p\">'+(hr.precipitation_probability?hr.precipitation_probability[i]:0)+'%</span></div>';cnt++;}\n")
+    sb.append("    horasEl.innerHTML=out;}\n")
+    sb.append("  function renderDias(dy){if(!dy||!dy.time){diasEl.textContent='';return;}var dn=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'],out='';\n")
+    sb.append("    for(var i=0;i<dy.time.length;i++){var t=new Date(dy.time[i]+'T12:00:00');var w=wdesc(dy.weather_code[i]);\n")
+    sb.append("      out+='<div class=\"cd-item\"><span class=\"cd-d\">'+dn[t.getDay()]+'</span><span class=\"cd-e\">'+w[1]+'</span><span class=\"cd-mx\">'+Math.round(dy.temperature_2m_max[i])+'\\u00B0</span><span class=\"cd-mn\">'+Math.round(dy.temperature_2m_min[i])+'\\u00B0</span><span class=\"cd-p\">'+dy.precipitation_probability_max[i]+'%</span></div>';}\n")
+    sb.append("    diasEl.innerHTML=out;}\n")
+    sb.append("  function renderAire(d){var c=d.current||{};if(c.us_aqi==null){aireEl.textContent='Sin datos.';return;}var l=aqiLabel(c.us_aqi);\n")
+    sb.append("    aireEl.innerHTML='<div class=\"ca-aqi\" style=\"border-color:'+l[1]+'\"><span class=\"aqi-num\" style=\"color:'+l[1]+'\">'+c.us_aqi+'</span><span class=\"aqi-lab\">AQI (US): '+l[0]+'</span><span class=\"aqi-pm\">PM2.5 '+c.pm2_5+' \\u00b7 PM10 '+c.pm10+'</span></div>';}\n")
+    sb.append("  var q=document.getElementById('c-q'),bBuscar=document.getElementById('c-buscar'),bGeo=document.getElementById('c-geo'),res=document.getElementById('c-results'),_res=[];\n")
+    sb.append("  function buscar(){var term=(q.value||'').trim();if(!term)return;res.textContent='Buscando\\u2026';\n")
+    sb.append("    fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(term)+'&count=6&language=es')\n")
+    sb.append("      .then(function(r){return r.json();}).then(function(d){_res=d.results||[];if(!_res.length){res.textContent='Sin resultados.';return;}\n")
+    sb.append("        var out='';for(var i=0;i<_res.length;i++){var x=_res[i];var sub=(x.admin1?(', '+x.admin1):'')+(x.country_code?(' ('+x.country_code+')'):'');out+='<button type=\"button\" class=\"c-res\" data-i=\"'+i+'\">'+x.name+'<small>'+sub+'</small></button>';}\n")
+    sb.append("        res.innerHTML=out;var bs=res.querySelectorAll('.c-res');for(var j=0;j<bs.length;j++){bs[j].addEventListener('click',function(){var x=_res[parseInt(this.getAttribute('data-i'),10)];res.innerHTML='';q.value='';setCity(x.latitude,x.longitude,x.name+(x.admin1?(', '+x.admin1):''));});}\n")
+    sb.append("      }).catch(function(){res.textContent='Error de busqueda.';});}\n")
+    sb.append("  if(bBuscar)bBuscar.addEventListener('click',buscar);\n")
+    sb.append("  if(q)q.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();buscar();}});\n")
+    sb.append("  if(bGeo)bGeo.addEventListener('click',function(){if(!navigator.geolocation)return;res.textContent='Obteniendo ubicacion\\u2026';navigator.geolocation.getCurrentPosition(function(p){res.textContent='';setCity(p.coords.latitude,p.coords.longitude,'Mi ubicacion');},function(){res.textContent='No se pudo obtener la ubicacion.';});});\n")
+    sb.append("  loadAll();\n")
+    sb.append("})();\n")
+    sb.append("</script>\n")
+    return html_nocache(200, page_fixed("Clima", sb.to_string()))
+}
+
+fn handle_article(req: Request) -> Response {
+    let slug: String = req.params.get("slug")
+    let content: String = render_article(slug)
+    if content.length() == 0 {
+        let nf: String = "<section class=\"notfound\"><h1>Articulo no encontrado</h1><p><a href=\"/\">Volver al inicio</a></p></section>"
+        return html_nocache(404, page("No encontrado", nf))
+    }
+    return html_nocache(200, page("Articulo", content))
+}
+
+// Pagina de LISTA de sismos: encabezado con conteo + ultima actualizacion,
+// lista paginada, filtros abajo, detalle desplegable al seleccionar (con boton
+// a la pagina de detalle con mapa). Sin mapa en esta pagina (evita el secuestro
+// de scroll); el mapa vive en /sismos/{id}.
+fn handle_sismos(req: Request) -> Response {
+    let lista: String = sismos_section()
+    let ts_str: String = int_to_string(sismos_ts())
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"sismos\">\n")
+    sb.append("<h1>Sismos recientes en Venezuela</h1>\n")
+    sb.append("<p class=\"lede\">Sismos recientes en Venezuela (magnitud &ge; 3). Fuente: EMSC.</p>\n")
+    sb.append("<p class=\"hint\">Nota: EMSC no publica sismos de magnitud menor a 3 en Venezuela (esos solo los registra FUNVISIS), por eso no aparecen aqui.</p>\n")
+    sb.append("<div class=\"sismos-top\"><span id=\"s-count\" class=\"s-count\">&mdash; sismos</span>")
+    sb.append("<span id=\"s-updated\" class=\"s-updated\" data-updated=\"")
+    sb.append(ts_str)
+    sb.append("\"></span>")
+    sb.append("<button id=\"filtros-btn\" class=\"filtros-btn\" type=\"button\" aria-expanded=\"false\" title=\"Filtros\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 5h18l-7 8v6l-4-2v-4z\"></path></svg> Filtros</button>")
+    sb.append("</div>\n")
+    sb.append("<a id=\"sismo-destacado\" class=\"destacado\" hidden></a>\n")
+    sb.append("<div class=\"tabla-scroll\">")
+    sb.append(lista)
+    sb.append("</div>\n")
+    sb.append("<div class=\"pager\"><button id=\"p-prev\" type=\"button\" class=\"pg-btn\">&laquo; Anteriores</button><span id=\"p-info\" class=\"p-info\"></span><button id=\"p-next\" type=\"button\" class=\"pg-btn\">Siguientes &raquo;</button></div>\n")
+    // Filtros (ocultos tras el icono de filtros)
+    sb.append("<div id=\"filtros\" class=\"filtros\" hidden>\n")
+    sb.append("  <label>Orden: <select id=\"f-orden\">")
+    sb.append("<option value=\"fecha\">Fecha (recientes)</option><option value=\"distancia\">Distancia (cercanos)</option><option value=\"magnitud\">Magnitud (mayores)</option>")
+    sb.append("</select></label>\n")
+    sb.append("  <label>Magnitud min: <select id=\"f-mag\">")
+    sb.append("<option value=\"0\">Todas</option><option value=\"3.5\">3.5+</option><option value=\"4\">4.0+</option><option value=\"4.5\">4.5+</option><option value=\"5\">5.0+</option><option value=\"6\">6.0+</option>")
+    sb.append("</select></label>\n")
+    sb.append("  <label>Distancia max: <input id=\"f-dist\" type=\"range\" min=\"50\" max=\"2000\" step=\"50\" value=\"2000\" disabled> <span id=\"f-dist-val\" class=\"f-dist-val\">activa tu ubicacion</span></label>\n")
+    sb.append("  <label>Lugar: <input id=\"f-text\" type=\"text\" placeholder=\"ej. Zulia\"></label>\n")
+    sb.append("  <span id=\"geo-status\" class=\"geo-status\"></span>\n")
+    sb.append("</div>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){\n")
+    sb.append("  var rows=Array.prototype.slice.call(document.querySelectorAll('tr[data-lat]'));\n")
+    sb.append("  var tbody=rows.length?rows[0].parentNode:null;\n")
+    sb.append("  var userLat=null,userLon=null;var perPage=12,page=0;var openRow=null,detailRow=null;\n")
+    sb.append("  function at(r,n){return r.getAttribute(n)||'';}\n")
+    sb.append("  function hhmm(d){return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}\n")
+    sb.append("  function pad(n){return ('0'+n).slice(-2);}\n")
+    sb.append("  function locPair(iso){var d=new Date(iso);if(isNaN(d.getTime()))return null;return {dia:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()),hora:pad(d.getHours())+':'+pad(d.getMinutes())};}\n")
+    sb.append("  function locStr(iso){var p=locPair(iso);return p?(p.dia+' '+p.hora):iso;}\n")
+    sb.append("  rows.forEach(function(r){var p=locPair(at(r,'data-iso'));if(!p)return;var dd=r.querySelector('.f-dia'),hh=r.querySelector('.f-hora');if(dd)dd.textContent=p.dia;if(hh)hh.textContent=p.hora;});\n")
+    sb.append("  function hav(la1,lo1,la2,lo2){var R=6371,t=Math.PI/180;var dLa=(la2-la1)*t,dLo=(lo2-lo1)*t;var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*t)*Math.cos(la2*t)*Math.sin(dLo/2)*Math.sin(dLo/2);return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}\n")
+    sb.append("  function distOf(r){if(userLat===null)return null;var la=parseFloat(at(r,'data-lat')),lo=parseFloat(at(r,'data-lon'));if(isNaN(la)||isNaN(lo))return null;return hav(userLat,userLon,la,lo);}\n")
+    sb.append("  var fMag=document.getElementById('f-mag'),fDist=document.getElementById('f-dist'),fText=document.getElementById('f-text'),fOrden=document.getElementById('f-orden');\n")
+    sb.append("  try{var _m=localStorage.getItem('f_mag');if(_m!==null&&fMag)fMag.value=_m;var _t=localStorage.getItem('f_text');if(_t!==null&&fText)fText.value=_t;var _o=localStorage.getItem('f_orden');if(_o!==null&&fOrden)fOrden.value=_o;}catch(e){}\n")
+    sb.append("  function maxDistFiltro(){if(!fDist||fDist.disabled)return 0;var v=parseFloat(fDist.value)||0;var mx=parseFloat(fDist.max)||0;if(v>=mx)return 0;return v;}\n")
+    sb.append("  function updDistLabel(){var s=document.getElementById('f-dist-val');if(!s)return;if(!fDist||fDist.disabled){s.textContent='activa tu ubicacion';return;}var d=maxDistFiltro();s.textContent=(d===0)?'sin limite':('hasta '+d+' km');}\n")
+    sb.append("  function passes(r){var mv=parseFloat(at(r,'data-mag'))||0;var minMag=parseFloat(fMag&&fMag.value)||0;if(mv<minMag)return false;var maxD=maxDistFiltro();var d=distOf(r);if(maxD>0&&d!==null&&d>maxD)return false;var q=((fText&&fText.value)||'').toLowerCase();if(q&&at(r,'data-place').toLowerCase().indexOf(q)<0)return false;return true;}\n")
+    sb.append("  function getFiltered(){var o=[];rows.forEach(function(r){if(passes(r))o.push(r);});return o;}\n")
+    sb.append("  function updateDistCells(){rows.forEach(function(r){var c=r.querySelector('.dist');if(!c)return;var d=distOf(r);c.innerHTML=(d===null)?'&mdash;':(d.toFixed(0)+' km');});}\n")
+    sb.append("  function isoOf(r){var v=Date.parse(at(r,'data-iso'));return isNaN(v)?0:v;}\n")
+    sb.append("  function ordenar(){if(!tbody)return;var c=fOrden?fOrden.value:'fecha';var arr=rows.slice();\n")
+    sb.append("    if(c==='distancia'&&userLat!==null){arr.sort(function(a,b){var da=distOf(a),db=distOf(b);if(da===null)return 1;if(db===null)return -1;return da-db;});}\n")
+    sb.append("    else if(c==='magnitud'){arr.sort(function(a,b){var ma=parseFloat(at(a,'data-mag'))||0,mb=parseFloat(at(b,'data-mag'))||0;if(mb!==ma)return mb-ma;return isoOf(b)-isoOf(a);});}\n")
+    sb.append("    else{arr.sort(function(a,b){return isoOf(b)-isoOf(a);});}\n")
+    sb.append("    arr.forEach(function(r){tbody.appendChild(r);});rows=arr;}\n")
+    sb.append("  function colapsar(){if(detailRow&&detailRow.parentNode)detailRow.parentNode.removeChild(detailRow);detailRow=null;if(openRow)openRow.classList.remove('sel');openRow=null;}\n")
+    sb.append("  function render(){var f=getFiltered();var pages=Math.max(1,Math.ceil(f.length/perPage));if(page>=pages)page=pages-1;if(page<0)page=0;\n")
+    sb.append("    rows.forEach(function(r){r.style.display='none';});var pr=f.slice(page*perPage,(page+1)*perPage);pr.forEach(function(r){r.style.display='';});\n")
+    sb.append("    if(openRow){if(pr.indexOf(openRow)<0){colapsar();}else if(detailRow){if(openRow.nextSibling!==detailRow){if(openRow.nextSibling){openRow.parentNode.insertBefore(detailRow,openRow.nextSibling);}else{openRow.parentNode.appendChild(detailRow);}}detailRow.style.display='';}}\n")
+    sb.append("    var sc=document.getElementById('s-count');if(sc)sc.textContent=f.length+' sismos';\n")
+    sb.append("    var pi=document.getElementById('p-info');if(pi)pi.textContent=(page+1)+' / '+pages;\n")
+    sb.append("    var pp=document.getElementById('p-prev'),pn=document.getElementById('p-next');if(pp)pp.disabled=(page<=0);if(pn)pn.disabled=(page>=pages-1);}\n")
+    sb.append("  function seleccionar(r){if(openRow===r){colapsar();return;}colapsar();r.classList.add('sel');\n")
+    sb.append("    var d=distOf(r);var ds=(d===null)?'':'<br>Distancia desde ti: '+d.toFixed(0)+' km';\n")
+    sb.append("    var href='/sismos/'+encodeURIComponent(at(r,'data-id'));\n")
+    sb.append("    var html='<div class=\"detalle-band\"><b>M '+at(r,'data-mag')+' '+at(r,'data-type')+'</b> &mdash; '+at(r,'data-place')+'<br>Fecha: '+locStr(at(r,'data-iso'))+'<br>Profundidad: '+at(r,'data-depth')+' km<br>Coordenadas: '+at(r,'data-lat')+', '+at(r,'data-lon')+ds+'<div class=\"detalle-acciones\"><a class=\"btn-map\" href=\"'+href+'\">Ver mapa y detalle &rarr;</a></div></div>';\n")
+    sb.append("    detailRow=document.createElement('tr');detailRow.className='detalle-row';var td=document.createElement('td');td.colSpan=5;td.innerHTML=html;detailRow.appendChild(td);\n")
+    sb.append("    if(r.nextSibling){r.parentNode.insertBefore(detailRow,r.nextSibling);}else{r.parentNode.appendChild(detailRow);}openRow=r;}\n")
+    sb.append("  rows.forEach(function(r){r.style.cursor='pointer';r.addEventListener('click',function(){seleccionar(r);});});\n")
+    sb.append("  var pp=document.getElementById('p-prev'),pn=document.getElementById('p-next');\n")
+    sb.append("  if(pp)pp.addEventListener('click',function(){page--;render();});\n")
+    sb.append("  if(pn)pn.addEventListener('click',function(){page++;render();});\n")
+    sb.append("  if(fOrden)fOrden.addEventListener('change',function(){try{localStorage.setItem('f_orden',fOrden.value);}catch(e){}page=0;ordenar();render();});\n")
+    sb.append("  if(fMag)fMag.addEventListener('change',function(){try{localStorage.setItem('f_mag',fMag.value);}catch(e){}page=0;render();});\n")
+    sb.append("  if(fDist)fDist.addEventListener('input',function(){try{localStorage.setItem('f_dist',fDist.value);}catch(e){}updDistLabel();page=0;render();});\n")
+    sb.append("  if(fText)fText.addEventListener('input',function(){try{localStorage.setItem('f_text',fText.value);}catch(e){}page=0;render();});\n")
+    sb.append("  var fb=document.getElementById('filtros-btn'),fp=document.getElementById('filtros');\n")
+    sb.append("  function setFiltros(open){if(!fp||!fb)return;if(open){fp.removeAttribute('hidden');fb.setAttribute('aria-expanded','true');fb.classList.add('on');}else{fp.setAttribute('hidden','');fb.setAttribute('aria-expanded','false');fb.classList.remove('on');}try{localStorage.setItem('f_open',open?'1':'0');}catch(e){}}\n")
+    sb.append("  if(fb&&fp){fb.addEventListener('click',function(){setFiltros(fp.hasAttribute('hidden'));});var _fo='0';try{_fo=localStorage.getItem('f_open')||'0';}catch(e){}if(_fo==='1')setFiltros(true);}\n")
+    sb.append("  var geoStatus=document.getElementById('geo-status');\n")
+    sb.append("  function applyLoc(la,lo){userLat=la;userLon=lo;updateDistCells();if(fDist){var mx=0;rows.forEach(function(r){var dd=distOf(r);if(dd!==null&&dd>mx)mx=dd;});mx=Math.ceil(mx/50)*50;if(mx<50)mx=50;fDist.min=0;fDist.max=mx;var _sd=NaN;try{_sd=parseFloat(localStorage.getItem('f_dist'));}catch(e){}if(!isNaN(_sd)&&_sd>0&&_sd<=mx){fDist.value=_sd;}else if(fDist.disabled){fDist.value=mx;}fDist.disabled=false;}updDistLabel();ordenar();render();}\n")
+    sb.append("  function pedirUbic(){if(!navigator.geolocation)return;navigator.geolocation.getCurrentPosition(function(pos){var la=pos.coords.latitude,lo=pos.coords.longitude;try{localStorage.setItem('ulat',la);localStorage.setItem('ulon',lo);}catch(e){}if(geoStatus)geoStatus.textContent='Ubicacion '+hhmm(new Date());applyLoc(la,lo);},function(){});}\n")
+    sb.append("  (function(){var sla=parseFloat(localStorage.getItem('ulat')),slo=parseFloat(localStorage.getItem('ulon'));if(!isNaN(sla)&&!isNaN(slo)){if(geoStatus)geoStatus.textContent='Ubicacion guardada';applyLoc(sla,slo);}pedirUbic();setInterval(pedirUbic,120000);})();\n")
+    sb.append("  (function(){var su=document.getElementById('s-updated');if(!su)return;var ep=parseInt(su.getAttribute('data-updated'),10)||0;su.textContent=ep?('Actualizado '+hhmm(new Date(ep*1000))):'';})();\n")
+    sb.append("  (function(){var box=document.getElementById('sismo-destacado');if(!box)return;var now=Date.now(),best=null,bestM=-1;\n")
+    sb.append("    function pt(r){return Date.parse(at(r,'data-time').replace(' ','T')+':00Z');}\n")
+    sb.append("    rows.forEach(function(r){var d=pt(r);if(isNaN(d))return;if(now-d>86400000)return;if(d>now+3600000)return;var m=parseFloat(at(r,'data-mag'))||0;if(m>bestM){bestM=m;best=r;}else if(m===bestM&&best&&d>pt(best)){best=r;}});\n")
+    sb.append("    if(!best){box.removeAttribute('href');box.classList.add('vacio');box.innerHTML='<span class=\"destacado-tag\">Ultimas 24 h</span><span class=\"destacado-info\">Sin sismos registrados</span>';box.hidden=false;return;}\n")
+    sb.append("    box.href='/sismos/'+encodeURIComponent(at(best,'data-id'));box.classList.remove('vacio');\n")
+    sb.append("    box.innerHTML='<span class=\"destacado-tag\">Mas fuerte (24 h)</span><span class=\"destacado-mag\">M '+at(best,'data-mag')+' '+at(best,'data-type')+'</span><span class=\"destacado-info\">'+at(best,'data-place')+' &middot; '+locStr(at(best,'data-iso'))+'</span>';box.hidden=false;})();\n")
+    sb.append("  updDistLabel();ordenar();render();\n")
+    sb.append("})();\n")
+    sb.append("</script>\n")
+    sb.append("</section>\n")
+    return html_nocache(200, page_fixed("Sismos", sb.to_string()))
+}
+
+// Pagina de DETALLE de un sismo: mapa grande (gesture-handling para no
+// secuestrar el scroll), info completa y distancia si llegan coords del usuario.
+fn handle_quake_detail(req: Request) -> Response {
+    let id: String = req.params.get("id")
+    let q: Array = quake_by_id(id)
+    if q.length() == 0 {
+        let nf: String = "<section class=\"sismos\"><p><a href=\"/sismos\">&larr; Volver a la lista</a></p><h1>Sismo no encontrado</h1><p>Este evento puede haber salido del listado reciente (ultimos 40).</p></section>"
+        return html_nocache(404, page("Sismo no encontrado", nf))
+    }
+    // q = [id, time, lat, lon, depth, mtype, mag, place]
+    let qtime: String = q[1]
+    let lat: String = q[2]
+    let lon: String = q[3]
+    let depth: String = q[4]
+    let mtype: String = q[5]
+    let mag: String = q[6]
+    let place: String = q[7]
+
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"sismo-detail\">\n")
+    sb.append("<p><a href=\"/sismos\">&larr; Volver a la lista</a></p>\n")
+    sb.append("<h1>Sismo M")
+    sb.append(html_escape(mag))
+    sb.append(" ")
+    sb.append(html_escape(mtype))
+    sb.append("</h1>\n<p class=\"lede\">")
+    sb.append(html_escape(place))
+    sb.append("</p>\n")
+    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css\">\n")
+    sb.append("<div id=\"qmap\" class=\"qmap\" data-lat=\"")
+    sb.append(aesc(lat))
+    sb.append("\" data-lon=\"")
+    sb.append(aesc(lon))
+    sb.append("\" data-mag=\"")
+    sb.append(aesc(mag))
+    sb.append("\" data-type=\"")
+    sb.append(aesc(mtype))
+    sb.append("\" data-place=\"")
+    sb.append(aesc(place))
+    sb.append("\" data-iso=\"")
+    sb.append(aesc(qtime))
+    sb.append("\"></div>\n")
+    sb.append("<div class=\"detail-info\">\n")
+    sb.append("<div><span>Magnitud</span><strong>M ")
+    sb.append(html_escape(mag))
+    sb.append(" ")
+    sb.append(html_escape(mtype))
+    sb.append("</strong></div>\n")
+    sb.append("<div><span>Fecha</span><strong id=\"q-fecha\">")
+    sb.append(html_escape(format_time(qtime)))
+    sb.append("</strong></div>\n")
+    sb.append("<div><span>Profundidad</span><strong>")
+    sb.append(html_escape(depth))
+    sb.append(" km</strong></div>\n")
+    sb.append("<div><span>Coordenadas</span><strong>")
+    sb.append(html_escape(lat))
+    sb.append(", ")
+    sb.append(html_escape(lon))
+    sb.append("</strong></div>\n")
+    sb.append("<div><span>Distancia desde ti</span><strong id=\"q-dist\">&mdash;</strong></div>\n")
+    sb.append("</div>\n")
+    sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
+    sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
+    sb.append("<script>\n")
+    sb.append("(function(){\n")
+    sb.append("  var el=document.getElementById('qmap');if(!el||typeof L==='undefined')return;\n")
+    sb.append("  function n(k){return el.getAttribute(k)||'';}\n")
+    sb.append("  (function(){var qf=document.getElementById('q-fecha');if(!qf)return;var dd=new Date(n('data-iso'));if(isNaN(dd.getTime()))return;function p2(x){return ('0'+x).slice(-2);}qf.textContent=dd.getFullYear()+'-'+p2(dd.getMonth()+1)+'-'+p2(dd.getDate())+' '+p2(dd.getHours())+':'+p2(dd.getMinutes());})();\n")
+    sb.append("  var la=parseFloat(n('data-lat')),lo=parseFloat(n('data-lon'));if(isNaN(la)||isNaN(lo))return;\n")
+    sb.append("  var opt={};if(L.GestureHandling){opt.gestureHandling=true;}\n")
+    sb.append("  var map=L.map('qmap',opt).setView([la,lo],8);\n")
+    sb.append("  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);\n")
+    sb.append("  var mv=parseFloat(n('data-mag'))||0;\n")
+    sb.append("  var mk=L.circleMarker([la,lo],{radius:8+mv*1.6,color:'#00247D',fillColor:'#CF142B',fillOpacity:0.85,weight:3}).addTo(map);\n")
+    sb.append("  mk.bindPopup('<b>M '+n('data-mag')+' '+n('data-type')+'</b><br>'+n('data-place')).openPopup();\n")
+    sb.append("  var uLayer=[];\n")
+    sb.append("  function drawUser(ula,ulo){if(isNaN(ula)||isNaN(ulo))return;uLayer.forEach(function(l){map.removeLayer(l);});uLayer=[];\n")
+    sb.append("    uLayer.push(L.marker([ula,ulo]).addTo(map).bindPopup('Tu ubicacion'));\n")
+    sb.append("    uLayer.push(L.polyline([[ula,ulo],[la,lo]],{color:'#00247D',weight:2,dashArray:'6,6'}).addTo(map));\n")
+    sb.append("    map.fitBounds([[ula,ulo],[la,lo]],{padding:[50,50],maxZoom:9});\n")
+    sb.append("    var R=6371,t=Math.PI/180,dLa=(la-ula)*t,dLo=(lo-ulo)*t,a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(ula*t)*Math.cos(la*t)*Math.sin(dLo/2)*Math.sin(dLo/2),dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));\n")
+    sb.append("    var qd=document.getElementById('q-dist');if(qd)qd.textContent=dist.toFixed(0)+' km';}\n")
+    sb.append("  var sla=parseFloat(localStorage.getItem('ulat')),slo=parseFloat(localStorage.getItem('ulon'));\n")
+    sb.append("  if(!isNaN(sla)&&!isNaN(slo)){drawUser(sla,slo);}\n")
+    sb.append("  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(function(pos){var a2=pos.coords.latitude,o2=pos.coords.longitude;try{localStorage.setItem('ulat',a2);localStorage.setItem('ulon',o2);}catch(e){}drawUser(a2,o2);},function(){});}\n")
+    sb.append("})();\n")
+    sb.append("</script>\n")
+    sb.append("</section>\n")
+    return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))
+}
+
+fn handle_health(req: Request) -> Response {
+    return response_json(200, "{\"status\":\"ok\"}")
+}
+
+// ---- PWA / iconos (servidos en la raiz con su content-type) ----
+fn handle_manifest(req: Request) -> Response {
+    let h: Array = ["Content-Type", "application/manifest+json; charset=utf-8"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/manifest.webmanifest") }
+}
+
+fn handle_sw(req: Request) -> Response {
+    let h: Array = ["Content-Type", "text/javascript; charset=utf-8", "Service-Worker-Allowed", "/"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/sw.js") }
+}
+
+fn handle_icon_svg(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/svg+xml"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon.svg") }
+}
+
+fn handle_icon_192(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/png"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon-192.png") }
+}
+
+fn handle_icon_512(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/png"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon-512.png") }
+}
+
+// Hilo en segundo plano: pre-calienta al arrancar y refresca cada 30 min, para
+// que las noticias/BVC esten siempre frescas (< 1 hora) aunque no haya trafico.
+fn refresher_worker() -> int {
+    news_warm()
+    sismos_warm()
+    var go: bool = true
+    while go {
+        sleep(1800000)
+        news_warm()
+        sismos_warm()
+    }
+    return 0
+}
+
+fn main() {
+    let port_str: String = getenv("PORT")
+    var port: int = 3010
+    if port_str != "" {
+        port = string_to_int(port_str)
+    }
+
+    sismos_init()
+    news_init()
+    thread_spawn(refresher_worker)
+
+    let app: App = app_new()
+    app_get(app, "/", handle_index)
+    app_get(app, "/clima", handle_clima)
+    app_get(app, "/finanzas", handle_finanzas)
+    app_get(app, "/noticias", handle_noticias)
+    app_get(app, "/sismos", handle_sismos)
+    app_get(app, "/sismos/{id}", handle_quake_detail)
+    app_get(app, "/articulo/{slug}", handle_article)
+    app_get(app, "/api/health", handle_health)
+    app_get(app, "/manifest.webmanifest", handle_manifest)
+    app_get(app, "/sw.js", handle_sw)
+    app_get(app, "/icon.svg", handle_icon_svg)
+    app_get(app, "/icon-192.png", handle_icon_192)
+    app_get(app, "/icon-512.png", handle_icon_512)
+    app_static(app, "/assets/", "static/assets/")
+    serve_app(app, port, 16)
+}
