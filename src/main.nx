@@ -217,6 +217,7 @@ fn handle_index(req: Request) -> Response {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<div class=\"cards-cfg\"><button id=\"cfg-btn\" type=\"button\" class=\"cfg-btn\" title=\"Ordenar tarjetas\" aria-label=\"Ordenar tarjetas\">&#9881;</button></div>\n")
     sb.append("<div id=\"home-cards\">\n")
+    sb.append("<div class=\"home-card\" data-key=\"hero\"><section class=\"hero\"><h1>Venezuela al dia</h1><p class=\"lede\">Noticias, informacion y monitoreo sismico en vivo.</p><a class=\"cta\" href=\"/sismos\">Ver sismos recientes &rarr;</a></section></div>\n")
     sb.append("<div class=\"home-card\" data-key=\"clima\">")
     sb.append(weather_card())
     sb.append("</div>\n")

@@ -110,12 +110,6 @@ pub fn render_home() -> String {
     let arts: Array = list_articles()
     var sb: StringBuilder = StringBuilder.new()
 
-    sb.append("<section class=\"hero\">\n")
-    sb.append("<h1>Venezuela al dia</h1>\n")
-    sb.append("<p class=\"lede\">Noticias, informacion y monitoreo sismico en vivo.</p>\n")
-    sb.append("<a class=\"cta\" href=\"/sismos\">Ver sismos recientes &rarr;</a>\n")
-    sb.append("</section>\n")
-
     sb.append("<section class=\"articles\">\n")
     sb.append("<h2>Articulos</h2>\n")
     if arts.length() == 0 {
