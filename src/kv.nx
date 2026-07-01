@@ -1,0 +1,145 @@
+// src/kv.nx — cliente minimo RESP2+TLS para nyx-kv (:6380).
+// Vendoreado del patron probado en nyx-kv-stack/dashboard/src/kv_client.nx:
+// una conexion TLS corta por request (AUTH -> comandos -> cierra). Loopback,
+// asi que el SSL_VERIFY_NONE implicito del runtime es aceptable.
+
+fn tls_read_line_local(h: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    var saw_cr: bool = false
+    var done: bool = false
+    while !done {
+        let chunk: String = tls_read(h, 1)
+        if chunk.length() == 0 {
+            return sb.to_string()
+        }
+        let c: int = chunk.charAt(0)
+        if saw_cr and c == 10 {
+            done = true
+        } else {
+            if saw_cr {
+                sb.append("\r")
+                saw_cr = false
+            }
+            if c == 13 {
+                saw_cr = true
+            } else {
+                sb.append(chunk)
+            }
+        }
+    }
+    return sb.to_string()
+}
+
+// Ejecuta un comando RESP2 y devuelve la respuesta simple/bulk como String.
+pub fn kv_cmd(h: int, parts: Array) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("*")
+    sb.append(int_to_string(parts.length()))
+    sb.append("\r\n")
+    var i: int = 0
+    while i < parts.length() {
+        let p: String = parts[i]
+        sb.append("$")
+        sb.append(int_to_string(p.length()))
+        sb.append("\r\n")
+        sb.append(p)
+        sb.append("\r\n")
+        i = i + 1
+    }
+    tls_write(h, sb.to_string())
+
+    let header: String = tls_read_line_local(h)
+    if header.length() == 0 {
+        return ""
+    }
+    let first: int = header.charAt(0)
+    if first == 36 {
+        let len_str: String = header.substring(1, header.length())
+        let len: int = string_to_int(len_str)
+        if len < 0 {
+            return ""
+        }
+        let data: String = tls_read_line_local(h)
+        return data
+    }
+    if first == 45 {
+        return ""
+    }
+    if header.length() > 1 {
+        return header.substring(1, header.length())
+    }
+    return ""
+}
+
+// Ejecuta un comando que devuelve un array RESP2 (p.ej. LRANGE) -> Array<String>.
+pub fn kv_cmd_array(h: int, parts: Array) -> Array {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("*")
+    sb.append(int_to_string(parts.length()))
+    sb.append("\r\n")
+    var i: int = 0
+    while i < parts.length() {
+        let p: String = parts[i]
+        sb.append("$")
+        sb.append(int_to_string(p.length()))
+        sb.append("\r\n")
+        sb.append(p)
+        sb.append("\r\n")
+        i = i + 1
+    }
+    tls_write(h, sb.to_string())
+
+    let header: String = tls_read_line_local(h)
+    var result: Array = []
+    if header.length() == 0 {
+        return result
+    }
+    let first: int = header.charAt(0)
+    if first != 42 {
+        return result
+    }
+    let count_str: String = header.substring(1, header.length())
+    let count: int = string_to_int(count_str)
+    if count <= 0 {
+        return result
+    }
+    var j: int = 0
+    while j < count {
+        let line: String = tls_read_line_local(h)
+        if line.length() > 0 and line.charAt(0) == 36 {
+            let data: String = tls_read_line_local(h)
+            result.push(data)
+        } else if line.length() > 1 {
+            result.push(line.substring(1, line.length()))
+        } else {
+            result.push("")
+        }
+        j = j + 1
+    }
+    return result
+}
+
+// Abre conexion TLS a nyx-kv y hace AUTH. Devuelve el handle o -1.
+pub fn kv_connect_auth(host: String, port: int, token: String) -> int {
+    let h: int = tls_connect(host, port)
+    if h == 0 {
+        return -1
+    }
+    if token.length() == 0 {
+        tls_close(h)
+        return -1
+    }
+    let parts: Array = ["AUTH", token]
+    let reply: String = kv_cmd(h, parts)
+    if reply != "OK" {
+        tls_close(h)
+        return -1
+    }
+    return h
+}
+
+pub fn kv_close(h: int) {
+    if h != 0 {
+        tls_close(h)
+    }
+}

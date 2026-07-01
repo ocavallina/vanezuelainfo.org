@@ -474,10 +474,46 @@ a { color: var(--azul); }
   font-size: .9rem;
 }
 
+/* ── Chat colectivo ─────────────────────────────────────────────── */
+.chat-card {
+  display: flex; align-items: center; gap: 14px; text-decoration: none;
+  background: linear-gradient(135deg, #4c1d95, #6d28d9);
+  color: #fff; border-radius: 14px; padding: 18px 20px; height: 100%;
+}
+.chat-card-ico { font-size: 2rem; line-height: 1; }
+.chat-card-txt h3 { margin: 0 0 4px; font-size: 1.1rem; }
+.chat-card-txt p { margin: 0 0 6px; font-size: .88rem; opacity: .9; }
+.chat-card-cta { font-size: .82rem; font-weight: 700; opacity: .95; }
+
+.chat-log {
+  background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: 12px; padding: 12px; height: 55vh; min-height: 260px;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+}
+.chat-empty { color: var(--gris); text-align: center; margin: auto; font-size: .92rem; }
+.chat-msg { background: var(--fondo); border-radius: 10px; padding: 8px 12px; }
+.chat-msg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.chat-msg-nick { font-weight: 700; color: var(--azul); font-size: .85rem; word-break: break-word; }
+.chat-msg-time { color: var(--gris); font-size: .72rem; flex: 0 0 auto; }
+.chat-msg-body { color: var(--tinta); font-size: .95rem; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
+
+.chat-form { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.chat-nick { border: 1px solid var(--borde); border-radius: 8px; padding: 8px 10px; font: inherit; max-width: 260px; }
+.chat-row { display: flex; gap: 8px; align-items: stretch; }
+.chat-text { flex: 1; border: 1px solid var(--borde); border-radius: 8px; padding: 8px 10px; font: inherit; resize: vertical; }
+.chat-send {
+  flex: 0 0 auto; background: var(--azul); color: #fff; border: 0;
+  border-radius: 8px; padding: 0 20px; font-weight: 700; cursor: pointer;
+}
+.chat-send:active { transform: translateY(1px); }
+.chat-meta { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--gris); }
+.chat-status { color: var(--rojo); font-weight: 600; }
+
 @media (max-width: 560px) {
   .hero { padding: 32px 22px; }
   .hero h1 { font-size: 1.7rem; }
   .quakes th, .quakes td { padding: 9px 8px; font-size: .9rem; }
   /* Ocultar Profundidad en pantallas pequenas para dar mas sitio a Lugar y Distancia */
   .quakes th:nth-child(3), .quakes td:nth-child(3) { display: none; }
+  .chat-log { height: 60vh; }
 }

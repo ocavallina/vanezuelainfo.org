@@ -11,6 +11,7 @@ import "src/layout"
 import "src/articles"
 import "src/sismos"
 import "src/news"
+import "src/chat"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -22,6 +23,12 @@ fn aesc(s: String) -> String {
 fn html_nocache(status: int, html: String) -> Response {
     let h: Array = ["Content-Type", "text/html; charset=utf-8", "Cache-Control", "no-cache", "Content-Security-Policy", "upgrade-insecure-requests"]
     return Response { status: status, headers_flat: h, body: html }
+}
+
+// Respuesta JSON sin cachear (para los endpoints del chat).
+fn json_nocache(status: int, json: String) -> Response {
+    let h: Array = ["Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-cache"]
+    return Response { status: status, headers_flat: h, body: json }
 }
 
 // JS que formatea los <time class="news-date" data-ts="RFC822"> a "hace X" local.
@@ -229,6 +236,9 @@ fn handle_index(req: Request) -> Response {
         sb.append(rot_news_card(rot))
         sb.append("</div>\n")
     }
+    sb.append("<div class=\"home-card\" data-key=\"chat\">")
+    sb.append(chat_card())
+    sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<script>")
     if rot.length() > 0 {
@@ -257,6 +267,102 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("</script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
+}
+
+// Tarjeta de chat para la portada (enlaza a /chat).
+fn chat_card() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a class=\"chat-card\" href=\"/chat\">")
+    sb.append("<div class=\"chat-card-ico\">&#128172;</div>")
+    sb.append("<div class=\"chat-card-txt\"><h3>Chat colectivo</h3>")
+    sb.append("<p>Conversa en vivo con otras personas sobre Venezuela.</p>")
+    sb.append("<span class=\"chat-card-cta\">Entrar al chat &rarr;</span></div>")
+    sb.append("</a>")
+    return sb.to_string()
+}
+
+// JS del chat: sondea /api/chat cada 3 s y publica por POST. Render con
+// textContent (anti-XSS). Hora en local. Nick recordado en localStorage.
+fn chat_page_js() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("(function(){")
+    sb.append("var log=document.getElementById('chat-log');")
+    sb.append("var form=document.getElementById('chat-form');")
+    sb.append("var nick=document.getElementById('chat-nick');")
+    sb.append("var text=document.getElementById('chat-text');")
+    sb.append("var count=document.getElementById('chat-count');")
+    sb.append("var status=document.getElementById('chat-status');")
+    sb.append("try{var sn=localStorage.getItem('chat_nick');if(sn)nick.value=sn;}catch(e){}")
+    sb.append("function two(n){return n<10?'0'+n:''+n;}")
+    sb.append("function fmt(t){var d=new Date(t*1000);var now=new Date();var hm=two(d.getHours())+':'+two(d.getMinutes());")
+    sb.append("if(d.toDateString()===now.toDateString())return hm;return two(d.getDate())+'/'+two(d.getMonth()+1)+' '+hm;}")
+    sb.append("function render(items){var atBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-40;log.innerHTML='';")
+    sb.append("if(!items.length){var e=document.createElement('div');e.className='chat-empty';e.textContent='Aun no hay mensajes. Se el primero.';log.appendChild(e);return;}")
+    sb.append("for(var i=0;i<items.length;i++){var it=items[i];var row=document.createElement('div');row.className='chat-msg';")
+    sb.append("var head=document.createElement('div');head.className='chat-msg-head';")
+    sb.append("var nm=document.createElement('span');nm.className='chat-msg-nick';nm.textContent=it.n;head.appendChild(nm);")
+    sb.append("var tm=document.createElement('span');tm.className='chat-msg-time';tm.textContent=fmt(it.t);head.appendChild(tm);")
+    sb.append("var bd=document.createElement('div');bd.className='chat-msg-body';bd.textContent=it.m;")
+    sb.append("row.appendChild(head);row.appendChild(bd);log.appendChild(row);}")
+    sb.append("if(atBottom)log.scrollTop=log.scrollHeight;}")
+    sb.append("function load(){fetch('/api/chat',{cache:'no-store'}).then(function(r){return r.json();}).then(render).catch(function(){});}")
+    sb.append("function upd(){count.textContent=text.value.length+'/280';}text.addEventListener('input',upd);upd();")
+    sb.append("form.addEventListener('submit',function(ev){ev.preventDefault();var m=text.value.trim();if(!m)return;")
+    sb.append("try{localStorage.setItem('chat_nick',nick.value);}catch(e){}")
+    sb.append("status.textContent='Enviando...';")
+    sb.append("var body='nick='+encodeURIComponent(nick.value)+'&texto='+encodeURIComponent(m);")
+    sb.append("fetch('/api/chat/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})")
+    sb.append(".then(function(r){return r.json();}).then(function(j){if(j.ok){text.value='';upd();status.textContent='';load();}else{status.textContent=j.error||'No se pudo enviar';}})")
+    sb.append(".catch(function(){status.textContent='Error de red';});});")
+    sb.append("load();setInterval(load,3000);")
+    sb.append("})();")
+    return sb.to_string()
+}
+
+// Pagina /chat — chat colectivo publico (polling cada 3 s).
+fn handle_chat(req: Request) -> Response {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"chat\">\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("<h1>Chat colectivo</h1>\n")
+    sb.append("<p class=\"lede\">Publico y moderado. Los mensajes los ven todos y se conservan alrededor de 24 h. Se respetuoso.</p>\n")
+    sb.append("<div id=\"chat-log\" class=\"chat-log\" aria-live=\"polite\"></div>\n")
+    sb.append("<form id=\"chat-form\" class=\"chat-form\" autocomplete=\"off\">\n")
+    sb.append("<input id=\"chat-nick\" class=\"chat-nick\" maxlength=\"24\" placeholder=\"Tu nombre (opcional)\">\n")
+    sb.append("<div class=\"chat-row\">\n")
+    sb.append("<textarea id=\"chat-text\" class=\"chat-text\" maxlength=\"280\" rows=\"2\" placeholder=\"Escribe un mensaje...\" required></textarea>\n")
+    sb.append("<button type=\"submit\" class=\"chat-send\">Enviar</button>\n")
+    sb.append("</div>\n")
+    sb.append("<div class=\"chat-meta\"><span id=\"chat-count\">0/280</span> <span id=\"chat-status\" class=\"chat-status\"></span></div>\n")
+    sb.append("</form>\n")
+    sb.append("</section>\n")
+    sb.append("<script>")
+    sb.append(chat_page_js())
+    sb.append("</script>\n")
+    return html_nocache(200, page_fixed("Chat", sb.to_string()))
+}
+
+// GET /api/chat — ultimos mensajes en JSON (sin cache).
+fn handle_chat_list(req: Request) -> Response {
+    return json_nocache(200, chat_list_json())
+}
+
+// POST /api/chat/send — publica un mensaje (body urlencoded: nick, texto).
+fn handle_chat_send(req: Request) -> Response {
+    let err: String = chat_send_body(req.body)
+    if err.length() == 0 {
+        return json_nocache(200, "{\"ok\":true}")
+    }
+    return json_nocache(200, "{\"ok\":false,\"error\":\"" + err + "\"}")
+}
+
+// POST /api/chat/clear — borra el chat si el campo key == CHAT_ADMIN_KEY (env).
+fn handle_chat_clear(req: Request) -> Response {
+    let ok: bool = chat_clear_body(req.body)
+    if ok {
+        return json_nocache(200, "{\"ok\":true}")
+    }
+    return json_nocache(403, "{\"ok\":false}")
 }
 
 // Landing /clima — pronostico completo de cualquier ciudad (buscador) o por
@@ -604,6 +710,10 @@ fn main() {
     app_get(app, "/clima", handle_clima)
     app_get(app, "/finanzas", handle_finanzas)
     app_get(app, "/noticias", handle_noticias)
+    app_get(app, "/chat", handle_chat)
+    app_get(app, "/api/chat", handle_chat_list)
+    app_post(app, "/api/chat/send", handle_chat_send)
+    app_post(app, "/api/chat/clear", handle_chat_clear)
     app_get(app, "/sismos", handle_sismos)
     app_get(app, "/sismos/{id}", handle_quake_detail)
     app_get(app, "/articulo/{slug}", handle_article)

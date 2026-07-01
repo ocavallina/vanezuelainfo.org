@@ -1,0 +1,199 @@
+// src/chat.nx — chat colectivo: guarda/lee mensajes en nyx-kv (RESP2+TLS).
+// Moderacion: saneo (quita | y control), topes de longitud, filtro de groserias,
+// cupo de ritmo global. Token dedicado (NO admin) para aislar el namespace.
+
+import "src/kv"
+import "src/md"
+
+// Decodificador percent (%XX + '+') del runtime; std/web solo decodifica '+'.
+extern "C" fn nyx_url_decode(s: String) -> String
+
+const KV_HOST: String = "127.0.0.1"
+const KV_PORT: int = 6380
+
+// Extrae un campo de un body x-www-form-urlencoded y lo decodifica.
+fn form_field(body: String, key: String) -> String {
+    let pairs: Array = body.split("&")
+    var i: int = 0
+    while i < pairs.length() {
+        let pair: String = pairs[i]
+        let eq: int = pair.indexOf("=")
+        if eq > 0 {
+            let k: String = pair.substring(0, eq)
+            if k == key {
+                let v: String = pair.substring(eq + 1, pair.length())
+                return nyx_url_decode(v)
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+// Token del chat: env NYXKV_CHAT_TOKEN o el archivo dedicado (fuera del repo).
+fn chat_token() -> String {
+    let e: String = getenv("NYXKV_CHAT_TOKEN")
+    if e.length() > 0 {
+        return md_trim(e)
+    }
+    let f: String = read_file("/home/admin/.veninfo-chat-token")
+    return md_trim(f)
+}
+
+fn chat_conn() -> int {
+    return kv_connect_auth(KV_HOST, KV_PORT, chat_token())
+}
+
+// Quita '|' y caracteres de control (los pasa a espacio), recorta y limita.
+fn sanitize(s: String, maxb: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if c == 124 or c < 32 {
+            sb.append(" ")
+        } else {
+            sb.append(s.substring(i, i + 1))
+        }
+        i = i + 1
+    }
+    var out: String = md_trim(sb.to_string())
+    if out.length() > maxb {
+        out = out.substring(0, maxb)
+    }
+    return out
+}
+
+// Filtro de groserias basico (formas en minuscula -> asteriscos).
+fn censor(s: String) -> String {
+    var o: String = s.replace("mierda", "******")
+    o = o.replace("puta", "****")
+    o = o.replace("puto", "****")
+    o = o.replace("coño", "****")
+    o = o.replace("marico", "******")
+    o = o.replace("marica", "******")
+    o = o.replace("verga", "*****")
+    o = o.replace("carajo", "******")
+    return o
+}
+
+// Escapa para JSON ("/\\ y comillas). El control ya se elimino en sanitize.
+fn json_esc(s: String) -> String {
+    var o: String = s.replace("\\", "\\\\")
+    o = o.replace("\"", "\\\"")
+    return o
+}
+
+// Publica un mensaje. Devuelve "" si OK, o el texto del error.
+pub fn chat_post(nick_raw: String, texto_raw: String) -> String {
+    let texto: String = censor(sanitize(texto_raw, 280))
+    if texto.length() == 0 {
+        return "Mensaje vacio"
+    }
+    var nick: String = sanitize(nick_raw, 24)
+    if nick.length() == 0 {
+        nick = "Anonimo"
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        return "Chat no disponible"
+    }
+    // cupo de ritmo global: max ~25 mensajes por ventana de 10s
+    let inc: Array = ["INCR", "chat:rl"]
+    let cnt: int = string_to_int(kv_cmd(h, inc))
+    if cnt == 1 {
+        let exp: Array = ["EXPIRE", "chat:rl", "10"]
+        kv_cmd(h, exp)
+    }
+    if cnt > 25 {
+        kv_close(h)
+        return "Demasiados mensajes ahora mismo, espera unos segundos"
+    }
+    let ts: String = int_to_string(time())
+    let val: String = ts + "|" + nick + "|" + texto
+    let push: Array = ["RPUSH", "chat:msgs", val]
+    kv_cmd(h, push)
+    let trim: Array = ["LTRIM", "chat:msgs", "-200", "-1"]
+    kv_cmd(h, trim)
+    kv_close(h)
+    return ""
+}
+
+// Devuelve los ultimos 50 mensajes como JSON [{t,n,m}].
+pub fn chat_list_json() -> String {
+    let h: int = chat_conn()
+    if h < 0 {
+        return "[]"
+    }
+    let q: Array = ["LRANGE", "chat:msgs", "-50", "-1"]
+    let rows: Array = kv_cmd_array(h, q)
+    kv_close(h)
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("[")
+    var i: int = 0
+    var first: bool = true
+    while i < rows.length() {
+        let row: String = rows[i]
+        let p1: int = row.indexOf("|")
+        if p1 > 0 {
+            let ts: String = row.substring(0, p1)
+            let rest: String = row.substring(p1 + 1, row.length())
+            let p2: int = rest.indexOf("|")
+            var nick: String = rest
+            var texto: String = ""
+            if p2 >= 0 {
+                nick = rest.substring(0, p2)
+                texto = rest.substring(p2 + 1, rest.length())
+            }
+            if !first {
+                sb.append(",")
+            }
+            first = false
+            sb.append("{\"t\":")
+            sb.append(ts)
+            sb.append(",\"n\":\"")
+            sb.append(json_esc(nick))
+            sb.append("\",\"m\":\"")
+            sb.append(json_esc(texto))
+            sb.append("\"}")
+        }
+        i = i + 1
+    }
+    sb.append("]")
+    return sb.to_string()
+}
+
+// Recibe el body crudo del POST /api/chat/send, extrae nick/texto y publica.
+// Devuelve "" si OK o el texto del error.
+pub fn chat_send_body(body: String) -> String {
+    let nick: String = form_field(body, "nick")
+    let texto: String = form_field(body, "texto")
+    return chat_post(nick, texto)
+}
+
+// Recibe el body crudo del POST /api/chat/clear (campo key) y borra si procede.
+pub fn chat_clear_body(body: String) -> bool {
+    let key: String = form_field(body, "key")
+    return chat_clear(key)
+}
+
+// Borra todo el chat si la clave coincide con CHAT_ADMIN_KEY (env). Si no hay
+// env configurada, esta deshabilitado.
+pub fn chat_clear(key: String) -> bool {
+    let admin_key: String = getenv("CHAT_ADMIN_KEY")
+    if admin_key.length() == 0 {
+        return false
+    }
+    if key != admin_key {
+        return false
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        return false
+    }
+    let del: Array = ["DEL", "chat:msgs"]
+    kv_cmd(h, del)
+    kv_close(h)
+    return true
+}

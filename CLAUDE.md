@@ -51,6 +51,8 @@ src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom 
 src/articles.nx  Portada + render de artículos (server-side desde content/).
 src/md.nx        Renderizador Markdown→HTML propio + html_escape.
 src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, caché, tabla HTML con data-*.
+src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexión corta por request.
+src/chat.nx      Chat colectivo: valida/sanea/filtra, guarda/lee en nyx-kv. Parseo de body a mano.
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).
 static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png.
 deploy/          nyx-venezuelainfo.service (referencia).
@@ -98,10 +100,33 @@ packages/        nyx-serve vendoreado.
 - Todo client-side con **Open-Meteo** (sin API key, CORS). Ciudad elegida en
   localStorage (`w_lat`/`w_lon`/`w_name`), compartida con la tarjeta.
 
+## Chat colectivo (src/chat.nx + src/kv.nx)
+
+- Chat público en `/chat`; tarjeta reordenable en la portada (`data-key="chat"`).
+- **Almacenamiento: nyx-kv** (:6380, RESP2+TLS) — lista `chat:msgs`
+  (`RPUSH`/`LTRIM -200 -1`/`LRANGE -50 -1`). Formato `ts|nick|texto` (nick/texto
+  saneados sin `|`). **Token dedicado** (NO admin) en `/home/admin/.veninfo-chat-token`
+  (0600) o env `NYXKV_CHAT_TOKEN`; se creó con `TOKEN_CREATE veninfo enterprise 0`
+  (namespace `veninfo::` aislado del `__admin__` del dashboard).
+- **Persistencia rodante ~24 h**: este deploy de nyx-kv **fuerza TTL 24h en todas
+  las claves**; sobrevive reinicios/deploys pero los mensajes viejos se autolimpian.
+- **Tiempo real: NO** (el gateway no hace upgrade WebSocket). Es **polling**: el
+  cliente pide `GET /api/chat` cada 3 s. Render con `textContent` (anti-XSS).
+- **Moderación**: escape/saneo, topes (nick 24 / texto 280), filtro de groserías,
+  **cupo global** (`INCR chat:rl`+`EXPIRE 10`, ~25/10s). `POST /api/chat/clear` borra
+  todo si el campo `key` == env `CHAT_ADMIN_KEY` (deshabilitado si no hay env).
+- **Body POST parseado a mano** (`form_field` + `nyx_url_decode` extern) para
+  esquivar el bug de `req.form`/`req.query`. std/web `url_decode` NO decodifica `%XX`.
+- **Gotcha ops**: al probar con `./venezuelainfo-org &` en background, el binario
+  queda **detached** y retiene el puerto → el systemd entra en bucle "cannot listen".
+  Matar strays con `sudo pkill -9 -f venezuelainfo-org` antes de reiniciar el servicio.
+
 ## Rutas
 
-`/` · `/clima` · `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health`
-· `/manifest.webmanifest` · `/sw.js` · `/icon*.png|svg` · `/assets/*`
+`/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `/sismos` · `/sismos/{id}`
+· `/articulo/{slug}` · `/api/health` · `/api/chat` · `POST /api/chat/send`
+· `POST /api/chat/clear` · `/manifest.webmanifest` · `/sw.js` · `/icon*.png|svg`
+· `/assets/*`
 
 ## Pendientes / ideas (backlog)
 
