@@ -46,6 +46,7 @@ sudo systemctl restart nyx-venezuelainfo    # recarga el servicio (NO el gateway
 ```
 src/main.nx      Entry + rutas + handlers. AQUÍ vive casi todo el "front" (JS en strings):
                  weather_card(), handle_clima(), handle_sismos(), handle_quake_detail().
+                 handle_index() (portada + tarjetas) + cards_order_js() (orden/reorden de tarjetas).
 src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom bloqueado),
                  metas PWA, registro del service worker.
 src/articles.nx  Portada + render de artículos (server-side desde content/).
@@ -76,6 +77,12 @@ packages/        nyx-serve vendoreado.
 - **Scope global plano entre módulos**: los `const`/`fn` de todos los `.nx`
   importados comparten un único scope. NO redeclarar el mismo `const` en dos
   módulos (ej. `KV_HOST`) → "already declared". Declararlo una vez o inline.
+- **NO redeclarar un `extern "C"` que ya provee `std/`**: el scope global plano
+  también aplica a los `extern`. `std/web` ahora declara `extern nyx_url_decode`;
+  como `main.nx` importa `std/web`, ese símbolo es visible en TODOS los módulos.
+  Declararlo otra vez (lo hacía `src/chat.nx`) da error de LINK **`invalid
+  redefinition of function 'nyx_url_decode'`** (no lo detecta el front del compilador,
+  revienta en clang). Usar el de `std/web` sin redeclarar.
 - **nyx-serve ignora `headers_flat` en 301/302** (`packages/nyx-serve/src/server.nx`):
   en un redirect usa `resp.body` como valor de `Location` y NO emite otras
   cabeceras → **no se puede fijar `Set-Cookie` en un redirect**. Para fijar/limpiar
@@ -93,6 +100,19 @@ packages/        nyx-serve vendoreado.
 - **Tiempos en hora LOCAL**: el servidor manda ISO UTC en `data-iso`; el navegador
   formatea a local (helpers `locPair`/`locStr` en el JS de sismos). No mostrar UTC.
 - **Zoom bloqueado**: todas las páginas usan `page_fixed` (`user-scalable=no`).
+
+## Portada / tarjetas (src/main.nx: handle_index + cards_order_js)
+
+- Tarjetas (`.home-card` con `data-key`) dentro de `#home-cards`. Orden guardado en
+  `localStorage` (`card_order`, lista de `data-key`). Botón ⚙️ (`#cfg-btn`) activa el
+  **modo edición** (`#home-cards.editing`).
+- **Dos formas de reordenar** (ambas guardan en `card_order`):
+  1. **Drag&drop** HTML5 (escritorio) — `draggable` solo en modo edición.
+  2. **Flechas ↑/↓** (`.card-move`/`.cm-btn`) que `cards_order_js` inyecta por JS en
+     cada tarjeta; visibles solo en modo edición. **Imprescindibles para móvil/PWA**
+     (el drag nativo táctil no funciona). Mueven con `previous/nextElementSibling`.
+- CSS de todo esto en `static/assets/style.css` (`.cfg-btn`, `.home-card`,
+  `.card-move`, `.cm-btn`). **Al tocarlo, subir `veninfo-vN` en `static/sw.js`.**
 
 ## Sismos (src/sismos.nx)
 
@@ -139,8 +159,9 @@ packages/        nyx-serve vendoreado.
   cupo de ritmo **por sala** (`INCR chat:rl:<id>`+`EXPIRE 10`, ~25/10s). Vaciar/borrar
   salas se hace desde el **panel admin** (`/admin/salas`). El antiguo
   `POST /api/chat/clear` + `CHAT_ADMIN_KEY` fue **eliminado** (lo reemplaza el panel).
-- **Body POST parseado a mano** (`form_field` + `nyx_url_decode` extern) para
-  esquivar el bug de `req.form`/`req.query`. std/web `url_decode` NO decodifica `%XX`.
+- **Body POST parseado a mano** (`form_field` en `chat.nx` + `nyx_url_decode` de
+  `std/web`) para esquivar el bug de `req.form`/`req.query`. `nyx_url_decode`
+  decodifica `%XX` + `+` (el símbolo lo aporta `std/web`; no redeclararlo, ver arriba).
 - **Gotcha ops**: al probar con `./venezuelainfo-org &` en background, el binario
   queda **detached** y retiene el puerto → el systemd entra en bucle "cannot listen".
   Matar strays con `sudo pkill -9 -f venezuelainfo-org` antes de reiniciar el servicio.

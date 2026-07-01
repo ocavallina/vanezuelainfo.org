@@ -3,7 +3,7 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v29';
+const CACHE = 'veninfo-v31';
 const SHELL = ['/', '/assets/style.css', '/icon.svg', '/icon-192.png'];
 
 self.addEventListener('install', function (e) {

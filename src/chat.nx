@@ -10,8 +10,9 @@ import "src/kv"
 import "src/md"
 import "src/articles"
 
-// Decodificador percent (%XX + '+') del runtime; std/web solo decodifica '+'.
-extern "C" fn nyx_url_decode(s: String) -> String
+// nyx_url_decode (percent %XX + '+') viene de std/web (import en main.nx); el scope
+// global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de
+// std/web da "invalid redefinition of function 'nyx_url_decode'" en el link.
 
 const KV_HOST: String = "127.0.0.1"
 const KV_PORT: int = 6380
