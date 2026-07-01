@@ -12,6 +12,8 @@ import "src/articles"
 import "src/sismos"
 import "src/news"
 import "src/chat"
+import "src/baquiano"
+import "src/admin"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -236,6 +238,9 @@ fn handle_index(req: Request) -> Response {
         sb.append(rot_news_card(rot))
         sb.append("</div>\n")
     }
+    sb.append("<div class=\"home-card\" data-key=\"baquiano\">")
+    sb.append(baquiano_card())
+    sb.append("</div>\n")
     sb.append("<div class=\"home-card\" data-key=\"chat\">")
     sb.append(chat_card())
     sb.append("</div>\n")
@@ -292,7 +297,9 @@ fn chat_page_js() -> String {
     sb.append("var text=document.getElementById('chat-text');")
     sb.append("var count=document.getElementById('chat-count');")
     sb.append("var status=document.getElementById('chat-status');")
+    sb.append("var roomSel=document.getElementById('chat-room');")
     sb.append("try{var sn=localStorage.getItem('chat_nick');if(sn)nick.value=sn;}catch(e){}")
+    sb.append("var room='general';try{var sr=localStorage.getItem('chat_room');if(sr)room=sr;}catch(e){}")
     sb.append("function two(n){return n<10?'0'+n:''+n;}")
     sb.append("function fmt(t){var d=new Date(t*1000);var now=new Date();var hm=two(d.getHours())+':'+two(d.getMinutes());")
     sb.append("if(d.toDateString()===now.toDateString())return hm;return two(d.getDate())+'/'+two(d.getMonth()+1)+' '+hm;}")
@@ -305,16 +312,20 @@ fn chat_page_js() -> String {
     sb.append("var bd=document.createElement('div');bd.className='chat-msg-body';bd.textContent=it.m;")
     sb.append("row.appendChild(head);row.appendChild(bd);log.appendChild(row);}")
     sb.append("if(atBottom)log.scrollTop=log.scrollHeight;}")
-    sb.append("function load(){fetch('/api/chat',{cache:'no-store'}).then(function(r){return r.json();}).then(render).catch(function(){});}")
+    sb.append("function load(){fetch('/api/chat/'+encodeURIComponent(room),{cache:'no-store'}).then(function(r){return r.json();}).then(render).catch(function(){});}")
+    sb.append("function loadRooms(){if(!roomSel)return;fetch('/api/rooms',{cache:'no-store'}).then(function(r){return r.json();}).then(function(rs){")
+    sb.append("roomSel.innerHTML='';var ok=false;for(var i=0;i<rs.length;i++){var o=document.createElement('option');o.value=rs[i].id;o.textContent=rs[i].n;if(rs[i].id===room)ok=true;roomSel.appendChild(o);}")
+    sb.append("if(!ok)room='general';roomSel.value=room;}).catch(function(){});}")
+    sb.append("if(roomSel){roomSel.addEventListener('change',function(){room=roomSel.value;try{localStorage.setItem('chat_room',room);}catch(e){}log.innerHTML='';load();});}")
     sb.append("function upd(){count.textContent=text.value.length+'/280';}text.addEventListener('input',upd);upd();")
     sb.append("form.addEventListener('submit',function(ev){ev.preventDefault();var m=text.value.trim();if(!m)return;")
     sb.append("try{localStorage.setItem('chat_nick',nick.value);}catch(e){}")
     sb.append("status.textContent='Enviando...';")
-    sb.append("var body='nick='+encodeURIComponent(nick.value)+'&texto='+encodeURIComponent(m);")
+    sb.append("var body='room='+encodeURIComponent(room)+'&nick='+encodeURIComponent(nick.value)+'&texto='+encodeURIComponent(m);")
     sb.append("fetch('/api/chat/send',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})")
     sb.append(".then(function(r){return r.json();}).then(function(j){if(j.ok){text.value='';upd();status.textContent='';load();}else{status.textContent=j.error||'No se pudo enviar';}})")
     sb.append(".catch(function(){status.textContent='Error de red';});});")
-    sb.append("load();setInterval(load,3000);")
+    sb.append("loadRooms();load();setInterval(load,3000);setInterval(loadRooms,15000);")
     sb.append("})();")
     return sb.to_string()
 }
@@ -325,7 +336,8 @@ fn handle_chat(req: Request) -> Response {
     sb.append("<section class=\"chat\">\n")
     sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
     sb.append("<h1>Chat colectivo</h1>\n")
-    sb.append("<p class=\"lede\">Publico y moderado. Los mensajes los ven todos y se conservan alrededor de 24 h. Se respetuoso.</p>\n")
+    sb.append("<p class=\"lede\">Publico y moderado. Elige una sala; los mensajes los ven todos. Se respetuoso.</p>\n")
+    sb.append("<div class=\"chat-rooms-bar\"><label for=\"chat-room\">Sala:</label> <select id=\"chat-room\" class=\"chat-room\"><option value=\"general\">General</option></select></div>\n")
     sb.append("<div id=\"chat-log\" class=\"chat-log\" aria-live=\"polite\"></div>\n")
     sb.append("<form id=\"chat-form\" class=\"chat-form\" autocomplete=\"off\">\n")
     sb.append("<input id=\"chat-nick\" class=\"chat-nick\" maxlength=\"24\" placeholder=\"Tu nombre (opcional)\">\n")
@@ -342,12 +354,23 @@ fn handle_chat(req: Request) -> Response {
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
-// GET /api/chat — ultimos mensajes en JSON (sin cache).
-fn handle_chat_list(req: Request) -> Response {
-    return json_nocache(200, chat_list_json())
+// GET /api/rooms — lista de salas disponibles en JSON.
+fn handle_chat_rooms(req: Request) -> Response {
+    return json_nocache(200, chat_rooms_json())
 }
 
-// POST /api/chat/send — publica un mensaje (body urlencoded: nick, texto).
+// GET /api/chat — ultimos mensajes de la sala general (compat).
+fn handle_chat_list(req: Request) -> Response {
+    return json_nocache(200, chat_list_json("general"))
+}
+
+// GET /api/chat/{room} — ultimos mensajes de una sala en JSON (sin cache).
+fn handle_chat_room(req: Request) -> Response {
+    let room: String = req.params.get("room")
+    return json_nocache(200, chat_list_json(room))
+}
+
+// POST /api/chat/send — publica un mensaje (body urlencoded: room, nick, texto).
 fn handle_chat_send(req: Request) -> Response {
     let err: String = chat_send_body(req.body)
     if err.length() == 0 {
@@ -356,13 +379,20 @@ fn handle_chat_send(req: Request) -> Response {
     return json_nocache(200, "{\"ok\":false,\"error\":\"" + err + "\"}")
 }
 
-// POST /api/chat/clear — borra el chat si el campo key == CHAT_ADMIN_KEY (env).
-fn handle_chat_clear(req: Request) -> Response {
-    let ok: bool = chat_clear_body(req.body)
-    if ok {
-        return json_nocache(200, "{\"ok\":true}")
+// GET /baquiano — indice de zonas de la guia.
+fn handle_baquiano(req: Request) -> Response {
+    return html_nocache(200, page_fixed("Baquiano", render_baquiano_index()))
+}
+
+// GET /baquiano/{zona} — sitios de una zona.
+fn handle_baquiano_zone(req: Request) -> Response {
+    let zona: String = req.params.get("zona")
+    let content: String = render_baquiano_zone(zona)
+    if content.length() == 0 {
+        let nf: String = "<section class=\"baquiano\"><p><a href=\"/baquiano\">&larr; Todas las zonas</a></p><h1>Zona no encontrada</h1></section>"
+        return html_nocache(404, page_fixed("Baquiano", nf))
     }
-    return json_nocache(403, "{\"ok\":false}")
+    return html_nocache(200, page_fixed("Baquiano", content))
 }
 
 // Landing /clima — pronostico completo de cualquier ciudad (buscador) o por
@@ -703,6 +733,7 @@ fn main() {
 
     sismos_init()
     news_init()
+    admin_init()
     thread_spawn(refresher_worker)
 
     let app: App = app_new()
@@ -711,9 +742,19 @@ fn main() {
     app_get(app, "/finanzas", handle_finanzas)
     app_get(app, "/noticias", handle_noticias)
     app_get(app, "/chat", handle_chat)
+    app_get(app, "/api/rooms", handle_chat_rooms)
     app_get(app, "/api/chat", handle_chat_list)
+    app_get(app, "/api/chat/{room}", handle_chat_room)
     app_post(app, "/api/chat/send", handle_chat_send)
-    app_post(app, "/api/chat/clear", handle_chat_clear)
+    app_get(app, "/baquiano", handle_baquiano)
+    app_get(app, "/baquiano/{zona}", handle_baquiano_zone)
+    app_get(app, "/admin", handle_admin)
+    app_post(app, "/admin/login", handle_admin_login)
+    app_post(app, "/admin/logout", handle_admin_logout)
+    app_get(app, "/admin/baquiano", handle_admin_baquiano)
+    app_post(app, "/admin/baquiano", handle_admin_baquiano_post)
+    app_get(app, "/admin/salas", handle_admin_salas)
+    app_post(app, "/admin/salas", handle_admin_salas_post)
     app_get(app, "/sismos", handle_sismos)
     app_get(app, "/sismos/{id}", handle_quake_detail)
     app_get(app, "/articulo/{slug}", handle_article)

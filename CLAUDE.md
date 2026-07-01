@@ -52,10 +52,16 @@ src/articles.nx  Portada + render de artículos (server-side desde content/).
 src/md.nx        Renderizador Markdown→HTML propio + html_escape.
 src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, caché, tabla HTML con data-*.
 src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexión corta por request.
-src/chat.nx      Chat colectivo: valida/sanea/filtra, guarda/lee en nyx-kv. Parseo de body a mano.
+                 Helpers kv_get/set/setex/del/exists/incr/expire/rpush/ltrim/lrange sobre kv_cmd.
+src/chat.nx      Chat colectivo CON SALAS: valida/sanea/filtra, guarda/lee por sala en nyx-kv.
+                 Parseo de body a mano. Solo el admin crea/borra salas. form_field es pub.
+src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenido en nyx-kv,
+                 editable desde el panel admin. render_baquiano_index/zone() + baquiano_card().
+src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
+                 baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).
 static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png.
-deploy/          nyx-venezuelainfo.service (referencia).
+deploy/          nyx-venezuelainfo.service + admin.conf.example (drop-in del secreto admin).
 packages/        nyx-serve vendoreado.
 ```
 
@@ -67,6 +73,14 @@ packages/        nyx-serve vendoreado.
 - **Imports internos de paquetes** deben ir **calificados**:
   `import "nyx-serve/src/files"` (no `import "src/files"`) — el resolver actual
   no resuelve el relativo en paquetes vendoreados.
+- **Scope global plano entre módulos**: los `const`/`fn` de todos los `.nx`
+  importados comparten un único scope. NO redeclarar el mismo `const` en dos
+  módulos (ej. `KV_HOST`) → "already declared". Declararlo una vez o inline.
+- **nyx-serve ignora `headers_flat` en 301/302** (`packages/nyx-serve/src/server.nx`):
+  en un redirect usa `resp.body` como valor de `Location` y NO emite otras
+  cabeceras → **no se puede fijar `Set-Cookie` en un redirect**. Para fijar/limpiar
+  cookie: responder `200` con `Set-Cookie` + `<meta refresh>` (ver
+  `set_cookie_and_go` en `src/admin.nx`). En `redirect()` el destino va en el body.
 - **Literales de array globales multi-elemento se inicializan vacíos**: inicializar
   los holders dentro de una función (ver `sismos_init()`), no confiar en el literal.
 - **Leer String de Array/Map**: asignar SIEMPRE a un `let x: String = arr[i]`
@@ -102,38 +116,71 @@ packages/        nyx-serve vendoreado.
 
 ## Chat colectivo (src/chat.nx + src/kv.nx)
 
-- Chat público en `/chat`; tarjeta reordenable en la portada (`data-key="chat"`).
-- **Almacenamiento: nyx-kv** (:6380, RESP2+TLS) — lista `chat:msgs`
-  (`RPUSH`/`LTRIM -200 -1`/`LRANGE -50 -1`). Formato `ts|nick|texto` (nick/texto
-  saneados sin `|`). **Token dedicado** (NO admin) en `/home/admin/.veninfo-chat-token`
-  (0600) o env `NYXKV_CHAT_TOKEN`; se creó con `TOKEN_CREATE veninfo enterprise 0`
-  (namespace `veninfo::` aislado del `__admin__` del dashboard).
-- **Persistencia rodante ~24 h**: este deploy de nyx-kv **fuerza TTL 24h en todas
-  las claves**; sobrevive reinicios/deploys pero los mensajes viejos se autolimpian.
+- Chat público en `/chat` **con salas**; tarjeta reordenable en la portada
+  (`data-key="chat"`). Selector de sala en el JS (localStorage `chat_room`).
+- **Salas**: la sala `general` usa la clave legacy `chat:msgs`; el resto usan
+  `chat:room:<id>:msgs`. Índice de salas creadas por el admin en la lista
+  `chat:rooms` (entradas `id|nombre`). **Solo el admin crea/borra salas** (panel).
+  Endpoints: `GET /api/rooms` (lista), `GET /api/chat/{room}` (mensajes),
+  `POST /api/chat/send` (campo `room` en el body). Sala validada con `is_valid_slug`
+  + existencia; rate-limit **por sala** (`chat:rl:<id>`).
+- **Almacenamiento: nyx-kv** (:6380, RESP2+TLS) — `RPUSH`/`LTRIM -200 -1`/
+  `LRANGE -50 -1`. Formato `ts|nick|texto` (nick/texto saneados sin `|`). **Token
+  dedicado** (NO admin) en `/home/admin/.veninfo-chat-token` (0600) o env
+  `NYXKV_CHAT_TOKEN`; `TOKEN_CREATE veninfo enterprise 0` (namespace `veninfo::`).
+- **Sin TTL forzado**: el TTL de 24h del daemon **solo aplica al plan `free`**
+  (`auth_force_ttl` devuelve false para `enterprise`, ver
+  `nyx-kv-stack/.../auth.nx`). El token `veninfo` es enterprise → las claves
+  (`chat:*`, `baq:*`, `admin:*`) **persisten indefinidamente** (no ponerles `EXPIRE`
+  salvo rate-limit y sesiones). La app no pone `EXPIRE` en `chat:msgs`.
 - **Tiempo real: NO** (el gateway no hace upgrade WebSocket). Es **polling**: el
   cliente pide `GET /api/chat` cada 3 s. Render con `textContent` (anti-XSS).
 - **Moderación**: escape/saneo, topes (nick 24 / texto 280), filtro de groserías,
-  **cupo global** (`INCR chat:rl`+`EXPIRE 10`, ~25/10s). `POST /api/chat/clear` borra
-  todo si el campo `key` == env `CHAT_ADMIN_KEY` (deshabilitado si no hay env).
+  cupo de ritmo **por sala** (`INCR chat:rl:<id>`+`EXPIRE 10`, ~25/10s). Vaciar/borrar
+  salas se hace desde el **panel admin** (`/admin/salas`). El antiguo
+  `POST /api/chat/clear` + `CHAT_ADMIN_KEY` fue **eliminado** (lo reemplaza el panel).
 - **Body POST parseado a mano** (`form_field` + `nyx_url_decode` extern) para
   esquivar el bug de `req.form`/`req.query`. std/web `url_decode` NO decodifica `%XX`.
 - **Gotcha ops**: al probar con `./venezuelainfo-org &` en background, el binario
   queda **detached** y retiene el puerto → el systemd entra en bucle "cannot listen".
   Matar strays con `sudo pkill -9 -f venezuelainfo-org` antes de reiniciar el servicio.
 
+## Baquiano (src/baquiano.nx + panel admin)
+
+- Guía de sitios de Venezuela **por zona** (estados/regiones). Tarjeta reordenable
+  en la portada (`data-key="baquiano"`), páginas `/baquiano` (índice de zonas) y
+  `/baquiano/{zona}` (sitios de la zona, con `req.params`, nunca `req.query`).
+- **Contenido en nyx-kv** (namespace `veninfo::`, sin TTL): `baq:zones` (lista de
+  ids), `baq:zone:<id>` (nombre), `baq:zone:<id>:sites` (lista `nombre|categoria|
+  descripcion`, saneados sin `|`). Ids validados con `is_valid_slug` (pub en articles).
+- Se **crea/edita/borra desde el panel admin** (`/admin/baquiano`).
+
+## Panel admin (src/admin.nx)
+
+- `/admin`: **login único de dueño**. Hash `salt:sha256(salt+pass)` en `admin:pass`
+  (nyx-kv, namespace `veninfo::`, inaccesible a anónimos). Sesión = cookie
+  `veninfo_admin` (HttpOnly, Secure, SameSite=Strict); estado en `admin:sess:<sid>`
+  (`SETEX` TTL 2h) cuyo valor es el **token CSRF** de esa sesión.
+- **Secreto**: `VENINFO_ADMIN_PASSWORD` por systemd drop-in (`deploy/admin.conf.example`).
+  `admin_init()` siembra `admin:pass` al arrancar solo si no existe. Sin secreto y
+  sin hash previo, el panel queda **cerrado** (login siempre falla). Cambiar clave:
+  `DEL admin:pass` (redis-cli con el token veninfo) + re-sembrar.
+- **CSRF**: todos los POST de mutación exigen el campo `csrf` == token de sesión.
+- Gestiona: **Baquiano** (zonas/sitios) y **Salas de chat** (crear/borrar/vaciar).
+- Reusa el patrón de `nyx-kv-stack/dashboard/src/auth_local.nx` (hash/salt/sesión).
+
 ## Rutas
 
-`/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `/sismos` · `/sismos/{id}`
-· `/articulo/{slug}` · `/api/health` · `/api/chat` · `POST /api/chat/send`
-· `POST /api/chat/clear` · `/manifest.webmanifest` · `/sw.js` · `/icon*.png|svg`
-· `/assets/*`
+`/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `/baquiano` · `/baquiano/{zona}`
+· `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rooms`
+· `/api/chat` · `/api/chat/{room}` · `POST /api/chat/send` · `/admin` ·
+`POST /admin/login` · `POST /admin/logout` · `/admin/baquiano` (+POST) ·
+`/admin/salas` (+POST) · `/manifest.webmanifest` · `/sw.js` · `/icon*.png|svg` · `/assets/*`
 
 ## Pendientes / ideas (backlog)
 
 Sin prioridad estricta; tomar lo que aporte.
 
-- [ ] **"Clima" en el menú superior** (`src/layout.nx`, nav) — hoy `/clima` solo
-      se alcanza desde la tarjeta de la portada.
 - [ ] **Indicador en el icono de Filtros** cuando hay filtros activos (punto/badge).
 - [ ] **Tarjeta "más fuerte" con respaldo a 7 días**: si no hay sismos en 24 h,
       mostrar el más fuerte reciente; resaltar siempre cualquier M ≥ 6.
@@ -153,8 +200,11 @@ Desplegado y en producción: portada + artículos Markdown; sismos (EMSC) con ma
 filtros, paginación, orden (fecha/distancia/magnitud), geolocalización persistente,
 hora local, detalle por evento; clima completo en `/clima` (cualquier ciudad +
 geolocalización + actual/horas/7 días/UV/amanecer/AQI); PWA (manifest + SW +
-iconos); HTML `no-cache`; behind gateway con TLS. Bugs del lenguaje hallados →
-anotados en `NyxLang/TASKS.md`.
+iconos); HTML `no-cache`; behind gateway con TLS. Nav superior (con Clima/Baquiano).
+**Baquiano** (guía de sitios por zona, contenido en nyx-kv, editable en el panel).
+**Chat con salas** (solo admin las crea, mensajes aislados por sala). **Panel admin**
+(`/admin`, login de dueño + sesión por cookie + CSRF, CRUD de baquiano y salas).
+Bugs del lenguaje hallados → anotados en `NyxLang/TASKS.md`.
 
 ## Verificación rápida
 ```bash

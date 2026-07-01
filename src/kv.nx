@@ -143,3 +143,61 @@ pub fn kv_close(h: int) {
         tls_close(h)
     }
 }
+
+// ── Helpers de alto nivel sobre kv_cmd/kv_cmd_array ──────────────────────────
+// Portados del patron de nyx-kv-stack/dashboard/src/kv_client.nx. Ahorran armar
+// el Array de partes en cada llamada y centralizan los comandos usados por
+// admin/baquiano/chat.
+
+pub fn kv_get(h: int, key: String) -> String {
+    let parts: Array = ["GET", key]
+    return kv_cmd(h, parts)
+}
+
+pub fn kv_set(h: int, key: String, val: String) -> bool {
+    let parts: Array = ["SET", key, val]
+    return kv_cmd(h, parts) == "OK"
+}
+
+// SET con expiracion (segundos). Para sesiones (TTL deseado).
+pub fn kv_setex(h: int, key: String, ttl: int, val: String) -> bool {
+    let parts: Array = ["SETEX", key, int_to_string(ttl), val]
+    return kv_cmd(h, parts) == "OK"
+}
+
+pub fn kv_del(h: int, key: String) {
+    let parts: Array = ["DEL", key]
+    kv_cmd(h, parts)
+}
+
+pub fn kv_exists(h: int, key: String) -> bool {
+    let parts: Array = ["EXISTS", key]
+    return kv_cmd(h, parts) == "1"
+}
+
+pub fn kv_incr(h: int, key: String) -> int {
+    let parts: Array = ["INCR", key]
+    return string_to_int(kv_cmd(h, parts))
+}
+
+pub fn kv_expire(h: int, key: String, ttl: int) {
+    let parts: Array = ["EXPIRE", key, int_to_string(ttl)]
+    kv_cmd(h, parts)
+}
+
+// ── Listas ──────────────────────────────────────────────────────────────────
+
+pub fn kv_rpush(h: int, key: String, val: String) {
+    let parts: Array = ["RPUSH", key, val]
+    kv_cmd(h, parts)
+}
+
+pub fn kv_ltrim(h: int, key: String, start: int, stop: int) {
+    let parts: Array = ["LTRIM", key, int_to_string(start), int_to_string(stop)]
+    kv_cmd(h, parts)
+}
+
+pub fn kv_lrange(h: int, key: String, start: int, stop: int) -> Array {
+    let parts: Array = ["LRANGE", key, int_to_string(start), int_to_string(stop)]
+    return kv_cmd_array(h, parts)
+}

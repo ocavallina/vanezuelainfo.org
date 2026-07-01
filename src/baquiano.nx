@@ -1,0 +1,371 @@
+// src/baquiano.nx — "Baquiano": guia de sitios de Venezuela por zona (estado/region).
+// Contenido editable desde el panel admin, almacenado en nyx-kv (namespace veninfo::).
+//
+// Modelo (todo plano, sin Maps anidados por el SEGV de la lib):
+//   baq:zones            -> lista de ids de zona (estados/regiones)
+//   baq:zone:<id>        -> nombre de la zona (string)
+//   baq:zone:<id>:sites  -> lista de sitios "nombre|categoria|descripcion" (saneados)
+//
+// La escritura la usa el panel admin (src/admin.nx); la lectura, las rutas publicas
+// /baquiano y /baquiano/{zona} y la tarjeta de la portada.
+
+import "src/kv"
+import "src/md"
+import "src/articles"
+
+fn baq_token() -> String {
+    let e: String = getenv("NYXKV_CHAT_TOKEN")
+    if e.length() > 0 {
+        return md_trim(e)
+    }
+    let f: String = read_file("/home/admin/.veninfo-chat-token")
+    return md_trim(f)
+}
+
+fn baq_conn() -> int {
+    return kv_connect_auth("127.0.0.1", 6380, baq_token())
+}
+
+// Quita '|' y caracteres de control (a espacio), recorta y limita a maxb bytes.
+fn baq_clean(s: String, maxb: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if c == 124 or c < 32 {
+            sb.append(" ")
+        } else {
+            sb.append(s.substring(i, i + 1))
+        }
+        i = i + 1
+    }
+    var out: String = md_trim(sb.to_string())
+    if out.length() > maxb {
+        out = out.substring(0, maxb)
+    }
+    return out
+}
+
+fn zone_meta_key(id: String) -> String {
+    return "baq:zone:" + id
+}
+
+fn zone_sites_key(id: String) -> String {
+    return "baq:zone:" + id + ":sites"
+}
+
+// ── Lectura ──────────────────────────────────────────────────────────────────
+
+// Ids de zona (en orden de creacion).
+fn zones_list_h(h: int) -> Array {
+    return kv_lrange(h, "baq:zones", 0, -1)
+}
+
+fn zone_exists_h(h: int, id: String) -> bool {
+    return kv_exists(h, zone_meta_key(id))
+}
+
+// ── Escritura (panel admin) ──────────────────────────────────────────────────
+
+// Crea una zona. Devuelve "" si OK o el texto del error.
+pub fn zone_create(id_raw: String, name_raw: String) -> String {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return "Identificador invalido (solo minusculas, numeros y guiones)"
+    }
+    var nm: String = baq_clean(name_raw, 60)
+    if nm.length() == 0 {
+        nm = id
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    if zone_exists_h(h, id) {
+        kv_close(h)
+        return "Esa zona ya existe"
+    }
+    kv_set(h, zone_meta_key(id), nm)
+    kv_rpush(h, "baq:zones", id)
+    kv_close(h)
+    return ""
+}
+
+// Renombra una zona existente.
+pub fn zone_rename(id_raw: String, name_raw: String) -> bool {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return false
+    }
+    let nm: String = baq_clean(name_raw, 60)
+    if nm.length() == 0 {
+        return false
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return false
+    }
+    if !zone_exists_h(h, id) {
+        kv_close(h)
+        return false
+    }
+    kv_set(h, zone_meta_key(id), nm)
+    kv_close(h)
+    return true
+}
+
+// Borra una zona y sus sitios.
+pub fn zone_delete(id_raw: String) -> bool {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return false
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return false
+    }
+    let ids: Array = zones_list_h(h)
+    var survivors: Array = []
+    var found: bool = false
+    var i: int = 0
+    while i < ids.length() {
+        let z: String = ids[i]
+        if z == id {
+            found = true
+        } else {
+            survivors.push(z)
+        }
+        i = i + 1
+    }
+    kv_del(h, "baq:zones")
+    var j: int = 0
+    while j < survivors.length() {
+        let s: String = survivors[j]
+        kv_rpush(h, "baq:zones", s)
+        j = j + 1
+    }
+    kv_del(h, zone_meta_key(id))
+    kv_del(h, zone_sites_key(id))
+    kv_close(h)
+    return found
+}
+
+// Añade un sitio a una zona. Devuelve "" si OK o el texto del error.
+pub fn site_add(zone_raw: String, name_raw: String, cat_raw: String, desc_raw: String) -> String {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return "Zona invalida"
+    }
+    let nm: String = baq_clean(name_raw, 80)
+    if nm.length() == 0 {
+        return "El nombre del sitio es obligatorio"
+    }
+    let cat: String = baq_clean(cat_raw, 40)
+    let desc: String = baq_clean(desc_raw, 500)
+    let h: int = baq_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    if !zone_exists_h(h, zone) {
+        kv_close(h)
+        return "Esa zona no existe"
+    }
+    kv_rpush(h, zone_sites_key(zone), nm + "|" + cat + "|" + desc)
+    kv_close(h)
+    return ""
+}
+
+// Borra el sitio en la posicion `index` de una zona (reconstruye la lista).
+pub fn site_delete(zone_raw: String, index: int) -> bool {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return false
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return false
+    }
+    let sites: Array = kv_lrange(h, zone_sites_key(zone), 0, -1)
+    if index < 0 or index >= sites.length() {
+        kv_close(h)
+        return false
+    }
+    var survivors: Array = []
+    var i: int = 0
+    while i < sites.length() {
+        if i != index {
+            let s: String = sites[i]
+            survivors.push(s)
+        }
+        i = i + 1
+    }
+    kv_del(h, zone_sites_key(zone))
+    var j: int = 0
+    while j < survivors.length() {
+        let s2: String = survivors[j]
+        kv_rpush(h, zone_sites_key(zone), s2)
+        j = j + 1
+    }
+    kv_close(h)
+    return true
+}
+
+// ── Render de un sitio ("nombre|categoria|descripcion") como tarjeta ─────────
+fn render_site_entry(entry: String) -> String {
+    let p1: int = entry.indexOf("|")
+    var nm: String = entry
+    var cat: String = ""
+    var desc: String = ""
+    if p1 >= 0 {
+        nm = entry.substring(0, p1)
+        let rest: String = entry.substring(p1 + 1, entry.length())
+        let p2: int = rest.indexOf("|")
+        if p2 >= 0 {
+            cat = rest.substring(0, p2)
+            desc = rest.substring(p2 + 1, rest.length())
+        } else {
+            cat = rest
+        }
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<div class=\"baq-site\">")
+    sb.append("<div class=\"baq-site-head\"><h3>")
+    sb.append(html_escape(nm))
+    sb.append("</h3>")
+    if cat.length() > 0 {
+        sb.append("<span class=\"baq-cat\">")
+        sb.append(html_escape(cat))
+        sb.append("</span>")
+    }
+    sb.append("</div>")
+    if desc.length() > 0 {
+        sb.append("<p>")
+        sb.append(html_escape(desc))
+        sb.append("</p>")
+    }
+    sb.append("</div>\n")
+    return sb.to_string()
+}
+
+// ── Render publico ───────────────────────────────────────────────────────────
+
+// Indice: rejilla de zonas (estados) con su conteo de sitios.
+pub fn render_baquiano_index() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"baquiano\">\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("<h1>Baquiano &mdash; guia de sitios</h1>\n")
+    sb.append("<p class=\"lede\">Lugares recomendados de Venezuela, organizados por zona. Un baquiano conoce el camino.</p>\n")
+    let h: int = baq_conn()
+    if h < 0 {
+        sb.append("<p class=\"hint\">La guia no esta disponible ahora mismo.</p>\n</section>\n")
+        return sb.to_string()
+    }
+    let ids: Array = zones_list_h(h)
+    if ids.length() == 0 {
+        sb.append("<p class=\"hint\">Todavia no hay zonas publicadas. Vuelve pronto.</p>\n")
+    } else {
+        sb.append("<div class=\"baq-zones\">\n")
+        var i: int = 0
+        while i < ids.length() {
+            let id: String = ids[i]
+            let nm: String = kv_get(h, zone_meta_key(id))
+            let sites: Array = kv_lrange(h, zone_sites_key(id), 0, -1)
+            var label: String = nm
+            if label.length() == 0 {
+                label = id
+            }
+            sb.append("<a class=\"baq-zone-card\" href=\"/baquiano/")
+            sb.append(id)
+            sb.append("\"><span class=\"baq-zone-name\">")
+            sb.append(html_escape(label))
+            sb.append("</span><span class=\"baq-zone-count\">")
+            sb.append(int_to_string(sites.length()))
+            sb.append(" sitios</span></a>\n")
+            i = i + 1
+        }
+        sb.append("</div>\n")
+    }
+    kv_close(h)
+    sb.append("</section>\n")
+    return sb.to_string()
+}
+
+// Pagina de una zona: cabecera + sitios. Devuelve "" si la zona no existe.
+pub fn render_baquiano_zone(id_raw: String) -> String {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return ""
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return ""
+    }
+    if !zone_exists_h(h, id) {
+        kv_close(h)
+        return ""
+    }
+    let nm: String = kv_get(h, zone_meta_key(id))
+    let sites: Array = kv_lrange(h, zone_sites_key(id), 0, -1)
+    kv_close(h)
+    var label: String = nm
+    if label.length() == 0 {
+        label = id
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"baquiano\">\n")
+    sb.append("<p><a href=\"/baquiano\">&larr; Todas las zonas</a></p>\n")
+    sb.append("<h1>")
+    sb.append(html_escape(label))
+    sb.append("</h1>\n")
+    if sites.length() == 0 {
+        sb.append("<p class=\"hint\">Aun no hay sitios en esta zona.</p>\n")
+    } else {
+        sb.append("<div class=\"baq-sites\">\n")
+        var i: int = 0
+        while i < sites.length() {
+            let entry: String = sites[i]
+            sb.append(render_site_entry(entry))
+            i = i + 1
+        }
+        sb.append("</div>\n")
+    }
+    sb.append("</section>\n")
+    return sb.to_string()
+}
+
+// Tarjeta de la portada: enlaza a /baquiano y muestra algunas zonas como chips.
+pub fn baquiano_card() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<a class=\"baq-card\" href=\"/baquiano\">")
+    sb.append("<div class=\"baq-card-head\"><span class=\"baq-card-ico\">&#128205;</span><h2>Baquiano</h2></div>")
+    sb.append("<p class=\"baq-card-sub\">Guia de sitios de Venezuela por zona.</p>")
+    let h: int = baq_conn()
+    if h >= 0 {
+        let ids: Array = zones_list_h(h)
+        if ids.length() > 0 {
+            sb.append("<div class=\"baq-card-chips\">")
+            var i: int = 0
+            var shown: int = 0
+            while i < ids.length() and shown < 6 {
+                let id: String = ids[i]
+                let nm: String = kv_get(h, zone_meta_key(id))
+                var label: String = nm
+                if label.length() == 0 {
+                    label = id
+                }
+                sb.append("<span class=\"baq-chip\">")
+                sb.append(html_escape(label))
+                sb.append("</span>")
+                shown = shown + 1
+                i = i + 1
+            }
+            sb.append("</div>")
+        }
+        kv_close(h)
+    }
+    sb.append("<span class=\"baq-card-cta\">Explorar la guia &rarr;</span>")
+    sb.append("</a>")
+    return sb.to_string()
+}

@@ -1,9 +1,14 @@
-// src/chat.nx — chat colectivo: guarda/lee mensajes en nyx-kv (RESP2+TLS).
+// src/chat.nx — chat colectivo con SALAS: guarda/lee mensajes en nyx-kv (RESP2+TLS).
 // Moderacion: saneo (quita | y control), topes de longitud, filtro de groserias,
-// cupo de ritmo global. Token dedicado (NO admin) para aislar el namespace.
+// cupo de ritmo por sala. Token dedicado (NO admin) para aislar el namespace.
+//
+// Salas: la sala "general" usa la clave legacy "chat:msgs" (no perder historial);
+// el resto usan "chat:room:<id>:msgs". El indice de salas creadas por el admin vive
+// en la lista "chat:rooms" con entradas "id|nombre". Solo el admin crea/borra salas.
 
 import "src/kv"
 import "src/md"
+import "src/articles"
 
 // Decodificador percent (%XX + '+') del runtime; std/web solo decodifica '+'.
 extern "C" fn nyx_url_decode(s: String) -> String
@@ -12,7 +17,7 @@ const KV_HOST: String = "127.0.0.1"
 const KV_PORT: int = 6380
 
 // Extrae un campo de un body x-www-form-urlencoded y lo decodifica.
-fn form_field(body: String, key: String) -> String {
+pub fn form_field(body: String, key: String) -> String {
     let pairs: Array = body.split("&")
     var i: int = 0
     while i < pairs.length() {
@@ -40,7 +45,7 @@ fn chat_token() -> String {
     return md_trim(f)
 }
 
-fn chat_conn() -> int {
+pub fn chat_conn() -> int {
     return kv_connect_auth(KV_HOST, KV_PORT, chat_token())
 }
 
@@ -85,8 +90,185 @@ fn json_esc(s: String) -> String {
     return o
 }
 
-// Publica un mensaje. Devuelve "" si OK, o el texto del error.
-pub fn chat_post(nick_raw: String, texto_raw: String) -> String {
+// ── Salas ────────────────────────────────────────────────────────────────────
+
+// Clave de la lista de mensajes de una sala. "general" -> clave legacy.
+fn room_msgs_key(room: String) -> String {
+    if room == "general" {
+        return "chat:msgs"
+    }
+    return "chat:room:" + room + ":msgs"
+}
+
+// Clave del cupo de ritmo por sala.
+fn room_rl_key(room: String) -> String {
+    return "chat:rl:" + room
+}
+
+// Lee el indice crudo de salas creadas por el admin ("id|nombre" por entrada).
+fn rooms_raw(h: int) -> Array {
+    return kv_lrange(h, "chat:rooms", 0, -1)
+}
+
+// Devuelve true si la sala existe (general siempre existe; el resto en chat:rooms).
+fn room_exists_h(h: int, room: String) -> bool {
+    if room == "general" {
+        return true
+    }
+    let raw: Array = rooms_raw(h)
+    var i: int = 0
+    while i < raw.length() {
+        let entry: String = raw[i]
+        let bar: int = entry.indexOf("|")
+        var id: String = entry
+        if bar >= 0 {
+            id = entry.substring(0, bar)
+        }
+        if id == room {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// Sala valida para postear/leer: slug seguro + existente.
+fn valid_room(h: int, room: String) -> bool {
+    if !is_valid_slug(room) {
+        return false
+    }
+    return room_exists_h(h, room)
+}
+
+// Lista publica de salas como JSON [{"id":..,"n":..}]. Incluye "general" primero.
+pub fn chat_rooms_json() -> String {
+    let h: int = chat_conn()
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("[{\"id\":\"general\",\"n\":\"General\"}")
+    if h < 0 {
+        sb.append("]")
+        return sb.to_string()
+    }
+    let raw: Array = rooms_raw(h)
+    kv_close(h)
+    var i: int = 0
+    while i < raw.length() {
+        let entry: String = raw[i]
+        let bar: int = entry.indexOf("|")
+        if bar > 0 {
+            let id: String = entry.substring(0, bar)
+            let nm: String = entry.substring(bar + 1, entry.length())
+            sb.append(",{\"id\":\"")
+            sb.append(json_esc(id))
+            sb.append("\",\"n\":\"")
+            sb.append(json_esc(nm))
+            sb.append("\"}")
+        }
+        i = i + 1
+    }
+    sb.append("]")
+    return sb.to_string()
+}
+
+// Lista de salas para el panel admin: Array de "id|nombre" (sin general).
+pub fn chat_rooms_list() -> Array {
+    let h: int = chat_conn()
+    if h < 0 {
+        var empty: Array = []
+        return empty
+    }
+    let raw: Array = rooms_raw(h)
+    kv_close(h)
+    return raw
+}
+
+// Crea una sala (solo admin). Devuelve "" si OK o el texto del error.
+pub fn room_create(id_raw: String, name_raw: String) -> String {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return "Identificador invalido (solo minusculas, numeros y guiones)"
+    }
+    if id == "general" {
+        return "Esa sala ya existe"
+    }
+    var nm: String = sanitize(name_raw, 40)
+    if nm.length() == 0 {
+        nm = id
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        return "Chat no disponible"
+    }
+    if room_exists_h(h, id) {
+        kv_close(h)
+        return "Esa sala ya existe"
+    }
+    kv_rpush(h, "chat:rooms", id + "|" + nm)
+    kv_close(h)
+    return ""
+}
+
+// Borra una sala y sus mensajes (solo admin). No se puede borrar "general".
+pub fn room_delete(id_raw: String) -> bool {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) or id == "general" {
+        return false
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        return false
+    }
+    let raw: Array = rooms_raw(h)
+    // Reconstruye la lista sin la sala borrada (nyx-kv no garantiza LREM).
+    var survivors: Array = []
+    var found: bool = false
+    var i: int = 0
+    while i < raw.length() {
+        let entry: String = raw[i]
+        let bar: int = entry.indexOf("|")
+        var eid: String = entry
+        if bar >= 0 {
+            eid = entry.substring(0, bar)
+        }
+        if eid == id {
+            found = true
+        } else {
+            survivors.push(entry)
+        }
+        i = i + 1
+    }
+    kv_del(h, "chat:rooms")
+    var j: int = 0
+    while j < survivors.length() {
+        let s: String = survivors[j]
+        kv_rpush(h, "chat:rooms", s)
+        j = j + 1
+    }
+    kv_del(h, room_msgs_key(id))
+    kv_close(h)
+    return found
+}
+
+// Vacia los mensajes de una sala (moderacion, solo admin).
+pub fn chat_room_clear(room_raw: String) -> bool {
+    let room: String = md_trim(room_raw)
+    if !is_valid_slug(room) {
+        return false
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        return false
+    }
+    kv_del(h, room_msgs_key(room))
+    kv_close(h)
+    return true
+}
+
+// ── Publicar / leer mensajes ─────────────────────────────────────────────────
+
+// Publica un mensaje en una sala. Devuelve "" si OK, o el texto del error.
+pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> String {
+    let room: String = md_trim(room_raw)
     let texto: String = censor(sanitize(texto_raw, 280))
     if texto.length() == 0 {
         return "Mensaje vacio"
@@ -99,12 +281,14 @@ pub fn chat_post(nick_raw: String, texto_raw: String) -> String {
     if h < 0 {
         return "Chat no disponible"
     }
-    // cupo de ritmo global: max ~25 mensajes por ventana de 10s
-    let inc: Array = ["INCR", "chat:rl"]
-    let cnt: int = string_to_int(kv_cmd(h, inc))
+    if !valid_room(h, room) {
+        kv_close(h)
+        return "Sala no valida"
+    }
+    // cupo de ritmo por sala: max ~25 mensajes por ventana de 10s
+    let cnt: int = kv_incr(h, room_rl_key(room))
     if cnt == 1 {
-        let exp: Array = ["EXPIRE", "chat:rl", "10"]
-        kv_cmd(h, exp)
+        kv_expire(h, room_rl_key(room), 10)
     }
     if cnt > 25 {
         kv_close(h)
@@ -112,22 +296,24 @@ pub fn chat_post(nick_raw: String, texto_raw: String) -> String {
     }
     let ts: String = int_to_string(time())
     let val: String = ts + "|" + nick + "|" + texto
-    let push: Array = ["RPUSH", "chat:msgs", val]
-    kv_cmd(h, push)
-    let trim: Array = ["LTRIM", "chat:msgs", "-200", "-1"]
-    kv_cmd(h, trim)
+    kv_rpush(h, room_msgs_key(room), val)
+    kv_ltrim(h, room_msgs_key(room), -200, -1)
     kv_close(h)
     return ""
 }
 
-// Devuelve los ultimos 50 mensajes como JSON [{t,n,m}].
-pub fn chat_list_json() -> String {
+// Devuelve los ultimos 50 mensajes de una sala como JSON [{t,n,m}].
+pub fn chat_list_json(room_raw: String) -> String {
+    let room: String = md_trim(room_raw)
     let h: int = chat_conn()
     if h < 0 {
         return "[]"
     }
-    let q: Array = ["LRANGE", "chat:msgs", "-50", "-1"]
-    let rows: Array = kv_cmd_array(h, q)
+    if !valid_room(h, room) {
+        kv_close(h)
+        return "[]"
+    }
+    let rows: Array = kv_lrange(h, room_msgs_key(room), -50, -1)
     kv_close(h)
     var sb: StringBuilder = StringBuilder.new()
     sb.append("[")
@@ -164,36 +350,14 @@ pub fn chat_list_json() -> String {
     return sb.to_string()
 }
 
-// Recibe el body crudo del POST /api/chat/send, extrae nick/texto y publica.
-// Devuelve "" si OK o el texto del error.
+// Recibe el body crudo del POST /api/chat/send, extrae room/nick/texto y publica.
+// Devuelve "" si OK o el texto del error. Sala por defecto: general.
 pub fn chat_send_body(body: String) -> String {
+    var room: String = form_field(body, "room")
+    if room.length() == 0 {
+        room = "general"
+    }
     let nick: String = form_field(body, "nick")
     let texto: String = form_field(body, "texto")
-    return chat_post(nick, texto)
-}
-
-// Recibe el body crudo del POST /api/chat/clear (campo key) y borra si procede.
-pub fn chat_clear_body(body: String) -> bool {
-    let key: String = form_field(body, "key")
-    return chat_clear(key)
-}
-
-// Borra todo el chat si la clave coincide con CHAT_ADMIN_KEY (env). Si no hay
-// env configurada, esta deshabilitado.
-pub fn chat_clear(key: String) -> bool {
-    let admin_key: String = getenv("CHAT_ADMIN_KEY")
-    if admin_key.length() == 0 {
-        return false
-    }
-    if key != admin_key {
-        return false
-    }
-    let h: int = chat_conn()
-    if h < 0 {
-        return false
-    }
-    let del: Array = ["DEL", "chat:msgs"]
-    kv_cmd(h, del)
-    kv_close(h)
-    return true
+    return chat_post(room, nick, texto)
 }

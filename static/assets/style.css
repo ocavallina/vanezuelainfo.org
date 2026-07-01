@@ -509,6 +509,76 @@ a { color: var(--azul); }
 .chat-meta { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--gris); }
 .chat-status { color: var(--rojo); font-weight: 600; }
 
+/* ── Nav superior responsive ────────────────────────────────────── */
+.header-inner { flex-wrap: wrap; gap: 8px 0; }
+.site-nav { display: flex; flex-wrap: wrap; align-items: center; }
+.site-nav a { margin-left: 18px; text-decoration: none; font-weight: 600; color: var(--tinta); font-size: .95rem; }
+.site-nav a:hover { color: var(--rojo); }
+
+/* ── Barra de salas del chat ────────────────────────────────────── */
+.chat-rooms-bar { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .9rem; color: var(--gris); }
+.chat-room { font: inherit; padding: 6px 10px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--tinta); }
+
+/* ── Baquiano: tarjeta de portada ───────────────────────────────── */
+.baq-card {
+  display: flex; flex-direction: column; gap: 8px; text-decoration: none; height: 100%;
+  background: linear-gradient(135deg, #065f46, #0f766e);
+  color: #fff; border-radius: 14px; padding: 18px 20px;
+}
+.baq-card-head { display: flex; align-items: center; gap: 10px; }
+.baq-card-head h2 { margin: 0; font-size: 1.15rem; }
+.baq-card-ico { font-size: 1.6rem; line-height: 1; }
+.baq-card-sub { margin: 0; font-size: .88rem; opacity: .92; }
+.baq-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.baq-chip { background: rgba(255,255,255,.18); border-radius: 999px; padding: 3px 10px; font-size: .78rem; }
+.baq-card-cta { font-size: .82rem; font-weight: 700; opacity: .95; margin-top: auto; }
+
+/* ── Baquiano: paginas ──────────────────────────────────────────── */
+.baquiano h1 { color: var(--azul); margin: 6px 0 2px; }
+.baquiano .lede { color: var(--gris); margin-top: 0; }
+.baq-zones { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 14px; }
+.baq-zone-card {
+  display: flex; flex-direction: column; gap: 4px; text-decoration: none;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px;
+}
+.baq-zone-card:hover { border-color: var(--azul); }
+.baq-zone-name { font-weight: 700; color: var(--tinta); }
+.baq-zone-count { font-size: .8rem; color: var(--gris); }
+.baq-sites { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.baq-site { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; }
+.baq-site-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.baq-site-head h3 { margin: 0; color: var(--azul); font-size: 1.05rem; }
+.baq-cat { background: var(--amarillo); color: var(--tinta); border-radius: 999px; padding: 2px 10px; font-size: .72rem; font-weight: 700; }
+.baq-site p { margin: 8px 0 0; color: var(--tinta); font-size: .95rem; }
+
+/* ── Panel admin ────────────────────────────────────────────────── */
+.admin h1 { color: var(--azul); margin: 6px 0; }
+.admin .lede { color: var(--gris); }
+.admin-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-err { background: #fdecea; color: var(--rojo); border-radius: 8px; padding: 10px 12px; font-weight: 600; }
+.admin-form { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 18px; }
+.admin-form input, .admin-form textarea, .admin-form select { border: 1px solid var(--borde); border-radius: 8px; padding: 9px 11px; font: inherit; }
+.admin-form button { background: var(--azul); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px; font-weight: 700; cursor: pointer; }
+.admin-row { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.admin-row input { flex: 1 1 160px; }
+.admin-inline { display: inline; margin: 0; }
+.admin-logout, .admin-del { background: var(--rojo); color: #fff; border: 0; border-radius: 8px; padding: 7px 14px; font-weight: 700; cursor: pointer; }
+.admin-nav { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin: 16px 0; }
+.admin-tile { display: flex; flex-direction: column; gap: 4px; text-decoration: none; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 18px; color: var(--tinta); }
+.admin-tile:hover { border-color: var(--azul); }
+.admin-tile-ico { font-size: 1.8rem; }
+.admin-tile small { color: var(--gris); }
+.admin-zone, .admin-room { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.admin-zone-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.admin-zone-head h3 { margin: 0; color: var(--azul); }
+.admin-zone-head small { color: var(--gris); font-weight: 400; }
+.admin-site { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--borde); }
+.admin-site-add { margin-top: 10px; }
+.admin-room { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-room small { color: var(--gris); }
+.admin-room-acts { display: flex; gap: 8px; }
+.admin-login .admin-form { max-width: 320px; }
+
 @media (max-width: 560px) {
   .hero { padding: 32px 22px; }
   .hero h1 { font-size: 1.7rem; }
@@ -516,4 +586,5 @@ a { color: var(--azul); }
   /* Ocultar Profundidad en pantallas pequenas para dar mas sitio a Lugar y Distancia */
   .quakes th:nth-child(3), .quakes td:nth-child(3) { display: none; }
   .chat-log { height: 60vh; }
+  .site-nav a { margin-left: 0; margin-right: 14px; }
 }

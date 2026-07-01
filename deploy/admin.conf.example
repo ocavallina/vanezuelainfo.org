@@ -1,0 +1,19 @@
+# Drop-in de systemd para el secreto del panel admin de venezuelainfo.org.
+#
+# El panel (/admin) usa una sola contraseña de dueño. Al arrancar, admin_init()
+# siembra el hash en nyx-kv (clave admin:pass, namespace veninfo::) SOLO si aun
+# no existe y esta variable esta definida. Una vez sembrado, puedes quitar la
+# variable: el hash persiste (token enterprise, sin TTL forzado).
+#
+# Instalar (requiere sudo):
+#   sudo install -m 600 -o root -g root deploy/admin.conf.example \
+#     /etc/systemd/system/nyx-venezuelainfo.service.d/admin.conf
+#   sudo nano /etc/systemd/system/nyx-venezuelainfo.service.d/admin.conf   # pon tu clave
+#   sudo systemctl daemon-reload && sudo systemctl restart nyx-venezuelainfo
+#
+# Para CAMBIAR la contraseña despues: borra la clave y vuelve a sembrar:
+#   redis-cli --tls --insecure -p 6380 -a "$(cat /home/admin/.veninfo-chat-token)" DEL admin:pass
+#   (edita la variable) sudo systemctl restart nyx-venezuelainfo
+
+[Service]
+Environment=VENINFO_ADMIN_PASSWORD=cambia-esta-clave

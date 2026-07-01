@@ -1,0 +1,480 @@
+// src/admin.nx — Panel de administracion (login unico de dueño) para controlar el
+// ecosistema: contenido de Baquiano, salas del chat y moderacion.
+//
+// Auth: una sola contraseña de dueño. El hash "salt:sha256(salt+pass)" vive en
+// nyx-kv bajo "admin:pass" (namespace veninfo::, inaccesible para anonimos). La
+// sesion es una cookie HttpOnly con id aleatorio; el estado de sesion vive en
+// "admin:sess:<sid>" (SETEX con TTL) y su valor es el token CSRF de esa sesion.
+//
+// Gotchas respetados: NUNCA req.query/req.form (SEGV). Body POST -> form_field;
+// cookies -> req.cookies; parametros -> req.params. Leer String de Array/Map a un
+// let tipado antes de usar.
+
+import "std/random"
+import "nyx-serve/src/server"
+import "src/kv"
+import "src/md"
+import "src/layout"
+import "src/chat"
+import "src/baquiano"
+
+const SESS_COOKIE: String = "veninfo_admin"
+const SESS_TTL: int = 7200
+
+fn admin_token() -> String {
+    let e: String = getenv("NYXKV_CHAT_TOKEN")
+    if e.length() > 0 {
+        return md_trim(e)
+    }
+    let f: String = read_file("/home/admin/.veninfo-chat-token")
+    return md_trim(f)
+}
+
+fn admin_conn() -> int {
+    return kv_connect_auth("127.0.0.1", 6380, admin_token())
+}
+
+// Escapa un valor para atributo HTML entre comillas dobles.
+fn aesc(s: String) -> String {
+    return html_escape(s).replace("\"", "&quot;")
+}
+
+fn hex_char(n: int) -> String {
+    if n == 0 { return "0" }
+    if n == 1 { return "1" }
+    if n == 2 { return "2" }
+    if n == 3 { return "3" }
+    if n == 4 { return "4" }
+    if n == 5 { return "5" }
+    if n == 6 { return "6" }
+    if n == 7 { return "7" }
+    if n == 8 { return "8" }
+    if n == 9 { return "9" }
+    if n == 10 { return "a" }
+    if n == 11 { return "b" }
+    if n == 12 { return "c" }
+    if n == 13 { return "d" }
+    if n == 14 { return "e" }
+    return "f"
+}
+
+fn gen_random_hex(bytes: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    var i: int = 0
+    while i < bytes {
+        let b: int = random_range(0, 255)
+        sb.append(hex_char((b >> 4) & 15))
+        sb.append(hex_char(b & 15))
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+fn hash_password(pass: String, salt: String) -> String {
+    return sha256(salt + pass)
+}
+
+// Siembra admin:pass desde el env VENINFO_ADMIN_PASSWORD si aun no existe.
+// Se llama al arrancar (main). Sin env y sin hash previo, el panel queda cerrado.
+pub fn admin_init() {
+    let pw: String = getenv("VENINFO_ADMIN_PASSWORD")
+    if pw.length() == 0 {
+        return 0
+    }
+    let h: int = admin_conn()
+    if h < 0 {
+        return 0
+    }
+    if kv_exists(h, "admin:pass") {
+        kv_close(h)
+        return 0
+    }
+    let salt: String = gen_random_hex(16)
+    let hash: String = hash_password(pw, salt)
+    kv_set(h, "admin:pass", salt + ":" + hash)
+    kv_close(h)
+    return 0
+}
+
+fn verify_admin(pass: String) -> bool {
+    if pass.length() == 0 {
+        return false
+    }
+    let h: int = admin_conn()
+    if h < 0 {
+        return false
+    }
+    let record: String = kv_get(h, "admin:pass")
+    kv_close(h)
+    if record.length() == 0 {
+        return false
+    }
+    let sep: int = record.indexOf(":")
+    if sep <= 0 {
+        return false
+    }
+    let salt: String = record.substring(0, sep)
+    let stored: String = record.substring(sep + 1, record.length())
+    let computed: String = hash_password(pass, salt)
+    return computed == stored
+}
+
+// Crea sesion; devuelve el sid o "". El valor guardado es el token CSRF.
+fn create_admin_session() -> String {
+    let h: int = admin_conn()
+    if h < 0 {
+        return ""
+    }
+    let sid: String = gen_random_hex(16)
+    let csrf: String = gen_random_hex(16)
+    kv_setex(h, "admin:sess:" + sid, SESS_TTL, csrf)
+    kv_close(h)
+    return sid + ":" + csrf
+}
+
+// Devuelve el token CSRF de la sesion (o "" si invalida/expirada).
+fn lookup_admin_session(sid: String) -> String {
+    if sid.length() != 32 {
+        return ""
+    }
+    let h: int = admin_conn()
+    if h < 0 {
+        return ""
+    }
+    let csrf: String = kv_get(h, "admin:sess:" + sid)
+    kv_close(h)
+    return csrf
+}
+
+fn destroy_admin_session(sid: String) {
+    if sid.length() != 32 {
+        return 0
+    }
+    let h: int = admin_conn()
+    if h < 0 {
+        return 0
+    }
+    kv_del(h, "admin:sess:" + sid)
+    kv_close(h)
+    return 0
+}
+
+fn current_sid(req: Request) -> String {
+    if req.cookies.contains(SESS_COOKIE) {
+        let sid: String = req.cookies.get(SESS_COOKIE)
+        return sid
+    }
+    return ""
+}
+
+// ── Respuestas ───────────────────────────────────────────────────────────────
+
+fn admin_html(status: int, html: String) -> Response {
+    let h: Array = ["Content-Type", "text/html; charset=utf-8", "Cache-Control", "no-cache"]
+    return Response { status: status, headers_flat: h, body: html }
+}
+
+// OJO: nyx-serve, en respuestas 301/302, usa resp.body como valor de Location e
+// IGNORA headers_flat (server.nx). Por eso el destino va en el body y NO se puede
+// fijar cookie en un redirect. Para fijar/limpiar cookie usamos un 200 con
+// Set-Cookie + meta-refresh (set_cookie_and_go).
+fn redirect(loc: String) -> Response {
+    let h: Array = []
+    return Response { status: 302, headers_flat: h, body: loc }
+}
+
+fn set_cookie_and_go(loc: String, cookie: String) -> Response {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\">")
+    sb.append("<meta http-equiv=\"refresh\" content=\"0;url=")
+    sb.append(loc)
+    sb.append("\"></head><body><p>Redirigiendo&hellip; <a href=\"")
+    sb.append(loc)
+    sb.append("\">continuar</a></p></body></html>")
+    let h: Array = ["Content-Type", "text/html; charset=utf-8", "Cache-Control", "no-cache", "Set-Cookie", cookie]
+    return Response { status: 200, headers_flat: h, body: sb.to_string() }
+}
+
+fn csrf_input(csrf: String) -> String {
+    return "<input type=\"hidden\" name=\"csrf\" value=\"" + aesc(csrf) + "\">"
+}
+
+// ── Login ────────────────────────────────────────────────────────────────────
+
+fn render_login(err: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin admin-login\">\n")
+    sb.append("<h1>Panel de administracion</h1>\n")
+    if err.length() > 0 {
+        sb.append("<p class=\"admin-err\">")
+        sb.append(html_escape(err))
+        sb.append("</p>\n")
+    }
+    sb.append("<form method=\"post\" action=\"/admin/login\" class=\"admin-form\">\n")
+    sb.append("<input type=\"password\" name=\"pass\" placeholder=\"Contraseña\" autocomplete=\"current-password\" required>\n")
+    sb.append("<button type=\"submit\">Entrar</button>\n")
+    sb.append("</form>\n")
+    sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
+    sb.append("</section>\n")
+    return page("Admin", sb.to_string())
+}
+
+pub fn handle_admin_login(req: Request) -> Response {
+    let pass: String = form_field(req.body, "pass")
+    if !verify_admin(pass) {
+        return admin_html(200, render_login("Contraseña incorrecta o panel no configurado."))
+    }
+    let pair: String = create_admin_session()
+    if pair.length() == 0 {
+        return admin_html(200, render_login("No se pudo crear la sesion."))
+    }
+    let sep: int = pair.indexOf(":")
+    let sid: String = pair.substring(0, sep)
+    let cookie: String = SESS_COOKIE + "=" + sid + "; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=" + int_to_string(SESS_TTL)
+    return set_cookie_and_go("/admin", cookie)
+}
+
+pub fn handle_admin_logout(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    if sid.length() > 0 {
+        destroy_admin_session(sid)
+    }
+    let cookie: String = SESS_COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
+    return set_cookie_and_go("/admin", cookie)
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+fn render_dashboard() -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin\">\n")
+    sb.append("<div class=\"admin-top\"><h1>Panel</h1>")
+    sb.append("<form method=\"post\" action=\"/admin/logout\" class=\"admin-inline\"><button type=\"submit\" class=\"admin-logout\">Salir</button></form></div>\n")
+    sb.append("<p class=\"lede\">Controla el contenido del ecosistema.</p>\n")
+    sb.append("<div class=\"admin-nav\">\n")
+    sb.append("<a class=\"admin-tile\" href=\"/admin/baquiano\"><span class=\"admin-tile-ico\">&#128205;</span><span>Baquiano</span><small>Zonas y sitios</small></a>\n")
+    sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>Crear, borrar, moderar</small></a>\n")
+    sb.append("</div>\n")
+    sb.append("<p><a href=\"/\">&larr; Ver el sitio</a></p>\n")
+    sb.append("</section>\n")
+    return page("Admin", sb.to_string())
+}
+
+pub fn handle_admin(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(200, render_login(""))
+    }
+    return admin_html(200, render_dashboard())
+}
+
+// ── Baquiano (CRUD) ──────────────────────────────────────────────────────────
+
+fn render_admin_baquiano(csrf: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin\">\n")
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("<h1>Baquiano</h1>\n")
+    // Crear zona
+    sb.append("<h2>Nueva zona (estado/region)</h2>\n")
+    sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-row\">\n")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_create\">\n")
+    sb.append("<input name=\"id\" placeholder=\"id (ej. zulia)\" required>\n")
+    sb.append("<input name=\"nombre\" placeholder=\"Nombre (ej. Zulia)\">\n")
+    sb.append("<button type=\"submit\">Crear zona</button>\n")
+    sb.append("</form>\n")
+    // Zonas existentes
+    let h: int = admin_conn()
+    if h < 0 {
+        sb.append("<p class=\"admin-err\">Almacen no disponible.</p>\n</section>\n")
+        return page("Admin baquiano", sb.to_string())
+    }
+    let ids: Array = kv_lrange(h, "baq:zones", 0, -1)
+    if ids.length() == 0 {
+        sb.append("<p class=\"hint\">Aun no hay zonas.</p>\n")
+    }
+    var i: int = 0
+    while i < ids.length() {
+        let id: String = ids[i]
+        let nm: String = kv_get(h, "baq:zone:" + id)
+        let sites: Array = kv_lrange(h, "baq:zone:" + id + ":sites", 0, -1)
+        sb.append("<div class=\"admin-zone\">\n")
+        sb.append("<div class=\"admin-zone-head\"><h3>")
+        sb.append(html_escape(nm))
+        sb.append(" <small>/baquiano/")
+        sb.append(html_escape(id))
+        sb.append("</small></h3>\n")
+        // Borrar zona
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Borrar la zona y sus sitios?');\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_delete\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><button type=\"submit\" class=\"admin-del\">Borrar zona</button></form>\n")
+        sb.append("</div>\n")
+        // Renombrar zona
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-row\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_rename\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><input name=\"nombre\" placeholder=\"Nuevo nombre\" value=\"")
+        sb.append(aesc(nm))
+        sb.append("\"><button type=\"submit\">Renombrar</button></form>\n")
+        // Sitios
+        var j: int = 0
+        while j < sites.length() {
+            let entry: String = sites[j]
+            let bar: int = entry.indexOf("|")
+            var snm: String = entry
+            if bar >= 0 {
+                snm = entry.substring(0, bar)
+            }
+            sb.append("<div class=\"admin-site\"><span>")
+            sb.append(html_escape(snm))
+            sb.append("</span>")
+            sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\">")
+            sb.append(csrf_input(csrf))
+            sb.append("<input type=\"hidden\" name=\"act\" value=\"site_delete\"><input type=\"hidden\" name=\"zone\" value=\"")
+            sb.append(aesc(id))
+            sb.append("\"><input type=\"hidden\" name=\"idx\" value=\"")
+            sb.append(int_to_string(j))
+            sb.append("\"><button type=\"submit\" class=\"admin-del\">x</button></form></div>\n")
+            j = j + 1
+        }
+        // Añadir sitio
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-site-add\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"site_add\"><input type=\"hidden\" name=\"zone\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\">")
+        sb.append("<input name=\"nombre\" placeholder=\"Nombre del sitio\" required>")
+        sb.append("<input name=\"categoria\" placeholder=\"Categoria (ej. Playa)\">")
+        sb.append("<textarea name=\"descripcion\" rows=\"2\" placeholder=\"Descripcion\"></textarea>")
+        sb.append("<button type=\"submit\">Añadir sitio</button></form>\n")
+        sb.append("</div>\n")
+        i = i + 1
+    }
+    kv_close(h)
+    sb.append("</section>\n")
+    return page("Admin baquiano", sb.to_string())
+}
+
+pub fn handle_admin_baquiano(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(200, render_login(""))
+    }
+    return admin_html(200, render_admin_baquiano(csrf))
+}
+
+pub fn handle_admin_baquiano_post(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(403, render_login("Sesion expirada."))
+    }
+    let tok: String = form_field(req.body, "csrf")
+    if tok != csrf {
+        return admin_html(403, render_login("Token invalido."))
+    }
+    let act: String = form_field(req.body, "act")
+    if act == "zone_create" {
+        zone_create(form_field(req.body, "id"), form_field(req.body, "nombre"))
+    } else if act == "zone_rename" {
+        zone_rename(form_field(req.body, "id"), form_field(req.body, "nombre"))
+    } else if act == "zone_delete" {
+        zone_delete(form_field(req.body, "id"))
+    } else if act == "site_add" {
+        site_add(form_field(req.body, "zone"), form_field(req.body, "nombre"), form_field(req.body, "categoria"), form_field(req.body, "descripcion"))
+    } else if act == "site_delete" {
+        let idx: int = string_to_int(form_field(req.body, "idx"))
+        site_delete(form_field(req.body, "zone"), idx)
+    }
+    return redirect("/admin/baquiano")
+}
+
+// ── Salas (CRUD + moderacion) ────────────────────────────────────────────────
+
+fn render_admin_salas(csrf: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin\">\n")
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("<h1>Salas de chat</h1>\n")
+    // Crear sala
+    sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-form admin-row\">\n")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"room_create\">\n")
+    sb.append("<input name=\"id\" placeholder=\"id (ej. avistamientos)\" required>\n")
+    sb.append("<input name=\"nombre\" placeholder=\"Nombre visible\">\n")
+    sb.append("<button type=\"submit\">Crear sala</button>\n")
+    sb.append("</form>\n")
+    // Sala general (fija)
+    sb.append("<div class=\"admin-room\"><span><b>General</b> <small>fija</small></span>")
+    sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-inline\" onsubmit=\"return confirm('Vaciar los mensajes de General?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"room_clear\"><input type=\"hidden\" name=\"id\" value=\"general\"><button type=\"submit\" class=\"admin-del\">Vaciar</button></form></div>\n")
+    // Salas creadas
+    let rooms: Array = chat_rooms_list()
+    var i: int = 0
+    while i < rooms.length() {
+        let entry: String = rooms[i]
+        let bar: int = entry.indexOf("|")
+        var id: String = entry
+        var nm: String = entry
+        if bar >= 0 {
+            id = entry.substring(0, bar)
+            nm = entry.substring(bar + 1, entry.length())
+        }
+        sb.append("<div class=\"admin-room\"><span><b>")
+        sb.append(html_escape(nm))
+        sb.append("</b> <small>")
+        sb.append(html_escape(id))
+        sb.append("</small></span><div class=\"admin-room-acts\">")
+        sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-inline\" onsubmit=\"return confirm('Vaciar mensajes?');\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"room_clear\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><button type=\"submit\" class=\"admin-del\">Vaciar</button></form>")
+        sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-inline\" onsubmit=\"return confirm('Borrar la sala?');\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"room_delete\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><button type=\"submit\" class=\"admin-del\">Borrar</button></form>")
+        sb.append("</div></div>\n")
+        i = i + 1
+    }
+    sb.append("</section>\n")
+    return page("Admin salas", sb.to_string())
+}
+
+pub fn handle_admin_salas(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(200, render_login(""))
+    }
+    return admin_html(200, render_admin_salas(csrf))
+}
+
+pub fn handle_admin_salas_post(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(403, render_login("Sesion expirada."))
+    }
+    let tok: String = form_field(req.body, "csrf")
+    if tok != csrf {
+        return admin_html(403, render_login("Token invalido."))
+    }
+    let act: String = form_field(req.body, "act")
+    if act == "room_create" {
+        room_create(form_field(req.body, "id"), form_field(req.body, "nombre"))
+    } else if act == "room_delete" {
+        room_delete(form_field(req.body, "id"))
+    } else if act == "room_clear" {
+        chat_room_clear(form_field(req.body, "id"))
+    }
+    return redirect("/admin/salas")
+}

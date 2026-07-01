@@ -8,7 +8,7 @@ import "src/md"
 
 // Valida que el slug sea seguro para construir una ruta de archivo:
 // solo minusculas, digitos y guiones. Evita path traversal (../, /, .).
-fn is_valid_slug(s: String) -> bool {
+pub fn is_valid_slug(s: String) -> bool {
     let n: int = s.length()
     if n == 0 or n > 80 {
         return false
