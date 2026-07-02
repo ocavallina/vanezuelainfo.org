@@ -75,15 +75,11 @@ window.nyxReady = (async () => {
   ref.exports = r.exports;
   dom.ref.exports = r.exports; // habilita la re-entrada de dom_on
   const S = (p) => r.nyx.readString(p), M = (s) => r.nyx.makeString(s);
+  // El wasm pinta finanzas/clima/sismos/noticias internamente (dom_set_html).
+  // Único wrapper con consumidor JS: havKm (quake.js, distancia en el mapa Leaflet).
   return {
     raw: r.exports,
-    wdesc: (c) => S(r.exports.wdesc(BigInt(c ?? -1))).split('|'),
-    relTime: (d) => S(r.exports.rel_time(BigInt(Math.floor(d)))),
-    compass: (d) => S(r.exports.compass(BigInt(Math.round(d)))),
-    aqiLabel: (v) => S(r.exports.aqi_label(BigInt(Math.round(v)))).split('|'),
     havKm: (la1, lo1, la2, lo2) => Number(S(r.exports.hav_km(M(String(la1)), M(String(lo1)), M(String(la2)), M(String(lo2))))),
-    fmtBs: (v) => S(r.exports.fmt_bs(M(String(v)))),
-    fmtCop: (v) => S(r.exports.fmt_cop(M(String(v)))),
   };
 })();
 window.nyxReady.catch(() => {}); // sin unhandledrejection; cada consumidor maneja el fallo
