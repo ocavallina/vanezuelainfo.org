@@ -19,6 +19,7 @@ fn page_v(title: String, content: String, viewport: String) -> String {
     sb.append("<link rel=\"apple-touch-icon\" href=\"/icon-192.png\">\n")
     sb.append("<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n")
     sb.append("<meta name=\"theme-color\" content=\"#00247D\">\n")
+    sb.append("<meta name=\"color-scheme\" content=\"light dark\">\n")
     sb.append("<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\n")
     sb.append("<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\n")
     sb.append("<meta name=\"apple-mobile-web-app-title\" content=\"VenezuelaInfo\">\n")

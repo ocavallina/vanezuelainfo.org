@@ -1,0 +1,134 @@
+// src/ws.nx — WebSocket del chat: registro de conexiones vivas + broadcast.
+// El upgrade in-band lo detecta nyx-serve (parche local: serve_ws en
+// packages/nyx-serve/src/server.nx) y entrega el fd a chat_ws_handler
+// (src/chat.nx), que valida la sala y llama a ws_accept(). Aqui: handshake
+// RFC 6455 (std/websocket), registro fd<->sala bajo mutex, un hilo lector por
+// conexion (solo detecta cierre/EOF; los 'p' de keepalive del cliente se
+// ignoran) y ws_broadcast() para empujar mensajes nuevos a una sala.
+//
+// El cliente NUNCA manda mensajes de chat por el WS (van por POST
+// /api/chat/send, que ya valida/sanea/limita); el WS es solo de bajada.
+
+import "std/websocket"
+
+var WS_MU: Map = Map.new()
+var WS_FDS: Array = []
+var WS_ROOMS: Array = []
+var WS_READY: int = 0
+
+// Llamar una vez desde main() antes de servir (crea el mutex; los literales
+// globales no son fiables para holders con estado).
+pub fn ws_init() {
+    if WS_READY == 1 {
+        return
+    }
+    WS_MU = mutex_new()
+    WS_READY = 1
+}
+
+fn ws_register(fd: int, room: String) {
+    mutex_lock(WS_MU)
+    WS_FDS.push(fd)
+    WS_ROOMS.push(room)
+    mutex_unlock(WS_MU)
+}
+
+fn ws_unregister(fd: int) {
+    mutex_lock(WS_MU)
+    var nf: Array = []
+    var nr: Array = []
+    var i: int = 0
+    while i < WS_FDS.length() {
+        let f: int = WS_FDS[i]
+        if f != fd {
+            let r: String = WS_ROOMS[i]
+            nf.push(f)
+            nr.push(r)
+        }
+        i = i + 1
+    }
+    WS_FDS = nf
+    WS_ROOMS = nr
+    mutex_unlock(WS_MU)
+}
+
+// Conexiones WS vivas (para /api/health).
+pub fn ws_count() -> int {
+    if WS_READY == 0 {
+        return 0
+    }
+    mutex_lock(WS_MU)
+    let n: int = WS_FDS.length()
+    mutex_unlock(WS_MU)
+    return n
+}
+
+// Empuja un payload (JSON de un mensaje) a todas las conexiones de la sala.
+// El mutex serializa los broadcasts, asi los frames no se intercalan en un
+// mismo fd. Un tcp_write fallido se ignora: el hilo lector de ese fd vera
+// EOF y limpiara el registro.
+pub fn ws_broadcast(room: String, payload: String) {
+    if WS_READY == 0 {
+        return
+    }
+    let frame: String = ws_frame(payload)
+    mutex_lock(WS_MU)
+    var i: int = 0
+    while i < WS_FDS.length() {
+        let r: String = WS_ROOMS[i]
+        if r == room {
+            let fd: int = WS_FDS[i]
+            tcp_write(fd, frame)
+        }
+        i = i + 1
+    }
+    mutex_unlock(WS_MU)
+}
+
+// Completa el handshake 101 sobre un fd ya validado, lo registra en la sala
+// y lanza el hilo lector dedicado (no pinnea los workers de nyx-serve).
+// Devuelve 1 (tomo posesion del fd) o 0 si el handshake fallo.
+pub fn ws_accept(fd: int, room: String, headers: Array) -> int {
+    let key: String = http_find_header(headers, "Sec-WebSocket-Key")
+    if key.length() == 0 {
+        return 0
+    }
+    let hs: String = ws_handshake_response(key)
+    if tcp_write(fd, hs) <= 0 {
+        return 0
+    }
+    ws_register(fd, room)
+    fn ws_reader() -> int {
+        var go: bool = true
+        while go {
+            let data: String = tcp_read_partial(fd, 4096)
+            if data.length() == 0 {
+                go = false
+            } else {
+                if ws_is_close(data) {
+                    tcp_write(fd, ws_close())
+                    go = false
+                } else {
+                    // Solo se tolera lo que manda un cliente real: frames de
+                    // TEXTO ENMASCARADOS (el ping 'p' de chat.js). Cualquier
+                    // otra cosa (p.ej. HTTP crudo si un proxy viejo recicla
+                    // la conexion como si fuera del pool) -> cerrar YA, para
+                    // no dejar un fd zombi que se coma requests ajenos.
+                    let b0: int = data.charAt(0)
+                    var b1: int = 0
+                    if data.length() > 1 {
+                        b1 = data.charAt(1)
+                    }
+                    if b0 != 129 or b1 < 128 {
+                        go = false
+                    }
+                }
+            }
+        }
+        ws_unregister(fd)
+        tcp_close(fd)
+        return 0
+    }
+    thread_spawn(ws_reader)
+    return 1
+}

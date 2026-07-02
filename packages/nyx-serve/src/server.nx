@@ -9,6 +9,17 @@ import "nyx-serve/src/files"
 // Global App reference for the MT handler (set by serve_app)
 var __serve_app: App = app_new()
 
+// Hook WebSocket opcional (parche local de venezuelainfo.org sobre v0.2.0).
+// Guardado en un Array para no necesitar un valor Fn por defecto en el global.
+var __serve_ws_handlers: Array = []
+
+// Registra el handler de upgrades WebSocket. Recibe [fd, path, headers_flat]
+// y devuelve 1 si tomo posesion del fd (el server NO lo cierra) o 0 para que
+// el server lo cierre. El handler debe responder el mismo (101 o error HTTP).
+pub fn serve_ws(handler: Fn(Array) -> int) {
+    __serve_ws_handlers.push(handler)
+}
+
 // Detect Content-Type from body content (heuristic fallback)
 fn __detect_content_type(body: String) -> String {
     if body.length() == 0 { return "text/plain" }
@@ -179,24 +190,43 @@ fn __serve_ka_worker() -> int {
 
         // Keep-alive loop for this connection
         var keep_alive: bool = true
+        var ws_owned: bool = false
         while keep_alive {
             let request: Array = http_parse_request_fast(client)
             let method: String = request[1]
             if method.length() == 0 {
                 keep_alive = false
             } else {
-                let response: String = __serve_mt_dispatch(request)
-                if response.length() > 0 {
-                    tcp_write(client, response)
-                }
                 let headers: Array = request[3]
-                let conn: String = http_find_header(headers, "Connection")
-                if conn == "close" {
+                let upg: String = http_find_header(headers, "Upgrade")
+                if __serve_ws_handlers.length() > 0 and upg.toLower() == "websocket" {
+                    // Upgrade WebSocket: entregar fd+path+headers al handler.
+                    // Si lo toma (1), el fd es suyo: no seguir leyendo ni cerrarlo.
+                    let path: String = request[2]
+                    var info: Array = []
+                    info.push(client)
+                    info.push(path)
+                    info.push(headers)
+                    let wh: Fn(Array) -> int = __serve_ws_handlers[0]
+                    if wh(info) == 1 {
+                        ws_owned = true
+                    }
                     keep_alive = false
+                } else {
+                    let response: String = __serve_mt_dispatch(request)
+                    if response.length() > 0 {
+                        tcp_write(client, response)
+                    }
+                    let conn: String = http_find_header(headers, "Connection")
+                    if conn == "close" {
+                        keep_alive = false
+                    }
                 }
             }
         }
-        tcp_close(client)
+        if !ws_owned {
+            tcp_close(client)
+        }
     }
     return 0
 }

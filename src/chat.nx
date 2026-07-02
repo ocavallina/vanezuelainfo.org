@@ -9,6 +9,7 @@
 import "src/kv"
 import "src/md"
 import "src/articles"
+import "src/ws"
 
 // nyx_url_decode (percent %XX + '+') viene de std/web (import en main.nx); el scope
 // global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de
@@ -300,7 +301,54 @@ pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> Strin
     kv_rpush(h, room_msgs_key(room), val)
     kv_ltrim(h, room_msgs_key(room), -200, -1)
     kv_close(h)
+    // Empuja el mensaje a los WebSocket suscritos a la sala (mismo shape que
+    // los items de /api/chat: {t,n,m}).
+    var wsb: StringBuilder = StringBuilder.new()
+    wsb.append("{\"t\":")
+    wsb.append(ts)
+    wsb.append(",\"n\":\"")
+    wsb.append(json_esc(nick))
+    wsb.append("\",\"m\":\"")
+    wsb.append(json_esc(texto))
+    wsb.append("\"}")
+    ws_broadcast(room, wsb.to_string())
     return ""
+}
+
+// Handler del upgrade WebSocket (registrado con serve_ws en main). info =
+// [fd, path, headers_flat]. Path esperado: /ws/chat/<sala> (o /ws/chat ->
+// general). Valida la sala contra nyx-kv antes de aceptar. Devuelve 1 si el
+// fd queda en manos de src/ws, 0 para que nyx-serve cierre la conexion.
+pub fn chat_ws_handler(info: Array) -> int {
+    let fd: int = info[0]
+    var path: String = info[1]
+    let headers: Array = info[2]
+    let qp: int = path.indexOf("?")
+    if qp >= 0 {
+        path = path.substring(0, qp)
+    }
+    var room: String = "general"
+    let pre: String = "/ws/chat/"
+    if path.indexOf(pre) == 0 and path.length() > pre.length() {
+        room = path.substring(pre.length(), path.length())
+    } else {
+        if path != "/ws/chat" {
+            tcp_write(fd, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            return 0
+        }
+    }
+    let h: int = chat_conn()
+    if h < 0 {
+        tcp_write(fd, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        return 0
+    }
+    let ok: bool = valid_room(h, room)
+    kv_close(h)
+    if !ok {
+        tcp_write(fd, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        return 0
+    }
+    return ws_accept(fd, room, headers)
 }
 
 // Devuelve los ultimos 50 mensajes de una sala como JSON [{t,n,m}].
