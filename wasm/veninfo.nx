@@ -7,6 +7,21 @@
 // no regenerar strings grandes en bucles calientes.
 
 import "std/dom"
+import "std/url"
+
+// ── Pasarela de capacidades del navegador (los provee nyx-loader.js) ────────
+// Patrón callback-por-NOMBRE-de-export (como dom_on): lo async re-entra al
+// módulo llamando al export indicado. Ver HANDOFF-veninfo-front.md (tarea 6:
+// formalizar esto como std/browser).
+extern "js" fn js_fetch(url: String, method: String, body: String, handler: String)
+extern "js" fn js_interval(ms: int, handler: String)
+extern "js" fn js_timeout(ms: int, handler: String)
+extern "js" fn js_geo(handler: String, err_handler: String)
+extern "js" fn js_delegate(cont: String, item: String, attr: String, hidden: String, handler: String)
+extern "js" fn js_on_enter(sel: String, handler: String)
+extern "js" fn js_media(q: String) -> int
+extern "js" fn js_count(sel: String) -> int
+extern "js" fn js_tz_offset_min() -> int
 
 // ── Helpers puros compartidos (fase 1) ──────────────────────────────────────
 
@@ -87,6 +102,149 @@ fn hav_km(la1s: String, lo1s: String, la2s: String, lo2s: String) -> String {
 
 // ── Formateo de números estilo es-VE / es-CO ────────────────────────────────
 
+fn pad2(n: int) -> String {
+    if n < 10 { return "0" + n.to_string() }
+    return n.to_string()
+}
+
+// ── Fechas: ISO → epoch UTC y epoch → hora local del navegador ──────────────
+// (algoritmo de días civiles de Hinnant; el offset local viene de js_tz_offset_min)
+
+fn days_from_civil(y: int, m: int, d: int) -> int {
+    var yy: int = y
+    if m <= 2 { yy = yy - 1 }
+    let era: int = yy / 400
+    let yoe: int = yy - era * 400
+    var mp: int = m - 3
+    if m <= 2 { mp = m + 9 }
+    let doy: int = (153 * mp + 2) / 5 + d - 1
+    let doe: int = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+// "2026-07-02T13:01[:09[.862]][Z|±HH:MM]" -> epoch UTC en segundos (0 si corto).
+// Sin sufijo de zona se asume UTC (o "tiempo local plano", útil para comparar
+// los ISO locales de Open-Meteo entre sí).
+fn iso_to_epoch(iso: String) -> int {
+    if iso.length() < 16 { return 0 }
+    let y: int = float_to_int(string_to_float(iso.substring(0, 4)))
+    let mo: int = float_to_int(string_to_float(iso.substring(5, 7)))
+    let d: int = float_to_int(string_to_float(iso.substring(8, 10)))
+    let h: int = float_to_int(string_to_float(iso.substring(11, 13)))
+    let mi: int = float_to_int(string_to_float(iso.substring(14, 16)))
+    var se: int = 0
+    if iso.length() >= 19 and iso.substring(16, 17) == ":" {
+        se = float_to_int(string_to_float(iso.substring(17, 19)))
+    }
+    var ep: int = days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se
+    let ln: int = iso.length()
+    if ln >= 22 {
+        let sgn: String = iso.substring(ln - 6, ln - 5)
+        if sgn == "+" or sgn == "-" {
+            let oh: int = float_to_int(string_to_float(iso.substring(ln - 5, ln - 3)))
+            let om: int = float_to_int(string_to_float(iso.substring(ln - 2, ln)))
+            let off: int = oh * 3600 + om * 60
+            if sgn == "+" { ep = ep - off } else { ep = ep + off }
+        }
+    }
+    return ep
+}
+
+// epoch UTC -> "y|m|d|hh|mm" en hora LOCAL del navegador
+fn civil_parts(epoch_utc: int) -> String {
+    let loc: int = epoch_utc + js_tz_offset_min() * 60
+    var z: int = loc / 86400
+    let sod: int = loc % 86400
+    z = z + 719468
+    let era: int = z / 146097
+    let doe: int = z - era * 146097
+    let yoe: int = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    var y: int = yoe + era * 400
+    let doy: int = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp: int = (5 * doy + 2) / 153
+    let d: int = doy - (153 * mp + 2) / 5 + 1
+    var m: int = mp + 3
+    if mp >= 10 { m = mp - 9 }
+    if m <= 2 { y = y + 1 }
+    let h: int = sod / 3600
+    let mi: int = (sod % 3600) / 60
+    return y.to_string() + "|" + m.to_string() + "|" + d.to_string() + "|" + pad2(h) + "|" + pad2(mi)
+}
+
+// epoch UTC -> "2/7/2026 13:01" local (formato del pie de finanzas)
+fn fmt_dmy_hm(epoch_utc: int) -> String {
+    let parts: Array = civil_parts(epoch_utc).split("|")
+    let y: String = parts[0]
+    let m: String = parts[1]
+    let d: String = parts[2]
+    let h: String = parts[3]
+    let mi: String = parts[4]
+    return d + "/" + m + "/" + y + " " + h + ":" + mi
+}
+
+// ── Scanning manual de JSON ──────────────────────────────────────────────────
+// std/json trunca floats (tarea 1 del HANDOFF), así que los valores numéricos
+// se extraen a mano. Tolera JSON con espacios/saltos tras los ":" (dolarapi).
+
+// Posición del valor tras "key" (saltando : y whitespace); -1 si no está.
+fn jvalpos(body: String, key: String) -> int {
+    let a: String = "\"" + key + "\""
+    let p: int = body.indexOf(a)
+    if p < 0 { return 0 - 1 }
+    var i: int = p + a.length()
+    var go: int = 1
+    while go == 1 and i < body.length() {
+        let c: String = body.substring(i, i + 1)
+        if c == ":" or c == " " or c == "\n" or c == "\t" or c == "\r" {
+            i = i + 1
+        } else {
+            go = 0
+        }
+    }
+    return i
+}
+
+// Literal numérico crudo tras "key" ("" si no está o es null).
+fn jnum(body: String, key: String) -> String {
+    let i0: int = jvalpos(body, key)
+    if i0 < 0 { return "" }
+    var i: int = i0
+    var out: String = ""
+    var go: int = 1
+    while go == 1 and i < body.length() {
+        let c: String = body.substring(i, i + 1)
+        if "0123456789.-".indexOf(c) >= 0 {
+            out = out + c
+            i = i + 1
+        } else {
+            go = 0
+        }
+    }
+    return out
+}
+
+// Valor string tras "key" ("" si no está o no es string).
+fn jstr(body: String, key: String) -> String {
+    let i0: int = jvalpos(body, key)
+    if i0 < 0 { return "" }
+    if body.substring(i0, i0 + 1) != "\"" { return "" }
+    let rest: String = body.substring(i0 + 1, body.length())
+    let q: int = rest.indexOf("\"")
+    if q < 0 { return "" }
+    return rest.substring(0, q)
+}
+
+// Recorte del objeto que EMPIEZA en la primera aparición de marker (hasta su
+// "}"). Suficiente para objetos planos (dolarapi item, binancep2p, bitcoin…).
+fn jseg(body: String, marker: String) -> String {
+    let p: int = body.indexOf(marker)
+    if p < 0 { return "" }
+    let rest: String = body.substring(p, body.length())
+    let e: int = rest.indexOf("}")
+    if e < 0 { return rest }
+    return rest.substring(0, e)
+}
+
 // Agrupa miles con "." (es-VE y es-CO usan el mismo separador)
 fn group_miles(n: int) -> String {
     let s: String = n.to_string()
@@ -141,27 +299,10 @@ fn fmt_cop(vs: String) -> String {
     return fmt_f(string_to_float(vs), 0, 0)
 }
 
-// ── Finanzas (fase 2) ───────────────────────────────────────────────────────
-// fx.js hace los fetch (wasm no tiene fetch), extrae los floats del JSON y los
-// pasa como "clave=valor|clave=valor" (los valores no llevan | ni =; JS los
-// sanea). Aquí se calcula y se arma el HTML. Mismo markup que el fx.js viejo.
-
-fn kv_get(data: String, key: String) -> String {
-    let pairs: Array = data.split("|")
-    var i: int = 0
-    while i < pairs.length() {
-        let p: String = pairs[i]
-        let eq: int = p.indexOf("=")
-        if eq > 0 {
-            let k: String = p.substring(0, eq)
-            if k == key {
-                return p.substring(eq + 1, p.length())
-            }
-        }
-        i = i + 1
-    }
-    return ""
-}
+// ── Finanzas (fase B: 100% Nyx) ─────────────────────────────────────────────
+// El propio módulo pide las 5 APIs vía js_fetch (pasarela) y extrae los floats
+// con los scanners de JSON de arriba. Estado en holders del módulo; cada
+// respuesta re-pinta (idempotente). Mismo markup que el fx.js retirado.
 
 fn fin_row(l: String, v: String) -> String {
     return "<div class=\"fin-row\"><span class=\"fin-lab\">" + l + "</span><span class=\"fin-val\">" + v + "</span></div>"
@@ -175,18 +316,21 @@ fn fz_item(l: String, v: String, s: String) -> String {
     return out + "</div>"
 }
 
+// Estado: [0]=bcv [1]=eur [2]=uc [3]=uv [4]=cop [5]=fch (local, ya formateada)
+var fxv: Array = [""]
+// Cripto: [0]=btc [1]=eth [2]=usdt
+var fxc: Array = [""]
+
 // Pinta la tarjeta de la portada (#fin-body) y/o la página /finanzas (#fz-div);
-// dom_set_html es no-op si el selector no existe, así que el mismo export sirve
-// para ambas. data: bcv, eur, uc (USDT compra), uv (USDT venta), cop, fch
-// (fecha YA formateada en hora local por JS).
-#[export_name = "fx_render"]
-fn fx_render(data: String) {
-    let bcv: String = kv_get(data, "bcv")
-    let eur: String = kv_get(data, "eur")
-    let uc: String = kv_get(data, "uc")
-    let uv: String = kv_get(data, "uv")
-    let cop: String = kv_get(data, "cop")
-    let fch: String = kv_get(data, "fch")
+// dom_set_html es no-op si el selector no existe, así que la misma fn sirve
+// para ambas.
+fn fx_paint() {
+    let bcv: String = fxv[0]
+    let eur: String = fxv[1]
+    let uc: String = fxv[2]
+    let uv: String = fxv[3]
+    let cop: String = fxv[4]
+    let fch: String = fxv[5]
 
     var base: float = 0.0
     if uc.length() > 0 and uv.length() > 0 {
@@ -230,18 +374,498 @@ fn fx_render(data: String) {
     dom_set_html("#fz-div", g)
 }
 
-// Cripto de /finanzas (#fz-cripto). data: btc, eth, usdt (USD, floats crudos).
-#[export_name = "fx_render_cripto"]
-fn fx_render_cripto(data: String) {
-    let btc: String = kv_get(data, "btc")
-    let eth: String = kv_get(data, "eth")
-    let usdt: String = kv_get(data, "usdt")
+// Cripto de /finanzas (#fz-cripto).
+fn fx_paint_cripto() {
+    let btc: String = fxc[0]
+    let eth: String = fxc[1]
+    let usdt: String = fxc[2]
     var h: String = ""
     if btc.length() > 0 { h = h + fz_item("Bitcoin (BTC)", "$ " + fmt_f(string_to_float(btc), 0, 3), "") }
     if eth.length() > 0 { h = h + fz_item("Ethereum (ETH)", "$ " + fmt_f(string_to_float(eth), 0, 3), "") }
     if usdt.length() > 0 { h = h + fz_item("Tether (USDT)", "$ " + fmt_f(string_to_float(usdt), 2, 3), "") }
     if h.length() == 0 { h = "Sin datos." }
     dom_set_html("#fz-cripto", h)
+}
+
+// Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
+
+#[export_name = "fx_on_dolares"]
+fn fx_on_dolares(status: int, body: String) {
+    if status != 200 { return }
+    let seg: String = jseg(body, "\"oficial\"")
+    if seg.length() == 0 { return }
+    let v: String = jnum(seg, "promedio")
+    if v.length() > 0 { fxv[0] = v }
+    let f: String = jstr(seg, "fechaActualizacion")
+    if f.length() > 0 { fxv[5] = fmt_dmy_hm(iso_to_epoch(f)) }
+    fx_paint()
+}
+
+#[export_name = "fx_on_euros"]
+fn fx_on_euros(status: int, body: String) {
+    if status != 200 { return }
+    let seg: String = jseg(body, "\"oficial\"")
+    if seg.length() == 0 { return }
+    let v: String = jnum(seg, "promedio")
+    if v.length() > 0 { fxv[1] = v }
+    fx_paint()
+}
+
+#[export_name = "fx_on_criptoya"]
+fn fx_on_criptoya(status: int, body: String) {
+    if status != 200 { return }
+    let seg: String = jseg(body, "\"binancep2p\"")
+    if seg.length() == 0 { return }
+    let a: String = jnum(seg, "ask")
+    let b: String = jnum(seg, "bid")
+    if a.length() > 0 { fxv[2] = a }
+    if b.length() > 0 { fxv[3] = b }
+    fx_paint()
+}
+
+#[export_name = "fx_on_cop"]
+fn fx_on_cop(status: int, body: String) {
+    if status != 200 { return }
+    let v: String = jnum(body, "COP")
+    if v.length() > 0 { fxv[4] = v }
+    fx_paint()
+}
+
+#[export_name = "fx_on_cripto"]
+fn fx_on_cripto(status: int, body: String) {
+    if status != 200 {
+        dom_set_html("#fz-cripto", "No se pudo cargar cripto.")
+        return
+    }
+    let b: String = jnum(jseg(body, "\"bitcoin\""), "usd")
+    let e: String = jnum(jseg(body, "\"ethereum\""), "usd")
+    let t: String = jnum(jseg(body, "\"tether\""), "usd")
+    if b.length() > 0 { fxc[0] = b }
+    if e.length() > 0 { fxc[1] = e }
+    if t.length() > 0 { fxc[2] = t }
+    fx_paint_cripto()
+}
+
+// Arranque de finanzas: con_cripto=1 solo en /finanzas (la portada no lo pinta)
+fn fx_boot(con_cripto: int) {
+    fxv = ["", "", "", "", "", ""]
+    fxc = ["", "", ""]
+    js_fetch("https://ve.dolarapi.com/v1/dolares", "GET", "", "fx_on_dolares")
+    js_fetch("https://criptoya.com/api/USDT/VES/1", "GET", "", "fx_on_criptoya")
+    js_fetch("https://ve.dolarapi.com/v1/euros", "GET", "", "fx_on_euros")
+    js_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
+    if con_cripto == 1 {
+        js_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")
+    }
+}
+
+// ── Clima (fase C: 100% Nyx) ─────────────────────────────────────────────────
+// Tarjeta de la portada (#w-body) y página /clima completa. Open-Meteo con
+// timezone=auto devuelve ISO LOCALES: se muestran con substring y se comparan
+// entre sí con iso_to_epoch (tratados como "hora local plana").
+
+// Redondeo al entero más cercano (Math.round; float_to_int trunca hacia 0)
+fn round_i(v: float) -> int {
+    if v >= 0.0 { return float_to_int(v + 0.5) }
+    return 0 - float_to_int(0.0 - v + 0.5)
+}
+
+// Array JSON "key":[...] dentro de seg → elementos crudos (Strings, sin comillas)
+fn jarr(seg: String, key: String) -> Array {
+    let empty: Array = []
+    let i0: int = jvalpos(seg, key)
+    if i0 < 0 { return empty }
+    if seg.substring(i0, i0 + 1) != "[" { return empty }
+    let rest: String = seg.substring(i0 + 1, seg.length())
+    let e: int = rest.indexOf("]")
+    if e < 0 { return empty }
+    let inner: String = rest.substring(0, e)
+    if inner.length() == 0 { return empty }
+    let parts: Array = inner.split(",")
+    var out: Array = []
+    var i: int = 0
+    while i < parts.length() {
+        var p: String = parts[i]
+        if p.startsWith("\"") { p = p.substring(1, p.length()) }
+        if p.endsWith("\"") { p = p.substring(0, p.length() - 1) }
+        out.push(p)
+        i = i + 1
+    }
+    return out
+}
+
+// Estado: [0]=lat [1]=lon [2]=nombre (compartido tarjeta/página vía localStorage)
+var wc: Array = [""]
+// Resultados del buscador de ciudades: nombre, lat, lon, subtítulo
+var cr_name: Array = [""]
+var cr_lat: Array = [""]
+var cr_lon: Array = [""]
+var cr_sub: Array = [""]
+
+// Coordenadas guardadas (w_* de localStorage) con fallback opcional a ulat/ulon
+// (solo la tarjeta) y default Caracas.
+fn wc_load_coords(usa_ulat: int) {
+    wc = ["10.4806", "-66.9036", "Caracas"]
+    let sla: String = js_ls_get("w_lat")
+    let slo: String = js_ls_get("w_lon")
+    let snm: String = js_ls_get("w_name")
+    if sla.length() > 0 and slo.length() > 0 {
+        wc[0] = sla
+        wc[1] = slo
+        if snm.length() > 0 { wc[2] = snm } else { wc[2] = "Tu ciudad" }
+        return
+    }
+    if usa_ulat == 1 {
+        let ula: String = js_ls_get("ulat")
+        let ulo: String = js_ls_get("ulon")
+        if ula.length() > 0 and ulo.length() > 0 {
+            wc[0] = ula
+            wc[1] = ulo
+            wc[2] = "Tu ubicacion"
+        }
+    }
+}
+
+// — Tarjeta de la portada —
+
+fn wcard_fetch() {
+    let la: String = wc[0]
+    let lo: String = wc[1]
+    js_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto", "GET", "", "wcard_on_meteo")
+}
+
+fn revgeo_fetch(handler: String) {
+    let la: String = wc[0]
+    let lo: String = wc[1]
+    js_fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" + la + "&longitude=" + lo + "&localityLanguage=es", "GET", "", handler)
+}
+
+#[export_name = "wcard_on_meteo"]
+fn wcard_on_meteo(status: int, body: String) {
+    if status != 200 {
+        dom_set_text("#w-body", "No se pudo cargar el clima.")
+        return
+    }
+    let cur: String = jseg(body, "\"current\":{")
+    if cur.length() == 0 {
+        dom_set_text("#w-body", "Sin datos de clima.")
+        return
+    }
+    let code: String = jnum(cur, "weather_code")
+    var wcode: int = 0 - 1
+    if code.length() > 0 { wcode = float_to_int(string_to_float(code)) }
+    let w: Array = wdesc(wcode).split("|")
+    let wt: String = w[0]
+    let wi: String = w[1]
+    let t: int = round_i(string_to_float(jnum(cur, "temperature_2m")))
+    let st: int = round_i(string_to_float(jnum(cur, "apparent_temperature")))
+    let hum: String = jnum(cur, "relative_humidity_2m")
+    let vi: int = round_i(string_to_float(jnum(cur, "wind_speed_10m")))
+    var h: String = "<div class=\"w-main\"><span class=\"w-emoji\">" + wi + "</span><span class=\"w-temp\">" + t.to_string() + "°C</span></div>"
+    h = h + "<div class=\"w-desc\">" + wt + "</div>"
+    h = h + "<div class=\"w-meta\">Sensacion " + st.to_string() + "°C · Humedad " + hum + "% · Viento " + vi.to_string() + " km/h</div>"
+    dom_set_html("#w-body", h)
+}
+
+#[export_name = "wcard_on_revgeo"]
+fn wcard_on_revgeo(status: int, body: String) {
+    if status != 200 { return }
+    var cc: String = jstr(body, "city")
+    if cc.length() == 0 { cc = jstr(body, "locality") }
+    if cc.length() == 0 { cc = jstr(body, "principalSubdivision") }
+    if cc.length() == 0 { return }
+    wc[2] = cc
+    dom_set_text("#w-city-name", cc)
+    js_ls_set("w_name", cc)
+}
+
+#[export_name = "wcard_geo_ok"]
+fn wcard_geo_ok(lat: String, lon: String) {
+    wc[0] = lat
+    wc[1] = lon
+    js_ls_set("w_lat", lat)
+    js_ls_set("w_lon", lon)
+    wcard_fetch()
+    revgeo_fetch("wcard_on_revgeo")
+}
+
+fn wcard_boot() {
+    wc_load_coords(1)
+    let nm: String = wc[2]
+    dom_set_text("#w-city-name", nm)
+    wcard_fetch()
+    if nm == "Tu ubicacion" or nm == "Mi ubicacion" {
+        revgeo_fetch("wcard_on_revgeo")
+    }
+    js_geo("wcard_geo_ok", "")
+}
+
+// — Página /clima —
+
+fn clima_fetch_all() {
+    let la: String = wc[0]
+    let lo: String = wc[1]
+    let nm: String = wc[2]
+    dom_set_text("#c-title", nm)
+    dom_set_text("#c-actual", "Cargando…")
+    js_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto", "GET", "", "clima_on_forecast")
+    js_fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + la + "&longitude=" + lo + "&current=pm2_5,pm10,us_aqi&timezone=auto", "GET", "", "clima_on_aire")
+}
+
+// "2026-07-02T06:15" local → "06:15"
+fn hm_of(iso: String) -> String {
+    if iso.length() < 16 { return "" }
+    return iso.substring(11, 16)
+}
+
+fn wdesc_of(code_raw: String) -> Array {
+    var wcode: int = 0 - 1
+    if code_raw.length() > 0 { wcode = float_to_int(string_to_float(code_raw)) }
+    return wdesc(wcode).split("|")
+}
+
+#[export_name = "clima_on_forecast"]
+fn clima_on_forecast(status: int, body: String) {
+    if status != 200 {
+        dom_set_text("#c-actual", "No se pudo cargar el clima.")
+        return
+    }
+    let cur: String = jseg(body, "\"current\":{")
+    let w: Array = wdesc_of(jnum(cur, "weather_code"))
+    let wt: String = w[0]
+    let wi: String = w[1]
+    var per: String = "Dia"
+    if jnum(cur, "is_day") == "0" { per = "Noche" }
+    var h: String = "<div class=\"ca-main\"><span class=\"ca-emoji\">" + wi + "</span><span class=\"ca-temp\">" + round_i(string_to_float(jnum(cur, "temperature_2m"))).to_string() + "°C</span><span class=\"ca-desc\">" + wt + "</span></div>"
+    h = h + "<div class=\"ca-grid\">"
+    h = h + "<div><span>Sensacion</span><b>" + round_i(string_to_float(jnum(cur, "apparent_temperature"))).to_string() + "°</b></div>"
+    h = h + "<div><span>Humedad</span><b>" + jnum(cur, "relative_humidity_2m") + "%</b></div>"
+    h = h + "<div><span>Viento</span><b>" + round_i(string_to_float(jnum(cur, "wind_speed_10m"))).to_string() + " km/h " + compass(round_i(string_to_float(jnum(cur, "wind_direction_10m")))) + "</b></div>"
+    h = h + "<div><span>Rafagas</span><b>" + round_i(string_to_float(jnum(cur, "wind_gusts_10m"))).to_string() + " km/h</b></div>"
+    h = h + "<div><span>Presion</span><b>" + round_i(string_to_float(jnum(cur, "surface_pressure"))).to_string() + " hPa</b></div>"
+    h = h + "<div><span>Nubosidad</span><b>" + jnum(cur, "cloud_cover") + "%</b></div>"
+    var prec: String = jnum(cur, "precipitation")
+    if prec.length() == 0 { prec = "0" }
+    h = h + "<div><span>Precipitacion</span><b>" + prec + " mm</b></div>"
+    h = h + "<div><span>Periodo</span><b>" + per + "</b></div></div>"
+    let daily: String = jseg(body, "\"daily\":{")
+    let sunrise: Array = jarr(daily, "sunrise")
+    if sunrise.length() > 0 {
+        let sunset: Array = jarr(daily, "sunset")
+        let uv: Array = jarr(daily, "uv_index_max")
+        let sr: String = sunrise[0]
+        let ss: String = sunset[0]
+        let u0: String = uv[0]
+        h = h + "<div class=\"ca-sun\">Amanece " + hm_of(sr) + " · Anochece " + hm_of(ss) + " · UV max " + u0 + "</div>"
+    }
+    dom_set_html("#c-actual", h)
+    clima_render_horas(body)
+    clima_render_dias(daily)
+}
+
+fn clima_render_horas(body: String) {
+    let hr: String = jseg(body, "\"hourly\":{")
+    let times: Array = jarr(hr, "time")
+    if times.length() == 0 {
+        dom_set_text("#c-horas", "")
+        return
+    }
+    let temps: Array = jarr(hr, "temperature_2m")
+    let probs: Array = jarr(hr, "precipitation_probability")
+    let codes: Array = jarr(hr, "weather_code")
+    // "ahora" en hora local plana (los ISO de Open-Meteo son locales)
+    let now_loc: int = time() + js_tz_offset_min() * 60
+    var out: String = ""
+    var cnt: int = 0
+    var i: int = 0
+    while i < times.length() and cnt < 12 {
+        let ti: String = times[i]
+        if iso_to_epoch(ti) >= now_loc - 3600 {
+            let ci: String = codes[i]
+            let w: Array = wdesc_of(ci)
+            let wi: String = w[1]
+            let tv: String = temps[i]
+            var pv: String = "0"
+            if i < probs.length() {
+                let p0: String = probs[i]
+                if p0.length() > 0 { pv = p0 }
+            }
+            out = out + "<div class=\"ch-item\"><span class=\"ch-h\">" + ti.substring(11, 13) + ":00</span><span class=\"ch-e\">" + wi + "</span><span class=\"ch-t\">" + round_i(string_to_float(tv)).to_string() + "°</span><span class=\"ch-p\">" + pv + "%</span></div>"
+            cnt = cnt + 1
+        }
+        i = i + 1
+    }
+    dom_set_html("#c-horas", out)
+}
+
+fn clima_render_dias(daily: String) {
+    let times: Array = jarr(daily, "time")
+    if times.length() == 0 {
+        dom_set_text("#c-dias", "")
+        return
+    }
+    let codes: Array = jarr(daily, "weather_code")
+    let tmax: Array = jarr(daily, "temperature_2m_max")
+    let tmin: Array = jarr(daily, "temperature_2m_min")
+    let pmax: Array = jarr(daily, "precipitation_probability_max")
+    var out: String = ""
+    var i: int = 0
+    while i < times.length() {
+        let di: String = times[i]
+        let y: int = float_to_int(string_to_float(di.substring(0, 4)))
+        let mo: int = float_to_int(string_to_float(di.substring(5, 7)))
+        let dd: int = float_to_int(string_to_float(di.substring(8, 10)))
+        let dow: int = (days_from_civil(y, mo, dd) + 4) % 7
+        var dn: String = "Dom"
+        if dow == 1 { dn = "Lun" }
+        if dow == 2 { dn = "Mar" }
+        if dow == 3 { dn = "Mie" }
+        if dow == 4 { dn = "Jue" }
+        if dow == 5 { dn = "Vie" }
+        if dow == 6 { dn = "Sab" }
+        let ci: String = codes[i]
+        let w: Array = wdesc_of(ci)
+        let wi: String = w[1]
+        let mx: String = tmax[i]
+        let mn: String = tmin[i]
+        var pp: String = "0"
+        if i < pmax.length() {
+            let p0: String = pmax[i]
+            if p0.length() > 0 { pp = p0 }
+        }
+        out = out + "<div class=\"cd-item\"><span class=\"cd-d\">" + dn + "</span><span class=\"cd-e\">" + wi + "</span><span class=\"cd-mx\">" + round_i(string_to_float(mx)).to_string() + "°</span><span class=\"cd-mn\">" + round_i(string_to_float(mn)).to_string() + "°</span><span class=\"cd-p\">" + pp + "%</span></div>"
+        i = i + 1
+    }
+    dom_set_html("#c-dias", out)
+}
+
+#[export_name = "clima_on_aire"]
+fn clima_on_aire(status: int, body: String) {
+    if status != 200 {
+        dom_set_text("#c-aire", "Sin datos de calidad del aire.")
+        return
+    }
+    let cur: String = jseg(body, "\"current\":{")
+    let aqi: String = jnum(cur, "us_aqi")
+    if aqi.length() == 0 {
+        dom_set_text("#c-aire", "Sin datos.")
+        return
+    }
+    let l: Array = aqi_label(float_to_int(string_to_float(aqi))).split("|")
+    let lt: String = l[0]
+    let lc: String = l[1]
+    var pm25: String = jnum(cur, "pm2_5")
+    var pm10: String = jnum(cur, "pm10")
+    dom_set_html("#c-aire", "<div class=\"ca-aqi\" style=\"border-color:" + lc + "\"><span class=\"aqi-num\" style=\"color:" + lc + "\">" + aqi + "</span><span class=\"aqi-lab\">AQI (US): " + lt + "</span><span class=\"aqi-pm\">PM2.5 " + pm25 + " · PM10 " + pm10 + "</span></div>")
+}
+
+// — Buscador de ciudades —
+
+#[export_name = "clima_buscar"]
+fn clima_buscar() {
+    let term: String = dom_get_value("#c-q").trim()
+    if term.length() == 0 { return }
+    dom_set_text("#c-results", "Buscando…")
+    js_fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + url_encode(term) + "&count=6&language=es", "GET", "", "clima_on_geo")
+}
+
+#[export_name = "clima_on_geo"]
+fn clima_on_geo(status: int, body: String) {
+    if status != 200 {
+        dom_set_text("#c-results", "Error de busqueda.")
+        return
+    }
+    cr_name = []
+    cr_lat = []
+    cr_lon = []
+    cr_sub = []
+    let p: int = body.indexOf("\"results\":[")
+    if p < 0 {
+        dom_set_text("#c-results", "Sin resultados.")
+        return
+    }
+    let seg: String = body.substring(p + 11, body.length())
+    let parts: Array = seg.split("},{")
+    var out: String = "<input type=\"hidden\" id=\"c-sel\">"
+    var i: int = 0
+    while i < parts.length() and i < 6 {
+        let ob: String = parts[i]
+        let nm: String = jstr(ob, "name")
+        let la: String = jnum(ob, "latitude")
+        let lo: String = jnum(ob, "longitude")
+        if nm.length() > 0 and la.length() > 0 and lo.length() > 0 {
+            let a1: String = jstr(ob, "admin1")
+            let cc: String = jstr(ob, "country_code")
+            var sub: String = ""
+            if a1.length() > 0 { sub = ", " + a1 }
+            if cc.length() > 0 { sub = sub + " (" + cc + ")" }
+            cr_name.push(nm)
+            cr_lat.push(la)
+            cr_lon.push(lo)
+            cr_sub.push(sub)
+            out = out + "<button type=\"button\" class=\"c-res\" data-i=\"" + (cr_name.length() - 1).to_string() + "\">" + esc(nm) + "<small>" + esc(sub) + "</small></button>"
+        }
+        i = i + 1
+    }
+    if cr_name.length() == 0 {
+        dom_set_text("#c-results", "Sin resultados.")
+        return
+    }
+    dom_set_html("#c-results", out)
+}
+
+fn clima_set_city(la: String, lo: String, nm: String) {
+    wc[0] = la
+    wc[1] = lo
+    wc[2] = nm
+    js_ls_set("w_lat", la)
+    js_ls_set("w_lon", lo)
+    js_ls_set("w_name", nm)
+    clima_fetch_all()
+}
+
+#[export_name = "clima_pick"]
+fn clima_pick() {
+    let iv: String = dom_get_value("#c-sel")
+    if iv.length() == 0 { return }
+    let i: int = float_to_int(string_to_float(iv))
+    if i < 0 or i >= cr_name.length() { return }
+    let nm: String = cr_name[i]
+    let la: String = cr_lat[i]
+    let lo: String = cr_lon[i]
+    let sub: String = cr_sub[i]
+    dom_set_html("#c-results", "")
+    js_set_value("#c-q", "")
+    var full: String = nm
+    let cm: int = sub.indexOf(" (")
+    if cm > 0 { full = nm + sub.substring(0, cm) } else if sub.length() > 0 { full = nm + sub }
+    clima_set_city(la, lo, full)
+}
+
+#[export_name = "clima_geo_click"]
+fn clima_geo_click() {
+    dom_set_text("#c-results", "Obteniendo ubicacion…")
+    js_geo("clima_geo_ok", "clima_geo_err")
+}
+
+#[export_name = "clima_geo_ok"]
+fn clima_geo_ok(lat: String, lon: String) {
+    dom_set_text("#c-results", "")
+    clima_set_city(lat, lon, "Mi ubicacion")
+}
+
+#[export_name = "clima_geo_err"]
+fn clima_geo_err() {
+    dom_set_text("#c-results", "No se pudo obtener la ubicacion.")
+}
+
+fn clima_boot() {
+    wc_load_coords(0)
+    dom_on("#c-buscar", "click", "clima_buscar")
+    js_on_enter("#c-q", "clima_buscar")
+    dom_on("#c-geo", "click", "clima_geo_click")
+    js_delegate("#c-results", ".c-res", "data-i", "#c-sel", "clima_pick")
+    clima_fetch_all()
 }
 
 // ── Sismos (fase 3) ─────────────────────────────────────────────────────────
@@ -606,10 +1230,8 @@ fn s_toggle_filtros() {
     s_apply_open()
 }
 
-// Ubicación del usuario (la llama sismos.js con la geolocalización; lat/lon
-// como String porque los floats no cruzan la frontera)
-#[export_name = "sismos_set_loc"]
-fn sismos_set_loc(lats: String, lons: String) {
+// Ubicación del usuario (lat/lon como String: los floats no cruzan la frontera)
+fn s_set_loc_internal(lats: String, lons: String) {
     let la: float = string_to_float(lats)
     let lo: float = string_to_float(lons)
     s_ulat4[0] = float_to_int(la * 10000.0)
@@ -643,10 +1265,13 @@ fn sismos_set_loc(lats: String, lons: String) {
     s_render()
 }
 
-// Carga inicial: parsea la serialización, aplica filtros persistidos, registra
-// los listeners y hace el primer render.
-#[export_name = "sismos_load"]
-fn sismos_load(data: String) {
+// Export para la suite de tests (el flujo real entra por sismos_geo_ok)
+#[export_name = "sismos_set_loc"]
+fn sismos_set_loc(lats: String, lons: String) {
+    s_set_loc_internal(lats, lons)
+}
+
+fn s_reset() {
     s_id = []
     s_iso = []
     s_dia = []
@@ -670,46 +1295,28 @@ fn sismos_load(data: String) {
     s_ulon4 = [0]
     s_dmax = [0]
     s_open = [0]
+}
 
-    let recs: Array = data.split("\n")
-    var i: int = 0
-    var n: int = 0
-    while i < recs.length() {
-        let rec: String = recs[i]
-        let f: Array = rec.split("\t")
-        if f.length() >= 11 {
-            let f0: String = f[0]
-            let f1: String = f[1]
-            let f2: String = f[2]
-            let f3: String = f[3]
-            let f4: String = f[4]
-            let f5: String = f[5]
-            let f6: String = f[6]
-            let f7: String = f[7]
-            let f8: String = f[8]
-            let f9: String = f[9]
-            let f10: String = f[10]
-            s_id.push(f0)
-            s_epoch.push(float_to_int(string_to_float(f1)))
-            s_iso.push(f2)
-            s_lats.push(f3)
-            s_lons.push(f4)
-            s_lat4.push(float_to_int(string_to_float(f3) * 10000.0))
-            s_lon4.push(float_to_int(string_to_float(f4) * 10000.0))
-            s_depth.push(f5)
-            s_mtype.push(f6)
-            s_mag.push(f7)
-            s_mag10.push(float_to_int(string_to_float(f7) * 10.0 + 0.5))
-            s_place.push(f8)
-            s_dia.push(f9)
-            s_hora.push(f10)
-            s_dist.push(0 - 1)
-            n = n + 1
-        }
-        i = i + 1
-    }
-    s_n[0] = n
+fn s_push_row(id: String, epoch: int, iso: String, lats: String, lons: String, depth: String, mtype: String, mag: String, place: String, dia: String, hora: String) {
+    s_id.push(id)
+    s_epoch.push(epoch)
+    s_iso.push(iso)
+    s_lats.push(lats)
+    s_lons.push(lons)
+    s_lat4.push(float_to_int(string_to_float(lats) * 10000.0))
+    s_lon4.push(float_to_int(string_to_float(lons) * 10000.0))
+    s_depth.push(depth)
+    s_mtype.push(mtype)
+    s_mag.push(mag)
+    s_mag10.push(float_to_int(string_to_float(mag) * 10.0 + 0.5))
+    s_place.push(place)
+    s_dia.push(dia)
+    s_hora.push(hora)
+    s_dist.push(0 - 1)
+    s_n[0] = s_n[0] + 1
+}
 
+fn s_finish_load() {
     // Filtros persistidos → controles (js_set_value fija la propiedad .value)
     let fm: String = js_ls_get("f_mag")
     if fm.length() > 0 { js_set_value("#f-mag", fm) }
@@ -729,11 +1336,206 @@ fn sismos_load(data: String) {
     dom_on("#p-prev", "click", "s_prev")
     dom_on("#p-next", "click", "s_next")
     dom_on("#filtros-btn", "click", "s_toggle_filtros")
+    js_delegate(".tabla-scroll", "tr[data-id]", "data-id", "#s-selected", "s_select")
 
     s_destacado()
     s_render()
 }
 
+// Carga desde serialización de 11 campos (id, epoch, iso, lat, lon, depth,
+// type, mag, place, dia, hora) — la usa la suite de tests.
+#[export_name = "sismos_load"]
+fn sismos_load(data: String) {
+    s_reset()
+    let recs: Array = data.split("\n")
+    var i: int = 0
+    while i < recs.length() {
+        let rec: String = recs[i]
+        let f: Array = rec.split("\t")
+        if f.length() >= 11 {
+            let f0: String = f[0]
+            let f1: String = f[1]
+            let f2: String = f[2]
+            let f3: String = f[3]
+            let f4: String = f[4]
+            let f5: String = f[5]
+            let f6: String = f[6]
+            let f7: String = f[7]
+            let f8: String = f[8]
+            let f9: String = f[9]
+            let f10: String = f[10]
+            s_push_row(f0, float_to_int(string_to_float(f1)), f2, f3, f4, f5, f6, f7, f8, f9, f10)
+        }
+        i = i + 1
+    }
+    s_finish_load()
+}
+
+// Arranque REAL de /sismos: lee el <textarea id="s-data"> que emite el
+// servidor (8 campos: id, iso, lat, lon, depth, type, mag, place), deriva
+// epoch y fecha/hora LOCAL él mismo, y arranca geolocalización y reloj.
+#[export_name = "sismos_boot"]
+fn sismos_boot() {
+    let data: String = dom_get_value("#s-data")
+    if data.length() == 0 { return }
+    s_reset()
+    let recs: Array = data.split("\n")
+    var i: int = 0
+    while i < recs.length() {
+        let rec: String = recs[i]
+        let f: Array = rec.split("\t")
+        if f.length() >= 8 {
+            let id: String = f[0]
+            let iso: String = f[1]
+            let lats: String = f[2]
+            let lons: String = f[3]
+            let depth: String = f[4]
+            let mtype: String = f[5]
+            let mag: String = f[6]
+            let place: String = f[7]
+            let ep: int = iso_to_epoch(iso)
+            let cp: Array = civil_parts(ep).split("|")
+            let cy: String = cp[0]
+            let cmo: String = cp[1]
+            let cd: String = cp[2]
+            let ch: String = cp[3]
+            let cmi: String = cp[4]
+            let dia: String = cy + "-" + pad2(float_to_int(string_to_float(cmo))) + "-" + pad2(float_to_int(string_to_float(cd)))
+            let hora: String = ch + ":" + cmi
+            s_push_row(id, ep, iso, lats, lons, depth, mtype, mag, place, dia, hora)
+        }
+        i = i + 1
+    }
+    s_finish_load()
+    // "Actualizado HH:MM" (hora local) desde el epoch de la última descarga
+    let ue: String = dom_get_value("#s-upd-epoch")
+    if ue.length() > 0 {
+        let up: Array = civil_parts(float_to_int(string_to_float(ue))).split("|")
+        let uh: String = up[3]
+        let um: String = up[4]
+        dom_set_text("#s-updated", "Actualizado " + uh + ":" + um)
+    }
+    // Geolocalización: la guardada primero, luego la fresca + refresco cada 2 min
+    let ula: String = js_ls_get("ulat")
+    let ulo: String = js_ls_get("ulon")
+    if ula.length() > 0 and ulo.length() > 0 {
+        dom_set_text("#geo-status", "Ubicacion guardada")
+        s_set_loc_internal(ula, ulo)
+    }
+    js_geo("sismos_geo_ok", "")
+    js_interval(120000, "sismos_geo_tick")
+}
+
+#[export_name = "sismos_geo_tick"]
+fn sismos_geo_tick() {
+    js_geo("sismos_geo_ok", "")
+}
+
+#[export_name = "sismos_geo_ok"]
+fn sismos_geo_ok(lat: String, lon: String) {
+    js_ls_set("ulat", lat)
+    js_ls_set("ulon", lon)
+    let np: Array = civil_parts(time()).split("|")
+    let nh: String = np[3]
+    let nm: String = np[4]
+    dom_set_text("#geo-status", "Ubicacion " + nh + ":" + nm)
+    s_set_loc_internal(lat, lon)
+}
+
+// ── Rotador de titulares y expand de noticias (fase E) ──────────────────────
+// El rotador marca el slide activo con la clase .on vía :nth-child; el CSS
+// (.rot-live en el stage) apaga el fallback estático de :first-child. El
+// expand usa js_delegate + data-idx (los clicks en <a> se ignoran en la
+// pasarela, así los enlaces siguen navegando).
+
+var rot_n: Array = [0]
+var rot_i: Array = [0]
+var n_open: Array = [0]
+
+fn rot_mark(k: int, on: int) {
+    js_toggle_class(".news-rot .rot-slide:nth-child(" + (k + 1).to_string() + ")", "on", on)
+}
+
+#[export_name = "rot_tick"]
+fn rot_tick() {
+    if rot_n[0] < 2 { return }
+    rot_mark(rot_i[0], 0)
+    rot_i[0] = (rot_i[0] + 1) % rot_n[0]
+    rot_mark(rot_i[0], 1)
+}
+
+fn rot_boot() {
+    rot_n = [0]
+    rot_i = [0]
+    if js_media("(prefers-reduced-motion: reduce)") == 1 {
+        return // sin animación: el CSS estático deja visible el primer slide
+    }
+    let n: int = js_count(".news-rot .rot-slide")
+    if n <= 0 { return }
+    rot_n[0] = n
+    js_toggle_class(".news-rot .rot-stage", "rot-live", 1)
+    rot_mark(0, 1)
+    if n > 1 {
+        js_interval(4500, "rot_tick")
+    }
+}
+
+// Despliegue/colapso del detalle de una noticia (uno a la vez)
+#[export_name = "news_toggle"]
+fn news_toggle() {
+    let iv: String = dom_get_value("#n-sel")
+    if iv.length() == 0 { return }
+    let idx: int = float_to_int(string_to_float(iv))
+    if idx < 1 { return }
+    let cur: int = n_open[0]
+    if cur > 0 {
+        js_toggle_class(".news-list .news-item:nth-child(" + cur.to_string() + ")", "open", 0)
+    }
+    if idx == cur {
+        n_open[0] = 0
+        return
+    }
+    js_toggle_class(".news-list .news-item:nth-child(" + idx.to_string() + ")", "open", 1)
+    n_open[0] = idx
+}
+
+fn news_boot() {
+    n_open = [0]
+    js_delegate(".news-list", ".news-item", "data-idx", "#n-sel", "news_toggle")
+}
+
+// Router de arranque: el servidor emite <input type="hidden" id="pg" value="X">
+// en cada página; aquí se decide qué boots disparar (así el fetch de finanzas
+// no corre en /sismos, etc.).
 fn main() {
     console_log("veninfo.wasm: módulo Nyx cargado")
+    // Dimensionar TODOS los holders globales aquí (gotcha: los literales
+    // globales multi-elemento no se materializan; y así ningún handler
+    // re-entrante pilla un holder corto aunque su boot no haya corrido).
+    fxv = ["", "", "", "", "", ""]
+    fxc = ["", "", ""]
+    wc = ["10.4806", "-66.9036", "Caracas"]
+    cr_name = []
+    cr_lat = []
+    cr_lon = []
+    cr_sub = []
+    let pg: String = dom_get_value("#pg")
+    if pg == "index" {
+        fx_boot(0)
+        wcard_boot()
+        rot_boot()
+    }
+    if pg == "finanzas" {
+        fx_boot(1)
+        news_boot() // lista de comunicados BVC (mismo markup expandible)
+    }
+    if pg == "clima" {
+        clima_boot()
+    }
+    if pg == "sismos" {
+        sismos_boot()
+    }
+    if pg == "noticias" {
+        news_boot()
+    }
 }

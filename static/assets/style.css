@@ -462,6 +462,11 @@ a { color: var(--enlace); }
 .rot-stage { min-height: 48px; }
 .rot-slide { display: none; align-items: center; gap: 10px; }
 .rot-stage .rot-slide:first-child { display: flex; }
+/* Rotador controlado por veninfo.wasm: .rot-live apaga el fallback estático
+   de :first-child y manda la clase .on que Nyx va moviendo */
+.rot-stage.rot-live .rot-slide:first-child { display: none; }
+.rot-stage.rot-live .rot-slide.on { display: flex; }
+.rot-stage.rot-live .rot-slide.on:first-child { display: flex; }
 .rot-title { font-weight: 600; color: var(--tinta); }
 .mag-badge { background: var(--rojo) !important; }
 .rot-slide .news-date { color: var(--gris); font-size: .75rem; white-space: nowrap; margin-left: auto; }

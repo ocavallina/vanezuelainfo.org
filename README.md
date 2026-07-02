@@ -8,10 +8,14 @@ Escrito **enteramente en Nyx**, en ambos lados:
 
 - **Servidor**: binario nativo sobre la librería `nyx-serve` (HTTP, rutas,
   render HTML server-side, cliente HTTPS a APIs externas, WebSocket).
-- **Front**: el cómputo y el render dinámico corren en el navegador como
-  **Nyx compilado a WebAssembly** (`wasm/veninfo.nx` → `veninfo.wasm`, ~144 KB
-  gzip); el JavaScript restante es solo pegamento para lo que el target wasm
-  aún no cubre (fetch, timers, geolocalización, WebSocket, Leaflet).
+- **Front**: TODO el front dinámico (fetch a las APIs, parseo, cálculo y
+  render de finanzas, clima, sismos, rotador y noticias) corre en el navegador
+  como **Nyx compilado a WebAssembly** (`wasm/veninfo.nx` → `veninfo.wasm`,
+  ~150 KB gzip). El JavaScript restante es una **pasarela** genérica de ~90
+  líneas (`nyx-loader.js`: fetch/timers/geolocalización/eventos con callbacks
+  por nombre de export) más tres islas bloqueadas por el target: drag&drop de
+  la portada (necesita el objeto Event), mapas Leaflet y el chat (WebSocket;
+  migrará cuando el target tenga GC).
 
 Proyecto independiente: vive fuera de `NyxLang/` y usa `NYX_HOME` para encontrar
 el compilador, runtime y stdlib (mismo patrón que `nyx-kv-stack`).
@@ -39,9 +43,11 @@ venezuelainfo.org/
 ├── content/              # index.txt + articles/*.md (artículos en Markdown)
 ├── static/
 │   ├── assets/veninfo.wasm      # módulo wasm compilado (generado)
-│   ├── assets/nyx-loader.js     # loader ESM (window.nyxReady + marshalling)
+│   ├── assets/nyx-loader.js     # loader ESM + pasarela (fetch/timers/geo/eventos)
 │   ├── assets/nyx-wasi-shim.js  # shim WASI/DOM (copiado del monorepo NyxLang)
-│   ├── assets/*.js              # pegamento JS (fetch/geo/timers/WS/Leaflet)
+│   ├── assets/home.js           # drag&drop de tarjetas (espera Event en wasm)
+│   ├── assets/quake.js          # mapa Leaflet del detalle de sismo
+│   ├── assets/chat.js           # chat WebSocket (espera GC en wasm)
 │   ├── assets/style.css, sw.js  # estilos + service worker (PWA)
 │   └── manifest.webmanifest, icon.*
 ├── deploy/               # unit systemd + drop-in admin + build-wasm.sh
@@ -88,19 +94,26 @@ del service worker (`static/sw.js`).
 
 `wasm/veninfo.nx` es un módulo único que se compila con el target
 `wasm32-wasi` de NyxLang ("Escenario B": FFI `extern "js"`, `#[export_name]`
-y `std/dom`). En el navegador hace:
+y `std/dom`). Su `main()` es un router: lee `<input hidden id="pg">` y arranca
+los boots de la página. En el navegador hace:
 
-- **Helpers puros**: descripción del clima (códigos WMO), fechas relativas,
-  brújula, etiquetas AQI, distancia haversine, formateo de moneda es-VE/es-CO.
-- **Finanzas**: recibe los valores (que JS extrae de las APIs) como string
-  plano y arma e inyecta el HTML de la tarjeta y de `/finanzas`.
-- **Sismos**: filtros, orden, paginación, selección con detalle y tarjeta
-  "más fuerte 24 h" — regenera el `<tbody>` de la tabla en cada interacción.
+- **Finanzas**: pide DolarAPI/CriptoYa/er-api/CoinGecko él mismo (vía la
+  pasarela `js_fetch`), extrae los floats con scanners propios de JSON
+  (`std/json` aún trunca floats), calcula promedios/conversiones y arma el HTML.
+- **Clima**: tarjeta de portada y página completa (actual, horas, 7 días, AQI),
+  buscador de ciudades con geocoding y geolocalización.
+- **Sismos**: arranca de un `<textarea id="s-data">` que emite el servidor,
+  deriva epoch y hora local con aritmética de calendario propia, y hace
+  filtros, orden, paginación, detalle y la tarjeta "más fuerte 24 h".
+- **Noticias**: rotador de titulares (clases CSS + `js_interval`) y despliegue
+  de detalle. Las fechas "hace X" las pone el servidor en cada request
+  (marcador `@REL:` + `rel_fill`, exactas aunque la lista esté cacheada).
 
 Regla de la frontera JS↔wasm: solo cruzan `int` (BigInt) y `String`; los
-floats viajan como String. `static/assets/nyx-loader.js` resuelve todo el
-marshalling y expone la API como `window.nyxReady` (promesa). Si el wasm no
-carga, cada sección muestra un aviso (no hay lógica duplicada en JS).
+floats viajan como String. Lo asíncrono (fetch, timers, geolocalización)
+re-entra al módulo por **nombre de export** (mismo patrón que `dom_on`).
+`static/assets/nyx-loader.js` provee la pasarela y expone `window.nyxReady`.
+Si el wasm no carga, cada sección muestra un aviso (sin lógica duplicada en JS).
 
 ## Publicar un artículo
 

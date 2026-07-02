@@ -164,6 +164,44 @@ pub fn render_quakes(body: String) -> String {
     return sb.to_string()
 }
 
+// Bloque de datos crudos para el front Nyx→WASM: <textarea id="s-data" hidden>
+// con una línea TSV por sismo (id, iso, lat, lon, depth, type, mag, place).
+// veninfo.wasm (sismos_boot) lo lee con dom_get_value y deriva epoch/hora
+// local él mismo. Mismo filtrado (VENEZUELA) que render_quakes.
+pub fn sismos_data_block() -> String {
+    let body: String = emsc_body()
+    if body.length() == 0 {
+        return ""
+    }
+    let lines: Array = body.split("\n")
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<textarea id=\"s-data\" hidden>")
+    var i: int = 0
+    while i < lines.length() {
+        let line: String = lines[i]
+        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
+            let parts: Array = line.split("|")
+            if parts.length() >= 13 {
+                let place: String = md_trim(parts[12])
+                if place.indexOf("VENEZUELA") >= 0 {
+                    let eid: String = md_trim(parts[0])
+                    let t: String = md_trim(parts[1])
+                    let lat: String = md_trim(parts[2])
+                    let lon: String = md_trim(parts[3])
+                    let depth: String = md_trim(parts[4])
+                    let mtype: String = md_trim(parts[9])
+                    let mag: String = md_trim(parts[10])
+                    sb.append(html_escape(eid + "\t" + t + "\t" + lat + "\t" + lon + "\t" + depth + "\t" + mtype + "\t" + mag + "\t" + place))
+                    sb.append("\n")
+                }
+            }
+        }
+        i = i + 1
+    }
+    sb.append("</textarea>\n")
+    return sb.to_string()
+}
+
 // HTML de la lista (usa el cuerpo cacheado).
 pub fn sismos_section() -> String {
     let body: String = emsc_body()

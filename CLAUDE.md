@@ -43,27 +43,34 @@ node /home/admin/NyxLang/examples/browser/run-node.mjs static/assets/veninfo.was
 
 - **Todo el servidor es Nyx** (`src/*.nx`): HTTP, rutas, render de HTML
   server-side, lectura de Markdown, cliente HTTPS a APIs externas, parseo, caché.
-- **El front es HÍBRIDO Nyx→WASM + JS de pegamento** (desde 2026-07-02,
-  Escenario B del lenguaje): el CÓMPUTO y el render dinámico viven en
-  **`wasm/veninfo.nx`** → compilado a `static/assets/veninfo.wasm` (~144 KB gzip)
-  con `deploy/build-wasm.sh`, cargado por **`static/assets/nyx-loader.js`**
-  (ESM, expone `window.nyxReady` = promesa con la API ya marshalleada) sobre el
-  shim **`static/assets/nyx-wasi-shim.js`** (copiado del monorepo). El módulo
-  wasm exporta: `wdesc`, `rel_time`, `compass`, `aqi_label`, `hav_km`, `fmt_bs`,
-  `fmt_cop` (helpers puros), `fx_render`/`fx_render_cripto` (finanzas: arma el
-  HTML y lo inyecta con dom_set_html) y `sismos_load`/`sismos_set_loc`/
-  `s_refiltrar`/`s_prev`/`s_next`/`s_select`/`s_toggle_filtros` (sismos:
-  filtros/orden/paginación/selección/destacado, tbody `#qtbody` regenerado en
-  Nyx). Los `.js` quedan como PEGAMENTO de lo que wasm aún no tiene (fetch,
-  timers, geolocalización, WebSocket, Leaflet, drag&drop): todos hacen
-  `window.nyxReady.then(nyx=>…).catch(()=>aviso)` — sin respaldo JS duplicado.
-  `veninfo.js` (fechas relativas via wasm + rotador + expand), `fx.js` (solo
-  fetches → string `k=v|…` → `nyx.fxRender`), `home.js` (tarjeta clima +
-  orden de tarjetas), `clima.js`, `sismos.js` (serializa las filas server-side
-  UNA vez + geo + click-delegación), `quake.js` (Leaflet + `nyx.havKm`),
-  `chat.js` (NO migrado: WS/timers). Además: `static/sw.js` y `style.css`.
-- Librerías client-side por CDN: **Leaflet** (mapas). APIs client-side:
-  **Open-Meteo** (clima/geocoding/calidad del aire), **Geolocation**, **localStorage**.
+- **El front es Nyx→WASM con una PASARELA JS mínima** (fases A–E, 2026-07-02):
+  TODO el cómputo, los fetch a APIs, el parseo y el render dinámico viven en
+  **`wasm/veninfo.nx`** → `static/assets/veninfo.wasm` (~150 KB gzip,
+  `deploy/build-wasm.sh`), cargado por **`static/assets/nyx-loader.js`** (ESM,
+  `window.nyxReady`) sobre el shim `nyx-wasi-shim.js` (copia del monorepo).
+  `main()` del wasm es un ROUTER: lee `<input hidden id="pg">` que emite cada
+  handler y dispara los boots de esa página:
+  - `index` → `fx_boot(0)` + `wcard_boot()` (tarjeta clima) + `rot_boot()` (rotador)
+  - `finanzas` → `fx_boot(1)` (con cripto) + `news_boot()` (expand lista BVC)
+  - `clima` → `clima_boot()` (página completa + buscador de ciudades + geo)
+  - `sismos` → `sismos_boot()` (lee `<textarea id="s-data">` del server, deriva
+    epoch/hora local, filtros/orden/paginación/selección/destacado, geo cada 2 min)
+  - `noticias` → `news_boot()` (expand con `js_delegate` + `data-idx` + `#n-sel`)
+  La **pasarela** (imports del loader, patrón callback-por-NOMBRE-de-export como
+  `dom_on`): `js_fetch(url,method,body,handler)` (handler recibe status+body),
+  `js_interval/js_timeout`, `js_geo(ok,err)`, `js_delegate` (delegación de click
+  → hidden + handler; ignora clicks en `<a>`), `js_on_enter`, `js_media`,
+  `js_count`, `js_tz_offset_min`, `js_ls_get/set`, `js_set_attr/js_remove_attr/
+  js_toggle_class/js_set_value`. Formalizarla como `std/browser` es la tarea 6
+  de `NyxLang/HANDOFF-veninfo-front.md`.
+- **JS restante (solo lo bloqueado por el target)**: `nyx-loader.js` (pasarela),
+  `home.js` (SOLO drag&drop/orden de tarjetas — necesita objeto Event/closures),
+  `quake.js` (Leaflet), `chat.js` (WebSocket/timers; migrar cuando haya GC en
+  wasm — fase F planificada), `sw.js`. Sin respaldo JS duplicado: si el wasm no
+  carga, las secciones muestran aviso.
+- Librerías client-side por CDN: **Leaflet** (mapas). APIs consumidas por el
+  wasm vía pasarela: **Open-Meteo** (clima/geocoding/AQI), DolarAPI, CriptoYa,
+  er-api, CoinGecko, bigdatacloud (reverse geocode), **Geolocation**, **localStorage**.
 
 ### Mapa de archivos
 ```
@@ -87,15 +94,16 @@ src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenid
 src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
                  baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
 wasm/veninfo.nx  Módulo Nyx→WASM del front (UN solo archivo: make wasm no resuelve imports
-                 locales). Secciones: helpers puros / finanzas / sismos. Declara los extern
-                 "js" propios (js_ls_get/set, js_set_attr, js_remove_attr, js_toggle_class,
-                 js_set_value) que provee nyx-loader.js.
-wasm/tests/imports.mjs  Test headless (mocks DOM/localStorage + asserts):
+                 locales). Secciones: pasarela (externs) / helpers puros / fechas (iso_to_epoch,
+                 civil_parts) / scanners JSON (jnum/jstr/jseg/jarr — std/json trunca floats) /
+                 finanzas / clima / sismos / rotador+expand / main() router por #pg.
+wasm/tests/imports.mjs  Test headless (mocks DOM/localStorage/pasarela + fixtures reales):
                  node NyxLang/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).
 static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png,
-                 assets/nyx-loader.js (loader ESM), assets/nyx-wasi-shim.js (COPIA del
-                 monorepo; la refresca build-wasm.sh), assets/veninfo.wasm (generado).
+                 assets/nyx-loader.js (loader ESM + pasarela), assets/nyx-wasi-shim.js (COPIA
+                 del monorepo; la refresca build-wasm.sh), assets/veninfo.wasm (generado),
+                 assets/home.js (drag&drop), assets/quake.js (Leaflet), assets/chat.js (WS).
 deploy/          nyx-venezuelainfo.service + admin.conf.example (drop-in del secreto admin)
                  + build-wasm.sh (compila wasm/veninfo.nx y copia artefactos).
 packages/        nyx-serve vendoreado.
@@ -152,9 +160,22 @@ packages/        nyx-serve vendoreado.
 - **El markup de fila de sismos está DUPLICADO adrede**: `render_quakes`
   (src/sismos.nx, server) y `s_row_html` (wasm/veninfo.nx, navegador) — el wasm
   regenera `#qtbody`. Cambiarlos JUNTOS (hay comentario cruzado).
-- **`deploy/build-wasm.sh` clobbera `script.nx`/`script.ll` del monorepo**
-  (scratch de `make wasm`) — no correrlo en paralelo con otro build de NyxLang.
-  El shim `nyx-wasi-shim.js` se re-copia del monorepo en cada build del wasm.
+- **CARRERA del scratch `script.nx` del monorepo**: tanto `deploy/build-wasm.sh`
+  (make wasm) como **`nyx build` del proyecto** usan `$NYX_HOME/script.nx` como
+  scratch. Si OTRA sesión está compilando/testeando en NyxLang a la vez, el
+  binario puede salir con el programa EQUIVOCADO (pasó 2026-07-02: el server
+  quedó compilado con un test de docstrings y el servicio entró en bucle).
+  Tras CADA `nyx build`: verificar con `strings venezuelainfo-org | grep -q
+  sismos` antes de reiniciar. El shim `nyx-wasi-shim.js` se re-copia del
+  monorepo en cada build del wasm.
+- **Fechas "hace X" server-side con marcador**: el HTML de noticias/BVC se
+  cachea ~30 min, así que `render_list/render_slides` (src/news.nx) emiten
+  `@REL:<epoch>@` dentro del `<time>` y `rel_fill()` lo sustituye EN CADA
+  request (news_full_html/news_rotator_html/bvc_list_html ya lo aplican). Si se
+  añade otra lista cacheada con fechas: emitir el marcador y envolver el getter.
+- **El rotador es CSS + clases**: sin wasm, `:first-child` muestra el primer
+  slide (fallback estático); `rot_boot` añade `.rot-live` al stage y va moviendo
+  `.on` vía `:nth-child` con `js_interval`. No volver a manipular `style.display`.
 - **`dom_on` registra por NOMBRE de export y los handlers reciben CERO args**:
   el contexto va por estado del módulo o inputs hidden (`#s-selected` +
   `dom_get_value`). El loader debe setear `dom.ref.exports` tras instanciar
@@ -162,8 +183,10 @@ packages/        nyx-serve vendoreado.
 - **Dark mode**: automático con `prefers-color-scheme` redefiniendo variables.
   Para TEXTO azul usar `var(--enlace)` (claro en oscuro); `var(--azul)` queda
   SOLO para fondos (botones, thead). Texto sobre amarillo: color fijo `#14213d`.
-- **Tiempos en hora LOCAL**: el servidor manda ISO UTC en `data-iso`; el navegador
-  formatea a local (helpers `locPair`/`locStr` en el JS de sismos). No mostrar UTC.
+- **Tiempos en hora LOCAL**: el servidor manda ISO UTC (`data-iso`/`#s-data`) y
+  el wasm los convierte con `iso_to_epoch` + `civil_parts` + `js_tz_offset_min()`
+  (wasm/veninfo.nx). Las fechas relativas de noticias van server-side (`rel_fill`).
+  No mostrar UTC al usuario.
 - **Zoom bloqueado**: todas las páginas usan `page_fixed` (`user-scalable=no`).
 
 ## Portada / tarjetas (src/main.nx: handle_index + static/assets/home.js)
@@ -186,18 +209,25 @@ packages/        nyx-serve vendoreado.
   parser de `std/json` trunca floats). Bounding box Venezuela, `limit=200`.
 - Columnas FDSN: 0 EventID, 1 Time, 2 Lat, 3 Lon, 4 Depth, 9 MagType, 10 Mag, 12 Lugar.
 - Caché del cuerpo crudo en memoria (TTL 5 min, `sismos_ts()`).
-- Lista: paginación (perPage=12), filtros (magnitud/distancia/lugar) tras icono,
-  **selector de orden** (fecha/distancia/magnitud), geolocalización automática
-  persistente, detalle desplegable inline, tarjeta "más fuerte 24 h".
-- `/sismos/{id}` = página de detalle con mapa grande (Leaflet + gesture-handling).
+- El servidor emite la tabla completa (SEO/no-JS) + `<textarea id="s-data" hidden>`
+  (TSV de 8 campos, `sismos_data_block()`); la interactividad (paginación 12/pág,
+  filtros mag/dist/lugar, orden fecha/distancia/magnitud, detalle inline, destacado
+  24 h, geolocalización persistente cada 2 min) corre en **wasm/veninfo.nx**
+  (`sismos_boot`), que regenera `#qtbody`. El markup de fila está duplicado adrede
+  (`render_quakes` server ↔ `s_row_html` wasm) — cambiarlos JUNTOS.
+- `/sismos/{id}` = página de detalle con mapa grande (Leaflet + gesture-handling,
+  `quake.js`; la distancia usa `nyx.havKm` del wasm).
 
 ## Clima (src/main.nx)
 
 - `weather_card()` = resumen (enlaza a `/clima`). `handle_clima()` = landing
   completa: buscador de cualquier ciudad (geocoding), "Mi ubicación", actual
   completo, próximas horas, 7 días, UV, amanecer/atardecer, calidad del aire.
-- Todo client-side con **Open-Meteo** (sin API key, CORS). Ciudad elegida en
-  localStorage (`w_lat`/`w_lon`/`w_name`), compartida con la tarjeta.
+- Todo corre en **wasm/veninfo.nx** (`wcard_boot`/`clima_boot`): fetch a
+  **Open-Meteo** (sin API key, CORS) vía `js_fetch`, parseo con los scanners
+  (jarr para los arrays hourly/daily — los ISO de timezone=auto son LOCALES),
+  render con dom_set_html. Ciudad elegida en localStorage (`w_lat`/`w_lon`/
+  `w_name`), compartida entre tarjeta y página.
 
 ## Chat colectivo (src/chat.nx + src/kv.nx)
 
@@ -288,12 +318,16 @@ Sin prioridad estricta; tomar lo que aporte.
       (`SETEX sismos:emsc:body 300 …`) y/o contadores de vistas (`INCR`). Patrón de
       cliente en `nyx-kv-stack/dashboard/src/kv_client.nx`. Decisión actual: NO
       (las prefs de UI van en localStorage; nyxkv solo para estado de servidor).
-- [ ] **Front Nyx→WASM, siguientes módulos** (fases 1–3 HECHAS 2026-07-02:
-      helpers + finanzas + sismos, ver Arquitectura). Migrar el render de
-      /clima y la tarjeta del clima (armar el HTML en Nyx con los datos que
-      fetchea JS, patrón fx_render) cuando valga la pena; chat/home (drag&drop)
-      y sw.js quedan en JS hasta que el target tenga WebSocket/timers/DOM rico
-      (backlog del ROADMAP: closures como handlers, fetch, más DOM).
+- [ ] **Fase F: chat en Nyx** — BLOQUEADA hasta que el monorepo entregue GC/arenas
+      en el target wasm (tarea 2 de `NyxLang/HANDOFF-veninfo-front.md`; sin GC una
+      pestaña de chat de horas filtra memoria sin tope). Diseño listo: externs
+      `js_ws(url,on_msg,on_close)` + `js_ws_send` + `js_on_submit` (preventDefault)
+      + `js_on_visibility`/`js_hidden` + `js_scroll_bottom` en la pasarela; POST por
+      `js_fetch`; render incremental en Nyx.
+- [ ] **Adoptar lo que entregue el monorepo** (HANDOFF-veninfo-front.md): al llegar
+      std/json con floats → borrar los scanners jnum/jstr/jseg/jarr; closures+Event
+      → migrar drag&drop de home.js y borrar js_delegate/js_on_enter; std/browser →
+      borrar la pasarela del loader; make wasm multi-archivo → partir veninfo.nx.
 - [ ] **Leaflet con SRI o autoalojado** (hoy unpkg sin integrity ni fallback).
 - [ ] **Robustez WS del gateway** (en el monorepo): locking del SSL del túnel,
       timeout de idle, propagación simétrica del cierre (limitaciones "de piloto").
@@ -316,13 +350,19 @@ chat.js con respaldo de polling; pendiente solo reiniciar nyx-gateway). **Front
 extraído a static/assets/*.js** (main.nx bajó de ~770 a ~470 líneas), **dark mode**,
 focus visible, reduced-motion, badge de filtros activos, `ws` en /api/health, y fix
 del SW que cacheaba `/api/*` (congelaba el chat en la PWA).
-**Front Nyx→WASM (2026-07-02, Escenario B fases 0–2 del lenguaje)**: módulo
-`wasm/veninfo.nx` → `veninfo.wasm` (~144 KB gzip) con helpers puros (wdesc,
-haversine, brújula, AQI, formateo es-VE/es-CO), render completo de finanzas
-(fx_render) y filtros/orden/paginación/selección/destacado de sismos corriendo
-EN NYX en el navegador; JS reducido a pegamento (fetch/geo/timers/WS/Leaflet);
-suite headless en wasm/tests/imports.mjs (helpers + finanzas + sismos con
-fixture); sin respaldo JS duplicado (aviso si el wasm no carga).
+**Front Nyx→WASM completo (2026-07-02, fases A–E el mismo día del release del
+Escenario B)**: `wasm/veninfo.nx` → `veninfo.wasm` (~150 KB gzip) hace TODO el
+front dinámico en Nyx — finanzas (fetch+parseo+render), clima (tarjeta + página
+completa + buscador de ciudades + geolocalización), sismos (self-boot desde
+`#s-data`, filtros/orden/paginación/detalle/destacado, hora local derivada en
+Nyx), rotador de titulares y expand de noticias/BVC — sobre una pasarela de
+capacidades en nyx-loader.js (js_fetch/js_interval/js_geo/js_delegate/…,
+callback-por-nombre-de-export). Fechas "hace X" movidas al SERVIDOR
+(marcador @REL: + rel_fill por request). Se BORRARON veninfo.js, fx.js,
+clima.js y sismos.js; quedan solo loader, home.js (drag&drop), quake.js
+(Leaflet), chat.js y sw.js. Suite headless de ~60 asserts con fixtures reales
+(wasm/tests/imports.mjs). Handoff de 7 tareas del lenguaje al monorepo
+(`NyxLang/HANDOFF-veninfo-front.md` + puntero en TASKS.md).
 Bugs del lenguaje hallados → anotados en `NyxLang/TASKS.md`.
 
 ## Verificación rápida

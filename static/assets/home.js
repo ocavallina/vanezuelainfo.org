@@ -1,28 +1,8 @@
-// home.js — portada: tarjeta del clima + orden/reorden de tarjetas.
-// wdesc vive en veninfo.wasm (Nyx, via nyx-loader.js). La tarjeta de finanzas
-// la pinta fx.js.
-
-// Tarjeta del clima (#w-body): actual de Open-Meteo con la ciudad guardada
-(function(){
-var body=document.getElementById('w-body'),nameEl=document.getElementById('w-city-name');
-if(!body){return;}
-window.nyxReady.then(function(nyx){
-var la='10.4806',lo='-66.9036',nm='Caracas';
-try{var sla=localStorage.getItem('w_lat'),slo=localStorage.getItem('w_lon'),snm=localStorage.getItem('w_name');if(sla&&slo){la=sla;lo=slo;if(snm)nm=snm;}else{var ula=localStorage.getItem('ulat'),ulo=localStorage.getItem('ulon');if(ula&&ulo){la=ula;lo=ulo;nm='Tu ubicacion';}}}catch(e){}
-function setName(n){nm=n;if(nameEl)nameEl.textContent=n;}
-setName(nm);
-function loadW(){fetch('https://api.open-meteo.com/v1/forecast?latitude='+la+'&longitude='+lo+'&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto')
-.then(function(r){return r.json();}).then(function(d){var c=d.current;if(!c){body.textContent='Sin datos de clima.';return;}var w=nyx.wdesc(c.weather_code);
-body.innerHTML='<div class="w-main"><span class="w-emoji">'+w[1]+'</span><span class="w-temp">'+Math.round(c.temperature_2m)+'°C</span></div>'
-+'<div class="w-desc">'+w[0]+'</div>'
-+'<div class="w-meta">Sensacion '+Math.round(c.apparent_temperature)+'°C · Humedad '+c.relative_humidity_2m+'% · Viento '+Math.round(c.wind_speed_10m)+' km/h</div>';
-}).catch(function(){body.textContent='No se pudo cargar el clima.';});}
-function revGeo(a,o){fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+a+'&longitude='+o+'&localityLanguage=es').then(function(r){return r.json();}).then(function(g){var cc=g.city||g.locality||g.principalSubdivision;if(cc){setName(cc);try{localStorage.setItem('w_name',cc);}catch(e){}}}).catch(function(){});}
-loadW();
-if(nm==='Tu ubicacion'||nm==='Mi ubicacion'||!nm){revGeo(la,lo);}
-if(navigator.geolocation){navigator.geolocation.getCurrentPosition(function(p){la=''+p.coords.latitude;lo=''+p.coords.longitude;try{localStorage.setItem('w_lat',la);localStorage.setItem('w_lon',lo);}catch(e){}loadW();revGeo(la,lo);},function(){});}
-}).catch(function(){body.textContent='No se pudo cargar el modulo de la pagina.';});
-})();
+// home.js — portada: SOLO orden/reorden de tarjetas (drag&drop + flechas).
+// La tarjeta del clima la pinta veninfo.wasm (wcard_boot, via nyx-loader.js).
+// El drag&drop sigue en JS porque el target wasm aun no expone el objeto
+// Event (coordenadas/target) ni closures como handlers — ver
+// NyxLang/HANDOFF-veninfo-front.md (tarea 3).
 
 // Orden de tarjetas (#home-cards): aplica card_order guardado y modo edicion
 // (drag&drop en escritorio + flechas inyectadas, imprescindibles en movil/PWA)

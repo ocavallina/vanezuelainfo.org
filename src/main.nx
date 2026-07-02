@@ -34,7 +34,7 @@ fn json_nocache(status: int, json: String) -> Response {
     return Response { status: status, headers_flat: h, body: json }
 }
 
-// Tarjeta del clima (resumen) — enlaza a /clima. Datos de Open-Meteo, client-side.
+// Tarjeta del clima (resumen) — enlaza a /clima. La pinta veninfo.wasm (wcard_boot).
 fn weather_card() -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<a href=\"/clima\" class=\"weather weather-card\">\n")
@@ -45,8 +45,8 @@ fn weather_card() -> String {
     return sb.to_string()
 }
 
-// Tarjeta de finanzas (resumen) — BCV/paralelo/euro (DolarAPI) + BTC (CoinGecko),
-// client-side. Enlaza a /finanzas. JS parsea floats (std/json no soporta floats).
+// Tarjeta de finanzas (resumen) — enlaza a /finanzas. La pinta veninfo.wasm
+// (fx_boot: fetch + parseo + render, todo en Nyx en el navegador).
 fn finanzas_card() -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<a href=\"/finanzas\" class=\"finanzas finanzas-card\">\n")
@@ -81,9 +81,9 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<p class=\"news-fuentes\">Divisas: DolarAPI &middot; USDT P2P: CriptoYa (Binance) &middot; USD/COP: open.er-api.com &middot; Cripto: CoinGecko &middot; Bolsa: bolsadecaracas.com</p>\n")
     sb.append("</section>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
-    sb.append("<script src=\"/assets/veninfo.js?v=2\" defer></script>\n")
-    sb.append("<script src=\"/assets/fx.js?v=2\" defer></script>\n")
+    sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -132,10 +132,9 @@ fn handle_index(req: Request) -> Response {
     sb.append(chat_card())
     sb.append("</div>\n")
     sb.append("</div>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
-    sb.append("<script src=\"/assets/veninfo.js?v=2\" defer></script>\n")
-    sb.append("<script src=\"/assets/fx.js?v=2\" defer></script>\n")
-    sb.append("<script src=\"/assets/home.js?v=2\" defer></script>\n")
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
+    sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
 
@@ -150,8 +149,9 @@ fn handle_noticias(req: Request) -> Response {
     sb.append(news_full_html())
     sb.append("</div>\n")
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
-    sb.append("<script src=\"/assets/veninfo.js?v=2\" defer></script>\n")
+    sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -257,9 +257,8 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<h3 class=\"clima-h3\">Calidad del aire</h3>\n")
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
-    sb.append("<script src=\"/assets/veninfo.js?v=2\" defer></script>\n")
-    sb.append("<script src=\"/assets/clima.js?v=2\" defer></script>\n")
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -309,8 +308,12 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("  <span id=\"geo-status\" class=\"geo-status\"></span>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"s-selected\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
-    sb.append("<script src=\"/assets/sismos.js?v=2\" defer></script>\n")
+    sb.append("<input type=\"hidden\" id=\"s-upd-epoch\" value=\"")
+    sb.append(ts_str)
+    sb.append("\">\n")
+    sb.append(sismos_data_block())
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -379,7 +382,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=4\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=6\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))

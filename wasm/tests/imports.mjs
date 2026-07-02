@@ -7,6 +7,10 @@
 export const texts = {};   // selector -> innerHTML/textContent capturado
 export const store = {};   // localStorage mock
 export const values = {};  // selector -> value de inputs mock
+export const fetches = []; // llamadas a js_fetch registradas: {url, method, handler}
+export const toggles = []; // llamadas a js_toggle_class: {sel, cls, on}
+export const timers = [];  // llamadas a js_interval/js_timeout: {ms, handler}
+export const TZ_MIN = -240; // zona fija del test: UTC-4 (Venezuela)
 
 export default (nyx) => ({
   js_console_log: (p) => console.log("[log]", nyx.readString(p)),
@@ -18,9 +22,47 @@ export default (nyx) => ({
   js_ls_set: (k, v) => { store[nyx.readString(k)] = nyx.readString(v); },
   js_set_attr: (sel, name, val) => { console.log("[set_attr]", nyx.readString(sel), nyx.readString(name), nyx.readString(val)); },
   js_remove_attr: (sel, name) => { console.log("[remove_attr]", nyx.readString(sel), nyx.readString(name)); },
-  js_toggle_class: (sel, cls, on) => { console.log("[toggle_class]", nyx.readString(sel), nyx.readString(cls), on); },
+  js_toggle_class: (sel, cls, on) => { const rec = { sel: nyx.readString(sel), cls: nyx.readString(cls), on: Number(on) }; toggles.push(rec); console.log("[toggle_class]", rec.sel, rec.cls, rec.on); },
   js_set_value: (sel, v) => { values[nyx.readString(sel)] = nyx.readString(v); },
+  // Pasarela (fase A): en el test no hay red ni timers reales — se registran
+  // las llamadas y el test dispara los handlers a mano con fixtures.
+  js_fetch: (url, method, body, handler) => { fetches.push({ url: nyx.readString(url), method: nyx.readString(method), handler: nyx.readString(handler) }); },
+  js_interval: (ms, handler) => { timers.push({ kind: "interval", ms: Number(ms), handler: nyx.readString(handler) }); },
+  js_timeout: (ms, handler) => { timers.push({ kind: "timeout", ms: Number(ms), handler: nyx.readString(handler) }); },
+  js_geo: (handler) => { console.log("[geo]", nyx.readString(handler)); },
+  js_delegate: (c, i, a, h, f) => { console.log("[delegate]", nyx.readString(c), nyx.readString(i), "->", nyx.readString(f)); },
+  js_on_enter: (sel, handler) => { console.log("[on_enter]", nyx.readString(sel), "->", nyx.readString(handler)); },
+  js_media: (q) => 0n,
+  js_count: (sel) => 0n,
+  js_tz_offset_min: () => BigInt(TZ_MIN),
 });
+
+// main() corre en _start y lee #pg — se pre-siembra ANTES de instanciar
+values["#pg"] = "finanzas";
+
+// Fixtures con la forma REAL de cada API (capturadas 2026-07-02; dolarapi
+// viene pretty-printed — el scanner debe tolerar espacios tras los ":")
+const FIX_DOLARES = `[
+  {
+    "moneda": "USD",
+    "fuente": "oficial",
+    "nombre": "Dólar",
+    "compra": null,
+    "venta": null,
+    "promedio": 639.7029,
+    "fechaActualizacion": "2026-07-02T00:00:00-04:00"
+  },
+  {
+    "moneda": "USD",
+    "fuente": "paralelo",
+    "promedio": 733.39,
+    "fechaActualizacion": "2026-07-02T13:01:09.862Z"
+  }
+]`;
+const FIX_EUROS = `[ { "moneda": "EUR", "fuente": "oficial", "promedio": 728.48086846, "fechaActualizacion": "2026-07-02T00:00:00-04:00" } ]`;
+const FIX_CRIPTOYA = `{"binancep2p":{"ask":734.588,"totalAsk":734.588,"bid":733.5,"totalBid":733.5,"time":1782999810},"okexp2p":{"ask":742}}`;
+const FIX_COP = `{"result":"success","rates":{"CNY":7.16,"COP":3401.617171,"CRC":515.4}}`;
+const FIX_CRIPTO = `{"bitcoin":{"usd":61835},"ethereum":{"usd":1705.37},"tether":{"usd":0.998706}}`;
 
 function eq(got, want, label) {
   if (got !== want) throw new Error(`FALLO ${label}: esperado ${JSON.stringify(want)}, obtenido ${JSON.stringify(got)}`);
@@ -58,28 +100,86 @@ export async function afterStart({ exports, nyx }) {
   eq(S(exports.fmt_cop(M("4123.55"))), "4.124", "fmt_cop(4123.55)");
   eq(S(exports.fmt_cop(M("999.2"))), "999", "fmt_cop(999.2)");
 
-  // Fase 2: finanzas (captura el HTML que fx_render inyecta en el DOM mock)
-  eq(S(exports.fmt_bs(M("44.65"))), "44,65", "fmt_bs(44.65)");
-  exports.fx_render(M("bcv=36.42|eur=39.91|uc=44.10|uv=45.20|cop=4123.55|fch=02/07/2026 10:15"));
+  // Fase A: main() leyó #pg="finanzas" y fx_boot(1) registró los 5 fetch
+  eq(fetches.length, 5, "fx_boot: 5 fetches");
+  eq(fetches[0].handler, "fx_on_dolares", "handler dolares");
+  eq(fetches[4].handler, "fx_on_cripto", "handler cripto");
+
+  // Fechas: ISO con offset -04:00 → epoch UTC → local (TZ_MIN=-240) ida y vuelta
+  // 2026-07-02T00:00:00-04:00 == 2026-07-02T04:00:00Z; local UTC-4 → 2/7/2026 00:00
+
+  // Fase B: disparar los handlers con los fixtures (como haría js_fetch)
+  exports.fx_on_dolares(200n, M(FIX_DOLARES));
+  exports.fx_on_criptoya(200n, M(FIX_CRIPTOYA));
+  exports.fx_on_euros(200n, M(FIX_EUROS));
+  exports.fx_on_cop(200n, M(FIX_COP));
   const card = texts["#fin-body"], page = texts["#fz-div"];
-  if (!card.includes("BCV") || !card.includes(" Bs 36,42")) throw new Error("FALLO fx_render BCV: " + card);
-  // 1.000 COP = (44.10+45.20)/2 / 4123.55 * 1000 = 10.8281... -> "10,83"
-  if (!card.includes("1.000 COP") || !card.includes("Bs 10,83")) throw new Error("FALLO fx_render 1.000 COP: " + card);
-  if (!card.includes("Actualizado 02/07/2026 10:15")) throw new Error("FALLO fx_render fch: " + card);
-  if (!page.includes("USD en Colombia") || !page.includes("COP 4.124")) throw new Error("FALLO fz-div COP: " + page);
-  // Bs 100 = 100/0.0108281 = 9.235,2... -> "9.235" COP
-  if (!page.includes("Bs 100 = 9.235 COP")) throw new Error("FALLO fz-div peso<->bolivar: " + page);
-  console.log("ok fx_render (tarjeta + /finanzas)");
+  if (!card.includes("BCV") || !card.includes(" Bs 639,70")) throw new Error("FALLO BCV (scanner con espacios): " + card);
+  if (!card.includes("USDT compra") || !card.includes("Bs 734,59")) throw new Error("FALLO USDT ask: " + card);
+  if (!card.includes("Euro BCV") || !card.includes("Bs 728,48")) throw new Error("FALLO EUR: " + card);
+  if (!card.includes("USD en COP") || !card.includes("COP 3.402")) throw new Error("FALLO COP: " + card);
+  // base=(734.588+733.5)/2=734.044; 1.000 COP = 734.044/3401.617171*1000 = 215,79
+  if (!card.includes("1.000 COP") || !card.includes("Bs 215,79")) throw new Error("FALLO 1.000 COP: " + card);
+  if (!card.includes("Actualizado 2/7/2026 00:00")) throw new Error("FALLO fch local: " + card);
+  if (!page.includes("USD en Colombia") || !page.includes("COP 3.402")) throw new Error("FALLO fz-div COP: " + page);
+  if (!page.includes("Bs 100 = 463 COP")) throw new Error("FALLO peso<->bolivar: " + page);
+  console.log("ok finanzas 100% Nyx (fetch propio + scanners JSON + fecha local)");
 
-  exports.fx_render(M(""));
-  eq(texts["#fin-body"], "Cargando…", "fx_render sin datos");
-
-  exports.fx_render_cripto(M("btc=108950.31|eth=3901.2|usdt=1.0"));
+  exports.fx_on_cripto(200n, M(FIX_CRIPTO));
   const cr = texts["#fz-cripto"];
-  if (!cr.includes("$ 108.950,31")) throw new Error("FALLO cripto btc: " + cr);
-  if (!cr.includes("$ 3.901,2")) throw new Error("FALLO cripto eth: " + cr);
-  if (!cr.includes("$ 1,00")) throw new Error("FALLO cripto usdt: " + cr);
-  console.log("ok fx_render_cripto");
+  if (!cr.includes("$ 61.835")) throw new Error("FALLO cripto btc: " + cr);
+  if (!cr.includes("$ 1.705,37")) throw new Error("FALLO cripto eth: " + cr);
+  if (!cr.includes("$ 0,999")) throw new Error("FALLO cripto usdt: " + cr);
+  console.log("ok cripto");
+
+  // Respuesta con error de red → status 0 → no rompe ni pisa el estado
+  exports.fx_on_dolares(0n, M(""));
+  if (!texts["#fin-body"].includes("Bs 639,70")) throw new Error("FALLO: error de red piso el estado");
+  console.log("ok manejo de status!=200");
+
+  // Fase C: clima — fixtures con decoys current_units/hourly_units (el marcador
+  // "key":{ debe saltarlos). Horas generadas relativas a ahora (TZ -240).
+  const nowLoc = new Date(Date.now() + TZ_MIN * 60000);
+  const p2 = (n) => ("0" + n).slice(-2);
+  const isoH = (d) => d.getUTCFullYear() + "-" + p2(d.getUTCMonth() + 1) + "-" + p2(d.getUTCDate()) + "T" + p2(d.getUTCHours()) + ":00";
+  const hTimes = [], hTemps = [], hProbs = [], hCodes = [];
+  for (let i = -2; i < 16; i++) {
+    hTimes.push('"' + isoH(new Date(nowLoc.getTime() + i * 3600000)) + '"');
+    hTemps.push("25.4"); hProbs.push("10"); hCodes.push("2");
+  }
+  const FIX_FORECAST = `{"latitude":10.5,"utc_offset_seconds":-14400,"current_units":{"time":"iso8601","temperature_2m":"°C"},"current":{"time":"2026-07-02T09:45","interval":900,"temperature_2m":26.1,"relative_humidity_2m":62,"apparent_temperature":28.3,"is_day":1,"weather_code":3,"cloud_cover":75,"surface_pressure":1013.4,"wind_speed_10m":7.6,"wind_direction_10m":92,"wind_gusts_10m":14.8,"precipitation":0.00},"hourly_units":{"time":"iso8601"},"hourly":{"time":[${hTimes.join(",")}],"temperature_2m":[${hTemps.join(",")}],"precipitation_probability":[${hProbs.join(",")}],"weather_code":[${hCodes.join(",")}]},"daily_units":{"time":"iso8601"},"daily":{"time":["2026-07-02","2026-07-03"],"weather_code":[80,3],"temperature_2m_max":[27.6,28.1],"temperature_2m_min":[18.9,19.2],"precipitation_probability_max":[65,30],"uv_index_max":[7.55,8.0],"sunrise":["2026-07-02T06:15","2026-07-03T06:15"],"sunset":["2026-07-02T18:59","2026-07-03T18:59"]}}`;
+  const FIX_AIRE = `{"current_units":{"pm2_5":"μg/m³"},"current":{"time":"2026-07-02T09:00","interval":3600,"pm2_5":13.2,"pm10":22.9,"us_aqi":51}}`;
+  const FIX_GEO = `{"results":[{"id":1,"name":"Valencia","latitude":39.47391,"longitude":-0.37966,"country_code":"ES","admin1":"Comunidad Valenciana"},{"id":2,"name":"Valencia","latitude":10.18,"longitude":-68.0,"country_code":"VE","admin1":"Carabobo"}]}`;
+
+  // Tarjeta de la portada
+  exports.wcard_on_meteo(200n, M(FIX_FORECAST));
+  const wb = texts["#w-body"];
+  if (!wb.includes("26°C") || !wb.includes("Nublado") || !wb.includes("Sensacion 28°C") || !wb.includes("Humedad 62%") || !wb.includes("Viento 8 km/h")) throw new Error("FALLO tarjeta clima: " + wb);
+  console.log("ok wcard_on_meteo");
+
+  // Página /clima: actual + horas + días
+  exports.clima_on_forecast(200n, M(FIX_FORECAST));
+  const ca = texts["#c-actual"];
+  if (!ca.includes("26°C") || !ca.includes("km/h E") || !ca.includes("1013 hPa") || !ca.includes("Amanece 06:15") || !ca.includes("UV max 7.55")) throw new Error("FALLO c-actual: " + ca);
+  const nHoras = (texts["#c-horas"].match(/ch-item/g) || []).length;
+  if (nHoras !== 12) throw new Error("FALLO c-horas: " + nHoras + " items (esperado 12)");
+  const cd = texts["#c-dias"];
+  if (!cd.includes(">Jue<") || !cd.includes(">Vie<") || !cd.includes(">28°<") || !cd.includes(">19°<") || !cd.includes(">65%<")) throw new Error("FALLO c-dias: " + cd);
+  exports.clima_on_aire(200n, M(FIX_AIRE));
+  if (!texts["#c-aire"].includes("51") || !texts["#c-aire"].includes("Moderada") || !texts["#c-aire"].includes("PM2.5 13.2")) throw new Error("FALLO c-aire: " + texts["#c-aire"]);
+  console.log("ok clima_on_forecast + horas + dias + aire");
+
+  // Buscador: resultados + selección
+  const fBefore = fetches.length;
+  exports.clima_on_geo(200n, M(FIX_GEO));
+  const res = texts["#c-results"];
+  if (!res.includes('id="c-sel"') || !res.includes("Carabobo") || !res.includes('data-i="1"')) throw new Error("FALLO c-results: " + res);
+  values["#c-sel"] = "1";
+  exports.clima_pick();
+  eq(store["w_name"], "Valencia, Carabobo", "clima_pick guarda ciudad");
+  eq(store["w_lat"], "10.18", "clima_pick guarda lat");
+  if (fetches.length !== fBefore + 2) throw new Error("FALLO clima_pick: no re-fetcheo (fetches=" + fetches.length + ")");
+  console.log("ok buscador de ciudades + pick");
 
   // Fase 3: sismos — fixture de 15 filas (paginación a 2 páginas)
   // id, epoch, iso, lat, lon, depth, magtype, mag, place, dia, hora
@@ -144,6 +244,38 @@ export async function afterStart({ exports, nyx }) {
   exports.s_select(); // segundo click colapsa
   if (texts["#qtbody"].includes("detalle-band")) throw new Error("FALLO colapso del detalle");
   console.log("ok sismos: filtros, orden, paginacion, distancia, seleccion");
+
+  // Fase D: self-boot desde el <textarea id="s-data"> del servidor (8 campos,
+  // ISO UTC del EMSC) — el wasm deriva epoch y fecha/hora local (TZ -240).
+  values["#s-data"] = [
+    ["evA", "2026-07-02T10:20:00.0Z", "10.48", "-66.90", "12", "ML", "4.2", "CARABOBO, VENEZUELA"].join("\t"),
+    ["evB", "2026-07-01T02:00:00.0Z", "10.65", "-71.61", "8", "ML", "3.1", "ZULIA, VENEZUELA"].join("\t"),
+  ].join("\n");
+  values["#s-upd-epoch"] = "1783082100"; // 2026-07-03T12:35:00Z -> local 08:35 (TZ-240)
+  values["#f-mag"] = ""; values["#f-text"] = ""; values["#f-orden"] = "fecha"; values["#f-dist"] = "";
+  exports.sismos_boot();
+  eq(texts["#s-count"], "2 sismos", "sismos_boot count");
+  // 10:20 UTC en TZ-240 = 06:20 local del 2026-07-02
+  const tb2 = texts["#qtbody"];
+  if (!tb2.includes(">2026-07-02<") || !tb2.includes(">06:20<")) throw new Error("FALLO hora local en boot: " + tb2.slice(0, 300));
+  // 2026-07-01T02:00Z en TZ-240 = 2026-06-30 22:00 local (cruza medianoche)
+  if (!tb2.includes(">2026-06-30<") || !tb2.includes(">22:00<")) throw new Error("FALLO cruce de medianoche: " + tb2.slice(0, 400));
+  eq(texts["#s-updated"], "Actualizado 08:35", "s-updated local");
+  console.log("ok sismos_boot (textarea + epoch/hora local derivados en Nyx)");
+
+  // Fase E: expand de noticias (news_toggle vía #n-sel + nth-child)
+  toggles.length = 0;
+  values["#n-sel"] = "3";
+  exports.news_toggle();
+  if (!toggles.some((t) => t.sel === ".news-list .news-item:nth-child(3)" && t.cls === "open" && t.on === 1)) throw new Error("FALLO news_toggle abrir: " + JSON.stringify(toggles));
+  exports.news_toggle(); // mismo item -> colapsa
+  if (!toggles.some((t) => t.sel === ".news-list .news-item:nth-child(3)" && t.on === 0)) throw new Error("FALLO news_toggle colapsar: " + JSON.stringify(toggles));
+  values["#n-sel"] = "5";
+  exports.news_toggle();
+  values["#n-sel"] = "2";
+  exports.news_toggle(); // abre otro -> cierra el 5 y abre el 2
+  if (!toggles.some((t) => t.sel.includes("nth-child(5)") && t.on === 0) || !toggles.some((t) => t.sel.includes("nth-child(2)") && t.on === 1)) throw new Error("FALLO news_toggle uno-a-la-vez: " + JSON.stringify(toggles));
+  console.log("ok news_toggle (expand uno a la vez)");
 
   console.log("TODOS LOS ASSERTS PASARON");
 }
