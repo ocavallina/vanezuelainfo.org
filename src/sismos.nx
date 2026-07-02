@@ -87,6 +87,8 @@ fn fmt_depth(d: String) -> String {
 }
 
 // Parser puro: cuerpo FDSN text -> tabla HTML. "" si no hay nada parseable.
+// OJO: el markup de fila lo REPLICA s_row_html en wasm/veninfo.nx (el wasm
+// regenera el tbody #qtbody en el navegador) — cambiarlos JUNTOS.
 pub fn render_quakes(body: String) -> String {
     if body.length() == 0 {
         return ""
@@ -95,7 +97,7 @@ pub fn render_quakes(body: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<table class=\"quakes\">\n")
     sb.append("<thead><tr><th>Fecha</th><th>Magnitud</th><th>Profundidad</th><th>Lugar</th><th>Distancia</th></tr></thead>\n")
-    sb.append("<tbody>\n")
+    sb.append("<tbody id=\"qtbody\">\n")
     var i: int = 0
     var count: int = 0
     while i < lines.length() {

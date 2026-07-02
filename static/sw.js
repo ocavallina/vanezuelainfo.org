@@ -3,7 +3,7 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v31';
+const CACHE = 'veninfo-v37';
 const SHELL = ['/', '/assets/style.css', '/icon.svg', '/icon-192.png'];
 
 self.addEventListener('install', function (e) {
@@ -26,6 +26,7 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // CDN/tiles -> red directa
+  if (url.pathname.indexOf('/api/') === 0) return; // JSON dinamico (chat/salas) -> red directa, jamas cache
 
   if (req.mode === 'navigate') {
     e.respondWith(

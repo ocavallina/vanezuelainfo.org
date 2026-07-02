@@ -1,8 +1,17 @@
 # venezuelainfo.org
 
-Portal de noticias e información sobre Venezuela, con una sección especial de
-**sismos en vivo** (datos del USGS). Escrito enteramente en **Nyx**, consumiendo
-la librería `nyx-serve`.
+Portal de noticias e información sobre Venezuela: **sismos en vivo** (EMSC),
+clima, finanzas (BCV/USDT/COP), noticias agregadas, guía de sitios por zona
+(Baquiano) y chat colectivo en tiempo real. PWA instalable.
+
+Escrito **enteramente en Nyx**, en ambos lados:
+
+- **Servidor**: binario nativo sobre la librería `nyx-serve` (HTTP, rutas,
+  render HTML server-side, cliente HTTPS a APIs externas, WebSocket).
+- **Front**: el cómputo y el render dinámico corren en el navegador como
+  **Nyx compilado a WebAssembly** (`wasm/veninfo.nx` → `veninfo.wasm`, ~144 KB
+  gzip); el JavaScript restante es solo pegamento para lo que el target wasm
+  aún no cubre (fetch, timers, geolocalización, WebSocket, Leaflet).
 
 Proyecto independiente: vive fuera de `NyxLang/` y usa `NYX_HOME` para encontrar
 el compilador, runtime y stdlib (mismo patrón que `nyx-kv-stack`).
@@ -13,15 +22,29 @@ el compilador, runtime y stdlib (mismo patrón que `nyx-kv-stack`).
 venezuelainfo.org/
 ├── nyx.toml              # paquete (main = src/main.nx; dep: nyx-serve)
 ├── src/
-│   ├── main.nx           # entry point: rutas + arranque del servidor
-│   ├── layout.nx         # plantilla HTML compartida (header/footer, tema bandera)
-│   ├── articles.nx       # carga de artículos + render de portada y artículo
+│   ├── main.nx           # entry point: rutas + handlers + arranque del servidor
+│   ├── layout.nx         # plantilla HTML compartida (PWA, tema bandera, dark mode)
+│   ├── articles.nx       # artículos Markdown (portada + detalle)
 │   ├── md.nx             # renderizador Markdown -> HTML mínimo
-│   └── sismos.nx         # cliente USGS (FDSN text) + caché + tabla de sismos
-├── content/
-│   ├── index.txt         # un slug por línea (lista de artículos publicados)
-│   └── articles/*.md     # artículos en Markdown con front-matter
-├── static/assets/style.css
+│   ├── sismos.nx         # cliente EMSC (FDSN text) + caché + tabla de sismos
+│   ├── news.nx           # agregador RSS de medios venezolanos
+│   ├── kv.nx             # cliente RESP2+TLS para nyx-kv (chat/baquiano/admin)
+│   ├── chat.nx           # chat colectivo con salas (almacenado en nyx-kv)
+│   ├── ws.nx             # WebSocket del chat (push en tiempo real)
+│   ├── baquiano.nx       # guía de sitios por zona (contenido en nyx-kv)
+│   └── admin.nx          # panel /admin (login de dueño, CSRF, CRUD)
+├── wasm/
+│   ├── veninfo.nx        # FRONT en Nyx: helpers, finanzas y sismos (→ veninfo.wasm)
+│   └── tests/imports.mjs # suite headless del módulo wasm (Node + shim)
+├── content/              # index.txt + articles/*.md (artículos en Markdown)
+├── static/
+│   ├── assets/veninfo.wasm      # módulo wasm compilado (generado)
+│   ├── assets/nyx-loader.js     # loader ESM (window.nyxReady + marshalling)
+│   ├── assets/nyx-wasi-shim.js  # shim WASI/DOM (copiado del monorepo NyxLang)
+│   ├── assets/*.js              # pegamento JS (fetch/geo/timers/WS/Leaflet)
+│   ├── assets/style.css, sw.js  # estilos + service worker (PWA)
+│   └── manifest.webmanifest, icon.*
+├── deploy/               # unit systemd + drop-in admin + build-wasm.sh
 └── packages/nyx-serve/   # nyx-serve vendoreado
 ```
 
@@ -33,15 +56,51 @@ NYX_HOME=/home/admin/NyxLang nyx build          # produce ./venezuelainfo-org
 PORT=3010 ./venezuelainfo-org                   # arranca el servidor (bloqueante)
 ```
 
-Rutas:
+### Front wasm (solo si se toca `wasm/veninfo.nx`)
 
-| Ruta                 | Descripción                                  |
-|----------------------|----------------------------------------------|
-| `GET /`              | Portada: lista de artículos (orden por fecha)|
-| `GET /articulo/{slug}` | Artículo renderizado desde su `.md`        |
-| `GET /sismos`        | Tabla de sismos recientes (USGS, en vivo)    |
-| `GET /api/health`    | `{"status":"ok"}`                            |
-| `GET /assets/*`      | Archivos estáticos (CSS, imágenes)           |
+```bash
+deploy/build-wasm.sh    # make wasm en el monorepo + copia a static/assets/
+# probar en headless (mismo shim que el navegador):
+node $NYX_HOME/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
+```
+
+Tras recompilar el wasm hay que subir juntos el `?v=N` de `nyx-loader.js` y
+`veninfo.wasm` (en `nyx-loader.js` y `src/main.nx`) y la versión `veninfo-vN`
+del service worker (`static/sw.js`).
+
+## Rutas
+
+| Ruta                     | Descripción                                        |
+|--------------------------|----------------------------------------------------|
+| `GET /`                  | Portada: tarjetas reordenables (clima, finanzas, noticias, baquiano, chat) |
+| `GET /clima`             | Pronóstico completo de cualquier ciudad (Open-Meteo) |
+| `GET /finanzas`          | Divisas (BCV/USDT P2P/COP), cripto y Bolsa de Caracas |
+| `GET /noticias`          | Titulares agregados de medios venezolanos          |
+| `GET /sismos`            | Sismos recientes con filtros/orden/paginación (EMSC) |
+| `GET /sismos/{id}`       | Detalle de un sismo con mapa (Leaflet)             |
+| `GET /baquiano[/{zona}]` | Guía de sitios por estado/región                   |
+| `GET /chat` + `WS /ws/chat/{sala}` | Chat colectivo con salas en tiempo real  |
+| `GET /articulo/{slug}`   | Artículo renderizado desde su `.md`                |
+| `GET /admin`             | Panel del dueño (baquiano + salas de chat)         |
+| `GET /api/health`        | Estado del servicio                                |
+
+## Front en Nyx→WASM
+
+`wasm/veninfo.nx` es un módulo único que se compila con el target
+`wasm32-wasi` de NyxLang ("Escenario B": FFI `extern "js"`, `#[export_name]`
+y `std/dom`). En el navegador hace:
+
+- **Helpers puros**: descripción del clima (códigos WMO), fechas relativas,
+  brújula, etiquetas AQI, distancia haversine, formateo de moneda es-VE/es-CO.
+- **Finanzas**: recibe los valores (que JS extrae de las APIs) como string
+  plano y arma e inyecta el HTML de la tarjeta y de `/finanzas`.
+- **Sismos**: filtros, orden, paginación, selección con detalle y tarjeta
+  "más fuerte 24 h" — regenera el `<tbody>` de la tabla en cada interacción.
+
+Regla de la frontera JS↔wasm: solo cruzan `int` (BigInt) y `String`; los
+floats viajan como String. `static/assets/nyx-loader.js` resuelve todo el
+marshalling y expone la API como `window.nyxReady` (promesa). Si el wasm no
+carga, cada sección muestra un aviso (no hay lógica duplicada en JS).
 
 ## Publicar un artículo
 
@@ -66,18 +125,24 @@ No requiere recompilar: los `.md` se leen en cada request.
 
 ## Sección de sismos
 
-`src/sismos.nx` consulta la API pública del USGS (FDSN, `format=text`) acotada al
-bounding box de Venezuela (lat 0..13, lon -74..-59), magnitud ≥ 2.5. Usa el
-builtin `https_get` (TLS) y cachea el resultado en memoria 5 minutos.
+`src/sismos.nx` consulta la API pública del **EMSC** (seismicportal.eu, FDSN
+`format=text`) acotada al bounding box de Venezuela (lat 0..13, lon -74..-59),
+magnitud ≥ 3. Usa el builtin `https_get` (TLS) y cachea el resultado en
+memoria 5 minutos. Se usa `format=text` (delimitado por `|`) en lugar de
+GeoJSON a propósito: el parser de `std/json` solo lee enteros y truncaría los
+floats (magnitud, coordenadas).
 
-Se usa `format=text` (delimitado por `|`) en lugar de GeoJSON a propósito: el
-parser de `std/json` solo lee enteros y truncaría los floats (magnitud,
-coordenadas) del GeoJSON.
+## Chat y datos persistentes
+
+El chat (salas, mensajes), el Baquiano y las credenciales del panel admin se
+guardan en **nyx-kv** (:6380, RESP2+TLS) con un token dedicado de namespace
+`veninfo::`. El tiempo real va por WebSocket (`/ws/chat/{sala}`, solo bajada;
+el envío es POST) con respaldo de polling.
 
 ## Despliegue (producción)
 
-1. Servicio systemd con `Environment=PORT=3010` (espejo de los `deploy/*.service`
-   de los sitios de NyxLang) y `WorkingDirectory` en esta carpeta.
+1. Servicio systemd con `Environment=PORT=3010` (ver `deploy/`) y
+   `WorkingDirectory` en esta carpeta.
 2. Añadir un vhost en `NyxLang/services/gateway/proxy.toml`:
 
    ```toml
@@ -92,7 +157,8 @@ coordenadas) del GeoJSON.
 
 ## Nota de mantenimiento
 
-`packages/nyx-serve/src/server.nx` se editó para que su import interno use la
-ruta calificada `import "nyx-serve/src/files"` (en vez de `import "src/files"`),
-porque el resolver del build actual (nyx v0.16.1) no resuelve imports internos
-relativos de un paquete vendoreado.
+`packages/nyx-serve/src/server.nx` lleva dos ediciones locales: (1) su import
+interno usa la ruta calificada `import "nyx-serve/src/files"` (el resolver no
+resuelve imports internos relativos de un paquete vendoreado), y (2) el parche
+`serve_ws` que detecta el `Upgrade: websocket` y entrega el fd a un handler
+(lo usa el chat). **Al re-vendorear nyx-serve hay que re-aplicar ambos.**

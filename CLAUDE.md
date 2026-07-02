@@ -22,6 +22,13 @@ fuera del monorepo del lenguaje (igual patrón que `nyx-kv-stack`).
 cd /home/admin/venezuelainfo.org
 NYX_HOME=/home/admin/NyxLang nyx build      # produce ./venezuelainfo-org
 sudo systemctl restart nyx-venezuelainfo    # recarga el servicio (NO el gateway)
+
+# Front wasm (paso SEPARADO, solo si se tocó wasm/veninfo.nx):
+deploy/build-wasm.sh                        # make wasm en el monorepo + copia a static/assets/
+# ...y SUBIR JUNTOS el ?v=N de nyx-loader.js + veninfo.wasm (en el propio
+# nyx-loader.js y en src/main.nx) + veninfo-vN en static/sw.js + rebuild+restart.
+# Test headless del módulo:
+node /home/admin/NyxLang/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
 ```
 
 - **`NYX_HOME` apunta al monorepo** `NyxLang/` a propósito: ahí están el
@@ -36,17 +43,32 @@ sudo systemctl restart nyx-venezuelainfo    # recarga el servicio (NO el gateway
 
 - **Todo el servidor es Nyx** (`src/*.nx`): HTTP, rutas, render de HTML
   server-side, lectura de Markdown, cliente HTTPS a APIs externas, parseo, caché.
-- **El "front" (interactividad) es JavaScript escrito como STRINGS dentro del
-  Nyx** (en `src/main.nx`), que el servidor emite al navegador. Nyx NO corre en
-  el navegador. Además: `static/sw.js` (service worker real) y `static/assets/style.css`.
+- **El front es HÍBRIDO Nyx→WASM + JS de pegamento** (desde 2026-07-02,
+  Escenario B del lenguaje): el CÓMPUTO y el render dinámico viven en
+  **`wasm/veninfo.nx`** → compilado a `static/assets/veninfo.wasm` (~144 KB gzip)
+  con `deploy/build-wasm.sh`, cargado por **`static/assets/nyx-loader.js`**
+  (ESM, expone `window.nyxReady` = promesa con la API ya marshalleada) sobre el
+  shim **`static/assets/nyx-wasi-shim.js`** (copiado del monorepo). El módulo
+  wasm exporta: `wdesc`, `rel_time`, `compass`, `aqi_label`, `hav_km`, `fmt_bs`,
+  `fmt_cop` (helpers puros), `fx_render`/`fx_render_cripto` (finanzas: arma el
+  HTML y lo inyecta con dom_set_html) y `sismos_load`/`sismos_set_loc`/
+  `s_refiltrar`/`s_prev`/`s_next`/`s_select`/`s_toggle_filtros` (sismos:
+  filtros/orden/paginación/selección/destacado, tbody `#qtbody` regenerado en
+  Nyx). Los `.js` quedan como PEGAMENTO de lo que wasm aún no tiene (fetch,
+  timers, geolocalización, WebSocket, Leaflet, drag&drop): todos hacen
+  `window.nyxReady.then(nyx=>…).catch(()=>aviso)` — sin respaldo JS duplicado.
+  `veninfo.js` (fechas relativas via wasm + rotador + expand), `fx.js` (solo
+  fetches → string `k=v|…` → `nyx.fxRender`), `home.js` (tarjeta clima +
+  orden de tarjetas), `clima.js`, `sismos.js` (serializa las filas server-side
+  UNA vez + geo + click-delegación), `quake.js` (Leaflet + `nyx.havKm`),
+  `chat.js` (NO migrado: WS/timers). Además: `static/sw.js` y `style.css`.
 - Librerías client-side por CDN: **Leaflet** (mapas). APIs client-side:
   **Open-Meteo** (clima/geocoding/calidad del aire), **Geolocation**, **localStorage**.
 
 ### Mapa de archivos
 ```
-src/main.nx      Entry + rutas + handlers. AQUÍ vive casi todo el "front" (JS en strings):
-                 weather_card(), handle_clima(), handle_sismos(), handle_quake_detail().
-                 handle_index() (portada + tarjetas) + cards_order_js() (orden/reorden de tarjetas).
+src/main.nx      Entry + rutas + handlers (HTML server-side; el JS vive en static/assets/*.js
+                 y se referencia con <script src="/assets/X.js?v=N" defer>).
 src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom bloqueado),
                  metas PWA, registro del service worker.
 src/articles.nx  Portada + render de artículos (server-side desde content/).
@@ -56,13 +78,26 @@ src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexi�
                  Helpers kv_get/set/setex/del/exists/incr/expire/rpush/ltrim/lrange sobre kv_cmd.
 src/chat.nx      Chat colectivo CON SALAS: valida/sanea/filtra, guarda/lee por sala en nyx-kv.
                  Parseo de body a mano. Solo el admin crea/borra salas. form_field es pub.
+                 chat_ws_handler = handler del upgrade WS (valida sala, delega en src/ws).
+src/ws.nx        WebSocket del chat (RFC 6455 via std/websocket): registro fd<->sala bajo
+                 mutex, un hilo lector por conexión, ws_broadcast() al publicar. Solo bajada;
+                 el envío sigue por POST. ws_init() se llama desde main().
 src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenido en nyx-kv,
                  editable desde el panel admin. render_baquiano_index/zone() + baquiano_card().
 src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
                  baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
+wasm/veninfo.nx  Módulo Nyx→WASM del front (UN solo archivo: make wasm no resuelve imports
+                 locales). Secciones: helpers puros / finanzas / sismos. Declara los extern
+                 "js" propios (js_ls_get/set, js_set_attr, js_remove_attr, js_toggle_class,
+                 js_set_value) que provee nyx-loader.js.
+wasm/tests/imports.mjs  Test headless (mocks DOM/localStorage + asserts):
+                 node NyxLang/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).
-static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png.
-deploy/          nyx-venezuelainfo.service + admin.conf.example (drop-in del secreto admin).
+static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png,
+                 assets/nyx-loader.js (loader ESM), assets/nyx-wasi-shim.js (COPIA del
+                 monorepo; la refresca build-wasm.sh), assets/veninfo.wasm (generado).
+deploy/          nyx-venezuelainfo.service + admin.conf.example (drop-in del secreto admin)
+                 + build-wasm.sh (compila wasm/veninfo.nx y copia artefactos).
 packages/        nyx-serve vendoreado.
 ```
 
@@ -83,6 +118,11 @@ packages/        nyx-serve vendoreado.
   Declararlo otra vez (lo hacía `src/chat.nx`) da error de LINK **`invalid
   redefinition of function 'nyx_url_decode'`** (no lo detecta el front del compilador,
   revienta en clang). Usar el de `std/web` sin redeclarar.
+- **nyx-serve vendoreado lleva un PARCHE LOCAL** (`serve_ws` + detección de
+  `Upgrade: websocket` en `__serve_ka_worker`, `packages/nyx-serve/src/server.nx`):
+  entrega `[fd, path, headers_flat]` a un handler `Fn(Array) -> int` registrado con
+  `serve_ws(...)`; si devuelve 1 el server NO cierra el fd. **Al re-vendorear
+  nyx-serve hay que re-aplicar el parche** (upstream `products/serve` no lo tiene).
 - **nyx-serve ignora `headers_flat` en 301/302** (`packages/nyx-serve/src/server.nx`):
   en un redirect usa `resp.body` como valor de `Location` y NO emite otras
   cabeceras → **no se puede fijar `Set-Cookie` en un redirect**. Para fijar/limpiar
@@ -95,20 +135,45 @@ packages/        nyx-serve vendoreado.
   da basura.
 - **Caché**: las páginas HTML usan `html_nocache(...)` (Cache-Control: no-cache)
   para que el gateway no las sirva viejas. Los assets (CSS/JS/iconos) SÍ se
-  cachean en el gateway (~60s). **Al tocar `style.css` o el JS de `sw.js`, subir
-  la versión `veninfo-vN` en `static/sw.js`** para invalidar la caché de las PWA.
+  cachean en el gateway (~60s). **Al tocar `style.css`, `chat.js` o el JS de
+  `sw.js`, subir la versión `veninfo-vN` en `static/sw.js`** para invalidar la
+  caché de las PWA. El SW **jamás cachea `/api/*`** (rama excluida; si se quita,
+  el chat de la PWA se congela con la primera respuesta).
+- **Frontera JS↔wasm: SOLO int (BigInt en JS) y String cruzan.** Los floats van
+  como String (`string_to_float` adentro) o salen ya formateados. NUNCA llamar
+  `exports.*` a pelo fuera de nyx-loader.js (pasar Number donde va i64 =
+  TypeError). Multi-valor con `|`; tabular con `\n`/`\t` (JS sanea separadores).
+- **NO parsear JSON con floats via `std/json` en el wasm** (trunca floats, mismo
+  bug de siempre): JS extrae los valores del JSON y los pasa en strings planas.
+- **El wasm NO tiene GC** (leak-by-design): ~120 KB filtrados por render de
+  sismos (~72 MB tras 600 renders; una sesión normal ni se nota, recargar
+  resetea). Por eso: filtros con evento `change` (no `input`), parseo único en
+  `sismos_load`, filas armadas con StringBuilder. No meter renders en bucles.
+- **El markup de fila de sismos está DUPLICADO adrede**: `render_quakes`
+  (src/sismos.nx, server) y `s_row_html` (wasm/veninfo.nx, navegador) — el wasm
+  regenera `#qtbody`. Cambiarlos JUNTOS (hay comentario cruzado).
+- **`deploy/build-wasm.sh` clobbera `script.nx`/`script.ll` del monorepo**
+  (scratch de `make wasm`) — no correrlo en paralelo con otro build de NyxLang.
+  El shim `nyx-wasi-shim.js` se re-copia del monorepo en cada build del wasm.
+- **`dom_on` registra por NOMBRE de export y los handlers reciben CERO args**:
+  el contexto va por estado del módulo o inputs hidden (`#s-selected` +
+  `dom_get_value`). El loader debe setear `dom.ref.exports` tras instanciar
+  (ya lo hace) o los listeners revientan.
+- **Dark mode**: automático con `prefers-color-scheme` redefiniendo variables.
+  Para TEXTO azul usar `var(--enlace)` (claro en oscuro); `var(--azul)` queda
+  SOLO para fondos (botones, thead). Texto sobre amarillo: color fijo `#14213d`.
 - **Tiempos en hora LOCAL**: el servidor manda ISO UTC en `data-iso`; el navegador
   formatea a local (helpers `locPair`/`locStr` en el JS de sismos). No mostrar UTC.
 - **Zoom bloqueado**: todas las páginas usan `page_fixed` (`user-scalable=no`).
 
-## Portada / tarjetas (src/main.nx: handle_index + cards_order_js)
+## Portada / tarjetas (src/main.nx: handle_index + static/assets/home.js)
 
 - Tarjetas (`.home-card` con `data-key`) dentro de `#home-cards`. Orden guardado en
   `localStorage` (`card_order`, lista de `data-key`). Botón ⚙️ (`#cfg-btn`) activa el
-  **modo edición** (`#home-cards.editing`).
+  **modo edición** (`#home-cards.editing`). Todo el JS en `static/assets/home.js`.
 - **Dos formas de reordenar** (ambas guardan en `card_order`):
   1. **Drag&drop** HTML5 (escritorio) — `draggable` solo en modo edición.
-  2. **Flechas ↑/↓** (`.card-move`/`.cm-btn`) que `cards_order_js` inyecta por JS en
+  2. **Flechas ↑/↓** (`.card-move`/`.cm-btn`) que `home.js` inyecta por JS en
      cada tarjeta; visibles solo en modo edición. **Imprescindibles para móvil/PWA**
      (el drag nativo táctil no funciona). Mueven con `previous/nextElementSibling`.
 - CSS de todo esto en `static/assets/style.css` (`.cfg-btn`, `.home-card`,
@@ -153,8 +218,19 @@ packages/        nyx-serve vendoreado.
   `nyx-kv-stack/.../auth.nx`). El token `veninfo` es enterprise → las claves
   (`chat:*`, `baq:*`, `admin:*`) **persisten indefinidamente** (no ponerles `EXPIRE`
   salvo rate-limit y sesiones). La app no pone `EXPIRE` en `chat:msgs`.
-- **Tiempo real: NO** (el gateway no hace upgrade WebSocket). Es **polling**: el
-  cliente pide `GET /api/chat` cada 3 s. Render con `textContent` (anti-XSS).
+- **Tiempo real: SÍ (WebSocket)** desde 2026-07-01. El gateway (nyx-proxy) hace
+  passthrough del Upgrade (solo por TLS/:443) hacia :3010; el upgrade lo detecta el
+  **parche local de nyx-serve** (`serve_ws` en `packages/nyx-serve/src/server.nx`,
+  ver gotchas) y lo maneja `src/ws.nx` + `chat_ws_handler` (`src/chat.nx`). Endpoint
+  `GET /ws/chat/{sala}` → 101; el servidor **solo empuja** (broadcast al publicar);
+  el envío sigue por POST. El cliente (`static/assets/chat.js`) manda un ping `'p'`
+  cada 25 s (keepalive NAT) y cae a **polling (4 s)** si el WS no conecta, con
+  backoff exponencial y pausa con la pestaña oculta. Render con `textContent`
+  (anti-XSS), incremental (solo anexa mensajes no vistos).
+- **OJO**: si el proceso del gateway es ANTERIOR al soporte WS (binario recompilado
+  pero servicio sin reiniciar), el Upgrade viaja por el pool HTTP y da 502. El hilo
+  lector de `src/ws.nx` se protege cerrando el fd ante datos que no sean frames de
+  cliente (texto enmascarado/close), para no envenenar el pool del gateway.
 - **Moderación**: escape/saneo, topes (nick 24 / texto 280), filtro de groserías,
   cupo de ritmo **por sala** (`INCR chat:rl:<id>`+`EXPIRE 10`, ~25/10s). Vaciar/borrar
   salas se hace desde el **panel admin** (`/admin/salas`). El antiguo
@@ -192,7 +268,8 @@ packages/        nyx-serve vendoreado.
 
 ## Rutas
 
-`/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `/baquiano` · `/baquiano/{zona}`
+`/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `WS /ws/chat/{sala}` ·
+`/baquiano` · `/baquiano/{zona}`
 · `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rooms`
 · `/api/chat` · `/api/chat/{room}` · `POST /api/chat/send` · `/admin` ·
 `POST /admin/login` · `POST /admin/logout` · `/admin/baquiano` (+POST) ·
@@ -202,7 +279,6 @@ packages/        nyx-serve vendoreado.
 
 Sin prioridad estricta; tomar lo que aporte.
 
-- [ ] **Indicador en el icono de Filtros** cuando hay filtros activos (punto/badge).
 - [ ] **Tarjeta "más fuerte" con respaldo a 7 días**: si no hay sismos en 24 h,
       mostrar el más fuerte reciente; resaltar siempre cualquier M ≥ 6.
 - [ ] **`Cache-Control: no-cache` también para `style.css`** (dejar cacheados solo
@@ -212,7 +288,17 @@ Sin prioridad estricta; tomar lo que aporte.
       (`SETEX sismos:emsc:body 300 …`) y/o contadores de vistas (`INCR`). Patrón de
       cliente en `nyx-kv-stack/dashboard/src/kv_client.nx`. Decisión actual: NO
       (las prefs de UI van en localStorage; nyxkv solo para estado de servidor).
-- [ ] **Front en Nyx→WASM** (a futuro): hoy el JS está escrito a mano como strings.
+- [ ] **Front Nyx→WASM, siguientes módulos** (fases 1–3 HECHAS 2026-07-02:
+      helpers + finanzas + sismos, ver Arquitectura). Migrar el render de
+      /clima y la tarjeta del clima (armar el HTML en Nyx con los datos que
+      fetchea JS, patrón fx_render) cuando valga la pena; chat/home (drag&drop)
+      y sw.js quedan en JS hasta que el target tenga WebSocket/timers/DOM rico
+      (backlog del ROADMAP: closures como handlers, fetch, más DOM).
+- [ ] **Leaflet con SRI o autoalojado** (hoy unpkg sin integrity ni fallback).
+- [ ] **Robustez WS del gateway** (en el monorepo): locking del SSL del túnel,
+      timeout de idle, propagación simétrica del cierre (limitaciones "de piloto").
+- [ ] **Notification API en el chat** (avisar mensajes nuevos con pestaña oculta;
+      viable ya que el WS empuja).
 - [ ] **Más artículos** en `content/articles/` (+ slug en `content/index.txt`).
 
 ## Hecho (hitos)
@@ -225,6 +311,18 @@ iconos); HTML `no-cache`; behind gateway con TLS. Nav superior (con Clima/Baquia
 **Baquiano** (guía de sitios por zona, contenido en nyx-kv, editable en el panel).
 **Chat con salas** (solo admin las crea, mensajes aislados por sala). **Panel admin**
 (`/admin`, login de dueño + sesión por cookie + CSRF, CRUD de baquiano y salas).
+**Chat en tiempo real por WebSocket** (2026-07-01: parche serve_ws + src/ws.nx +
+chat.js con respaldo de polling; pendiente solo reiniciar nyx-gateway). **Front
+extraído a static/assets/*.js** (main.nx bajó de ~770 a ~470 líneas), **dark mode**,
+focus visible, reduced-motion, badge de filtros activos, `ws` en /api/health, y fix
+del SW que cacheaba `/api/*` (congelaba el chat en la PWA).
+**Front Nyx→WASM (2026-07-02, Escenario B fases 0–2 del lenguaje)**: módulo
+`wasm/veninfo.nx` → `veninfo.wasm` (~144 KB gzip) con helpers puros (wdesc,
+haversine, brújula, AQI, formateo es-VE/es-CO), render completo de finanzas
+(fx_render) y filtros/orden/paginación/selección/destacado de sismos corriendo
+EN NYX en el navegador; JS reducido a pegamento (fetch/geo/timers/WS/Leaflet);
+suite headless en wasm/tests/imports.mjs (helpers + finanzas + sismos con
+fixture); sin respaldo JS duplicado (aviso si el wasm no carga).
 Bugs del lenguaje hallados → anotados en `NyxLang/TASKS.md`.
 
 ## Verificación rápida
