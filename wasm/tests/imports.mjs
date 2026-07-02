@@ -10,6 +10,7 @@ export const values = {};  // selector -> value de inputs mock
 export const fetches = []; // llamadas a js_fetch registradas: {url, method, handler}
 export const toggles = []; // llamadas a js_toggle_class: {sel, cls, on}
 export const timers = [];  // llamadas a js_interval/js_timeout: {ms, handler}
+export const shares = []; // llamadas a js_share: {text, url}
 export const TZ_MIN = -240; // zona fija del test: UTC-4 (Venezuela)
 
 export default (nyx) => ({
@@ -35,6 +36,7 @@ export default (nyx) => ({
   js_media: (q) => 0n,
   js_count: (sel) => 0n,
   js_tz_offset_min: () => BigInt(TZ_MIN),
+  js_share: (text, url) => { shares.push({ text: nyx.readString(text), url: nyx.readString(url) }); },
 });
 
 // main() corre en _start y lee #pg — se pre-siembra ANTES de instanciar
@@ -140,30 +142,41 @@ export async function afterStart({ exports, nyx }) {
   // Calculadora: estado ya poblado por los fx_on_* de arriba
   // (bcv=639.7029, uc=734.588, uv=733.5, eur=728.48086846, cop=3401.617171, btc=61835)
   values["#calc-amt"] = "100";
-  values["#calc-from"] = "USD"; values["#calc-to"] = "BSP";
+  values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
   exports.calc_render();
-  // 100 USD → Bs paralelo = 100 * (734.588+733.5)/2 = 73.404,40
-  if (!texts["#calc-out"].includes("73.404,40 Bs")) throw new Error("FALLO calc USD→BSP: " + texts["#calc-out"]);
-  if (!texts["#calc-out"].includes("1 USD =")) throw new Error("FALLO calc línea de tasa: " + texts["#calc-out"]);
-  values["#calc-to"] = "BSV"; exports.calc_render();
-  if (!texts["#calc-out"].includes("63.970,29 Bs")) throw new Error("FALLO calc USD→BSV: " + texts["#calc-out"]);
-  values["#calc-to"] = "COP"; exports.calc_render();
-  if (!texts["#calc-out"].includes("340.162 COP")) throw new Error("FALLO calc USD→COP: " + texts["#calc-out"]);
+  // 100 USD → Bs (BCV) = 100 * 639,7029 = 63.970,29 ; resultado y tasa separados
+  if (!texts["#calc-result"].includes("63.970,29 Bs")) throw new Error("FALLO calc USD→BSV: " + texts["#calc-result"]);
+  if (!texts["#calc-rate"].includes("1 USD =")) throw new Error("FALLO calc línea de tasa: " + texts["#calc-rate"]);
+  values["#calc-to"] = "USDT"; exports.calc_render();
+  // 100 USD / 0,998706 = 100,13 USDT
+  if (!texts["#calc-result"].includes("100,13 USDT")) throw new Error("FALLO calc USD→USDT: " + texts["#calc-result"]);
   values["#calc-to"] = "EUR"; exports.calc_render();
-  if (!texts["#calc-out"].includes("€ 87,8")) throw new Error("FALLO calc USD→EUR: " + texts["#calc-out"]);
-  values["#calc-to"] = "BTC"; exports.calc_render();
-  if (!/0,0016\d* BTC/.test(texts["#calc-out"])) throw new Error("FALLO calc USD→BTC: " + texts["#calc-out"]);
-  console.log("ok calculadora (USD→BSP/BSV/COP/EUR/BTC + línea de tasa)");
+  if (!texts["#calc-result"].includes("€ 87,8")) throw new Error("FALLO calc USD→EUR: " + texts["#calc-result"]);
+  console.log("ok calculadora (USD→BSV/USDT/EUR + línea de tasa)");
 
-  // Guard: moneda sin tasa base → "Esperando tasas…"
+  // Guard: moneda sin tasa base → "Esperando tasas…" y tasa vacía
   values["#calc-from"] = "ZZZ"; exports.calc_render();
-  if (!texts["#calc-out"].includes("Esperando tasas")) throw new Error("FALLO calc guard: " + texts["#calc-out"]);
+  if (!texts["#calc-result"].includes("Esperando tasas")) throw new Error("FALLO calc guard: " + texts["#calc-result"]);
+  if (texts["#calc-rate"] !== "") throw new Error("FALLO calc guard rate: " + texts["#calc-rate"]);
 
   // Swap: intercambia from/to (js_set_value escribe en el mock `values`)
-  values["#calc-from"] = "USD"; values["#calc-to"] = "BSP";
+  values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
   exports.calc_swap();
-  if (values["#calc-from"] !== "BSP" || values["#calc-to"] !== "USD") throw new Error("FALLO calc_swap: " + values["#calc-from"] + "/" + values["#calc-to"]);
+  if (values["#calc-from"] !== "BSV" || values["#calc-to"] !== "USD") throw new Error("FALLO calc_swap: " + values["#calc-from"] + "/" + values["#calc-to"]);
   console.log("ok calc_swap");
+
+  // Chip: Dólar→USDT fija origen=USD y destino=USDT
+  exports.calc_chip_usdt();
+  if (values["#calc-from"] !== "USD" || values["#calc-to"] !== "USDT") throw new Error("FALLO calc_chip_usdt: " + values["#calc-from"] + "/" + values["#calc-to"]);
+  console.log("ok calc_chip");
+
+  // Compartir: arma texto con la conversión y llama js_share(text, "/finanzas")
+  values["#calc-amt"] = "100"; values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
+  exports.calc_share();
+  const sh = shares[shares.length - 1];
+  if (!sh || sh.url !== "/finanzas") throw new Error("FALLO calc_share url: " + JSON.stringify(sh));
+  if (!sh.text.includes("63.970,29 Bs") || !sh.text.includes("Convierte")) throw new Error("FALLO calc_share text: " + sh.text);
+  console.log("ok calc_share");
 
   // Fase C: clima — fixtures con decoys current_units/hourly_units (el marcador
   // "key":{ debe saltarlos). Horas generadas relativas a ahora (TZ -240).

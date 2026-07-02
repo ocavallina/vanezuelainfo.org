@@ -66,17 +66,13 @@ fn cur_opt(val: String, label: String, sel: String) -> String {
     return "<option value=\"" + val + "\"" + s + ">" + label + "</option>"
 }
 
-// Las 8 monedas de la calculadora, con `sel` preseleccionada.
+// Las 4 monedas de la calculadora, con `sel` preseleccionada.
 fn cur_options(sel: String) -> String {
     var o: String = ""
     o = o + cur_opt("USD", "Dolar (USD)", sel)
     o = o + cur_opt("BSV", "Bolivar (BCV)", sel)
-    o = o + cur_opt("BSP", "Bolivar (paralelo)", sel)
-    o = o + cur_opt("EUR", "Euro (EUR)", sel)
-    o = o + cur_opt("COP", "Peso colombiano (COP)", sel)
     o = o + cur_opt("USDT", "USDT", sel)
-    o = o + cur_opt("BTC", "Bitcoin (BTC)", sel)
-    o = o + cur_opt("ETH", "Ethereum (ETH)", sel)
+    o = o + cur_opt("EUR", "Euro (EUR)", sel)
     return o
 }
 
@@ -90,18 +86,29 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("<h1>Finanzas</h1>\n")
     sb.append("<p class=\"lede\">Tipos de cambio, cripto e informacion de la Bolsa de Valores de Caracas.</p>\n")
     sb.append("<section class=\"fz-calc\">\n")
-    sb.append("<h2 class=\"finz-h\">Calculadora</h2>\n")
-    sb.append("<div class=\"calc-row\">")
+    sb.append("<div class=\"calc-head\">")
+    sb.append("<h2 class=\"finz-h\">Calculadora</h2>")
+    sb.append("<button id=\"calc-share\" class=\"calc-share\" type=\"button\" aria-label=\"Compartir esta conversion\">Compartir</button>")
+    sb.append("</div>\n")
+    sb.append("<div class=\"calc-panel\">")
     sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\">")
     sb.append("<select id=\"calc-from\" class=\"calc-cur\" aria-label=\"Moneda de origen\">")
     sb.append(cur_options("USD"))
     sb.append("</select>")
-    sb.append("<button id=\"calc-swap\" class=\"calc-swap\" type=\"button\" aria-label=\"Intercambiar monedas\" title=\"Intercambiar\">&#8646;</button>")
+    sb.append("</div>\n")
+    sb.append("<div class=\"calc-swap-wrap\"><button id=\"calc-swap\" class=\"calc-swap\" type=\"button\" aria-label=\"Intercambiar monedas\" title=\"Intercambiar\">&#8645;</button></div>\n")
+    sb.append("<div class=\"calc-panel\">")
+    sb.append("<div id=\"calc-result\" class=\"calc-result\"><span class=\"calc-wait\">Esperando tasas&hellip;</span></div>")
     sb.append("<select id=\"calc-to\" class=\"calc-cur\" aria-label=\"Moneda de destino\">")
-    sb.append(cur_options("BSP"))
+    sb.append(cur_options("BSV"))
     sb.append("</select>")
     sb.append("</div>\n")
-    sb.append("<div id=\"calc-out\" class=\"calc-out\"><span class=\"calc-wait\">Esperando tasas&hellip;</span></div>\n")
+    sb.append("<div id=\"calc-rate\" class=\"calc-rate\"></div>\n")
+    sb.append("<div class=\"calc-chips\">")
+    sb.append("<button id=\"calc-chip-bsv\" class=\"calc-chip\" type=\"button\">D&oacute;lar&rarr;Bs</button>")
+    sb.append("<button id=\"calc-chip-usdt\" class=\"calc-chip\" type=\"button\">D&oacute;lar&rarr;USDT</button>")
+    sb.append("<button id=\"calc-chip-eur\" class=\"calc-chip\" type=\"button\">D&oacute;lar&rarr;Euro</button>")
+    sb.append("</div>\n")
     sb.append("</section>\n")
     sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
     sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
@@ -120,7 +127,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -170,7 +177,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -188,7 +195,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -295,7 +302,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -350,7 +357,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -419,7 +426,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=9\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))

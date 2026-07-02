@@ -7,10 +7,10 @@
 // restantes hacen nyxReady.then(...).catch(...): si el wasm no carga, cada uno
 // pinta su aviso. Subir el ?v= de este archivo y del .wasm JUNTOS
 // (ver deploy/build-wasm.sh).
-import { runNyxWasm, domBindings } from '/assets/nyx-wasi-shim.js?v=6';
+import { runNyxWasm, domBindings } from '/assets/nyx-wasi-shim.js?v=7';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=6')).arrayBuffer();
+  const bytes = await (await fetch('/assets/veninfo.wasm?v=7')).arrayBuffer();
   const dom = domBindings();
   const ref = { exports: null };            // los callbacks re-entran vía ref
   const call = (h, ...args) => { if (ref.exports && ref.exports[h]) ref.exports[h](...args); };
@@ -29,6 +29,16 @@ window.nyxReady = (async () => {
     js_toggle_class: (sel, cls, on) => { const el = document.querySelector(S(sel)); if (el) el.classList.toggle(S(cls), on !== 0n); },
     js_set_value: (sel, v) => { const el = document.querySelector(S(sel)); if (el) el.value = S(v); },
     js_count: (sel) => BigInt(document.querySelectorAll(S(sel)).length),
+    // — Compartir: Web Share API (móvil) con respaldo a copiar al portapapeles —
+    js_share: (text, url) => {
+      const t = S(text), u = location.origin + S(url);
+      const btn = document.querySelector('#calc-share');
+      const flash = () => { if (!btn) return; const o = btn.getAttribute('data-lbl') || btn.textContent; btn.setAttribute('data-lbl', o); btn.textContent = '¡Copiado!'; setTimeout(() => { btn.textContent = o; }, 1800); };
+      if (navigator.share) { navigator.share({ title: 'VenezuelaInfo', text: t, url: u }).catch(() => {}); return; }
+      const full = t + ' ' + u;
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(full).then(flash, () => prompt('Copia el enlace:', full)); return; }
+      try { const ta = document.createElement('textarea'); ta.value = full; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); flash(); } catch (e) { prompt('Copia el enlace:', full); }
+    },
     // — Red: fetch con callback(status:int, body:String); error de red → status 0 —
     js_fetch: (url, method, body, handler) => {
       const u = S(url), m = S(method) || 'GET', b = S(body), h = S(handler);

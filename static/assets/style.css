@@ -193,16 +193,22 @@ a { color: var(--enlace); }
 
 /* ---- Calculadora de finanzas ---- */
 .fz-calc { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; }
-.fz-calc .finz-h { margin-top: 0; }
-.calc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.calc-amt { flex: 1 1 120px; min-width: 100px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; font-size: 1.05rem; background: var(--tarjeta); color: var(--tinta); }
-.calc-cur { flex: 1 1 150px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; background: var(--tarjeta); color: var(--tinta); cursor: pointer; }
-.calc-swap { flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid var(--azul); border-radius: 50%; background: var(--tarjeta); color: var(--enlace); font-size: 1.2rem; line-height: 1; cursor: pointer; }
+.calc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.calc-head .finz-h { margin: 0; }
+.calc-share { background: transparent; color: var(--enlace); border: 1.5px solid currentColor; border-radius: 8px; padding: 5px 12px; font: inherit; font-weight: 700; font-size: .9rem; cursor: pointer; white-space: nowrap; }
+.calc-share:hover { color: var(--rojo); }
+.calc-panel { display: flex; align-items: center; gap: 8px; border: 1px solid var(--borde); border-radius: 10px; padding: 4px 10px; background: var(--tarjeta); }
+.calc-amt { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--tinta); font: inherit; font-size: 1.5rem; font-weight: 700; padding: 8px 2px; outline: none; }
+.calc-result { flex: 1 1 auto; min-width: 0; font-size: 1.5rem; font-weight: 800; color: var(--enlace); padding: 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-cur { flex: 0 0 auto; width: 42%; max-width: 210px; padding: 9px 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; background: var(--tarjeta); color: var(--tinta); cursor: pointer; }
+.calc-swap-wrap { display: flex; justify-content: center; margin: 6px 0; }
+.calc-swap { width: 40px; height: 40px; border: 1px solid var(--azul); border-radius: 50%; background: var(--tarjeta); color: var(--enlace); font-size: 1.2rem; line-height: 1; cursor: pointer; }
 .calc-swap:hover { background: var(--azul); color: #fff; }
-.calc-out { margin-top: 12px; }
-.calc-res { display: block; font-size: 1.7rem; font-weight: 800; color: var(--enlace); }
-.calc-rate { display: block; margin-top: 2px; color: var(--gris); font-size: .85rem; }
-.calc-wait { color: var(--gris); font-size: 1rem; }
+.calc-rate { margin-top: 10px; color: var(--gris); font-size: .85rem; }
+.calc-wait { color: var(--gris); font-size: 1rem; font-weight: 400; }
+.calc-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.calc-chip { border: 1px solid var(--borde); border-radius: 999px; background: var(--tarjeta); color: var(--enlace); padding: 6px 13px; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+.calc-chip:hover { border-color: var(--azul); }
 
 /* ---- Articulos ---- */
 .articles h2 { font-size: 1.4rem; margin-bottom: 18px; }

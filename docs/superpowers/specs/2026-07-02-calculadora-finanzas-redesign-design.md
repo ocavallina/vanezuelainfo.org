@@ -4,6 +4,12 @@ Fecha: 2026-07-02
 
 > **Nota:** algunas decisiones se tomaron con el usuario ausente y están marcadas
 > como *(ajustable)*: la lista de 4 monedas, los 3 chips y el texto de compartir.
+>
+> **Actualización (implementado):** el usuario confirmó **unidireccional** (se escribe
+> el monto arriba y abajo aparece el resultado formateado de solo-lectura; ⇅ para el
+> sentido inverso), **no** bidireccional. Las secciones de abajo que describen edición
+> bidireccional (`calc_active`, `#calc-to-amt`) quedaron OBSOLETAS — la fuente de verdad
+> final es el plan aprobado `~/.claude/plans/ya-el-mono-repo-tidy-sun.md`.
 
 ## Problema
 

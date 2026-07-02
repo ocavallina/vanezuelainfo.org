@@ -457,16 +457,16 @@ fn calc_render() {
     let uf: float = usd_per(src)
     let ut: float = usd_per(dst)
     if uf <= 0.0 or ut <= 0.0 {
-        dom_set_html("#calc-out", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
+        dom_set_html("#calc-result", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
+        dom_set_html("#calc-rate", "")
         return
     }
     let amt_s: String = dom_get_value("#calc-amt")
     var amt: float = 0.0
     if amt_s.length() > 0 { amt = string_to_float(amt_s) }
     let out: float = amt * uf / ut
-    var h: String = "<span class=\"calc-res\">" + fmt_money(dst, out) + "</span>"
-    h = h + "<span class=\"calc-rate\">1 " + cur_name(src) + " = " + fmt_money(dst, uf / ut) + "</span>"
-    dom_set_html("#calc-out", h)
+    dom_set_html("#calc-result", fmt_money(dst, out))
+    dom_set_html("#calc-rate", "1 " + cur_name(src) + " = " + fmt_money(dst, uf / ut))
 }
 
 #[export_name = "calc_swap"]
@@ -476,6 +476,41 @@ fn calc_swap() {
     js_set_value("#calc-from", dst)
     js_set_value("#calc-to", src)
     calc_render()
+}
+
+// Accesos rápidos: fijan origen=USD y destino, y recalculan.
+fn calc_chip(dst: String) {
+    js_set_value("#calc-from", "USD")
+    js_set_value("#calc-to", dst)
+    calc_render()
+}
+
+#[export_name = "calc_chip_bsv"]
+fn calc_chip_bsv() { calc_chip("BSV") }
+
+#[export_name = "calc_chip_usdt"]
+fn calc_chip_usdt() { calc_chip("USDT") }
+
+#[export_name = "calc_chip_eur"]
+fn calc_chip_eur() { calc_chip("EUR") }
+
+// Compartir la conversión actual (Web Share / portapapeles via pasarela). El
+// texto se arma aquí; el enlace lo completa el loader con location.origin.
+#[export_name = "calc_share"]
+fn calc_share() {
+    let src: String = dom_get_value("#calc-from")
+    let dst: String = dom_get_value("#calc-to")
+    let uf: float = usd_per(src)
+    let ut: float = usd_per(dst)
+    var txt: String = "Convierte divisas de Venezuela (USD, Bs, USDT, Euro) en"
+    if uf > 0.0 and ut > 0.0 {
+        let amt_s: String = dom_get_value("#calc-amt")
+        var amt: float = 0.0
+        if amt_s.length() > 0 { amt = string_to_float(amt_s) }
+        let out: float = amt * uf / ut
+        txt = fmt_money(src, amt) + " = " + fmt_money(dst, out) + " · Convierte divisas de Venezuela en"
+    }
+    js_share(txt, "/finanzas")
 }
 
 // Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
@@ -557,6 +592,10 @@ fn fx_boot(con_cripto: int) {
         dom_on("#calc-from", "change", "calc_render")
         dom_on("#calc-to", "change", "calc_render")
         dom_on("#calc-swap", "click", "calc_swap")
+        dom_on("#calc-chip-bsv", "click", "calc_chip_bsv")
+        dom_on("#calc-chip-usdt", "click", "calc_chip_usdt")
+        dom_on("#calc-chip-eur", "click", "calc_chip_eur")
+        dom_on("#calc-share", "click", "calc_share")
         calc_render()
     }
 }
@@ -985,6 +1024,7 @@ extern "js" fn js_set_attr(sel: String, name: String, val: String)
 extern "js" fn js_remove_attr(sel: String, name: String)
 extern "js" fn js_toggle_class(sel: String, cls: String, on: int)
 extern "js" fn js_set_value(sel: String, v: String)
+extern "js" fn js_share(text: String, url: String)
 
 fn esc(s: String) -> String {
     var out: String = s.replace("&", "&amp;")
