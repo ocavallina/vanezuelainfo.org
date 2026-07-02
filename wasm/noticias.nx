@@ -23,7 +23,7 @@ fn rot_tick() {
 fn rot_boot() {
     rot_n = [0]
     rot_i = [0]
-    if js_media("(prefers-reduced-motion: reduce)") == 1 {
+    if match_media("(prefers-reduced-motion: reduce)") == 1 {
         return // sin animación: el CSS estático deja visible el primer slide
     }
     let n: int = js_count(".news-rot .rot-slide")
@@ -32,7 +32,7 @@ fn rot_boot() {
     js_toggle_class(".news-rot .rot-stage", "rot-live", 1)
     rot_mark(0, 1)
     if n > 1 {
-        js_interval(4500, "rot_tick")
+        browser_interval(4500, "rot_tick")
     }
 }
 

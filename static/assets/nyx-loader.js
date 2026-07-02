@@ -7,22 +7,19 @@
 // restantes hacen nyxReady.then(...).catch(...): si el wasm no carga, cada uno
 // pinta su aviso. Subir el ?v= de este archivo y del .wasm JUNTOS
 // (ver deploy/build-wasm.sh).
-import { runNyxWasm, domBindings } from '/assets/nyx-wasi-shim.js?v=7';
+import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=8';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=7')).arrayBuffer();
+  const bytes = await (await fetch('/assets/veninfo.wasm?v=8')).arrayBuffer();
   const dom = domBindings();
+  const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref
   const call = (h, ...args) => { if (ref.exports && ref.exports[h]) ref.exports[h](...args); };
   const r = await runNyxWasm(bytes, { js: (nyx) => {
     const S = (p) => nyx.readString(p), M = (s) => nyx.makeString(s);
     return {
     ...dom.imports(nyx),
-    // — Estado del navegador —
-    js_ls_get: (k) => { let v = null; try { v = localStorage.getItem(S(k)); } catch (e) {} return M(v ?? ''); },
-    js_ls_set: (k, v) => { try { localStorage.setItem(S(k), S(v)); } catch (e) {} },
-    js_tz_offset_min: () => BigInt(-new Date().getTimezoneOffset()),
-    js_media: (q) => BigInt(window.matchMedia && matchMedia(S(q)).matches ? 1 : 0),
+    ...br.imports(nyx),   // std/browser: js_browser_fetch/interval/timeout/clear_timer/geo, js_ls_get/set, js_tz_offset, js_match_media
     // — DOM extra (hasta que std/dom lo cubra) —
     js_set_attr: (sel, name, val) => { const el = document.querySelector(S(sel)); if (el) el.setAttribute(S(name), S(val)); },
     js_remove_attr: (sel, name) => { const el = document.querySelector(S(sel)); if (el) el.removeAttribute(S(name)); },
@@ -39,20 +36,8 @@ window.nyxReady = (async () => {
       if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(full).then(flash, () => prompt('Copia el enlace:', full)); return; }
       try { const ta = document.createElement('textarea'); ta.value = full; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); flash(); } catch (e) { prompt('Copia el enlace:', full); }
     },
-    // — Red: fetch con callback(status:int, body:String); error de red → status 0 —
-    js_fetch: (url, method, body, handler) => {
-      const u = S(url), m = S(method) || 'GET', b = S(body), h = S(handler);
-      const opts = { method: m };
-      if (b) { opts.body = b; opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' }; }
-      fetch(u, opts).then(async (resp) => {
-        const t = await resp.text();
-        call(h, BigInt(resp.status), nyx.makeString(t));
-      }).catch(() => { call(h, 0n, nyx.makeString('')); });
-    },
-    // — Timers: el handler re-entra sin argumentos —
-    js_interval: (ms, handler) => { const h = S(handler); setInterval(() => call(h), Number(ms)); },
-    js_timeout: (ms, handler) => { const h = S(handler); setTimeout(() => call(h), Number(ms)); },
     // — Geolocalización: ok → handler(lat:String, lon:String); error → err_handler() ("" = ignorar) —
+    //   (se queda local: std/browser.browser_geo no propaga el err_handler) —
     js_geo: (handler, err_handler) => {
       const h = S(handler), he = S(err_handler);
       if (!navigator.geolocation) { if (he) call(he); return; }
@@ -84,6 +69,7 @@ window.nyxReady = (async () => {
   }; }});
   ref.exports = r.exports;
   dom.ref.exports = r.exports; // habilita la re-entrada de dom_on
+  br.ref.exports = r.exports;  // habilita las re-entradas de std/browser (fetch/timers/geo)
   const S = (p) => r.nyx.readString(p), M = (s) => r.nyx.makeString(s);
   // El wasm pinta finanzas/clima/sismos/noticias internamente (dom_set_html).
   // Único wrapper con consumidor JS: havKm (quake.js, distancia en el mapa Leaflet).

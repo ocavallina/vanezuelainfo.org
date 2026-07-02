@@ -8,6 +8,7 @@
 
 import "std/dom"
 import "std/url"
+import "std/browser"
 // Módulos del front (scope global plano; se re-inlinan en una sola unidad).
 import "common"
 import "finanzas"
@@ -17,22 +18,15 @@ import "noticias"
 
 // ── Pasarela de capacidades del navegador (los provee nyx-loader.js) ────────
 // Patrón callback-por-NOMBRE-de-export (como dom_on): lo async re-entra al
-// módulo llamando al export indicado. Ver HANDOFF-veninfo-front.md (tarea 6:
-// formalizar esto como std/browser).
-extern "js" fn js_fetch(url: String, method: String, body: String, handler: String)
-extern "js" fn js_interval(ms: int, handler: String)
-extern "js" fn js_timeout(ms: int, handler: String)
+// módulo llamando al export indicado. fetch/timers/localStorage/tz/media ahora
+// vienen de std/browser (browser_fetch/browser_interval/…/ls_get/ls_set/
+// tz_offset/match_media). Se quedan como externs propios los que std/browser NO
+// cubre o cubriría con regresión: js_geo (con err_handler), js_delegate,
+// js_on_enter, js_count, y los js_* de DOM extra (set_attr/…/set_value/share).
 extern "js" fn js_geo(handler: String, err_handler: String)
 extern "js" fn js_delegate(cont: String, item: String, attr: String, hidden: String, handler: String)
 extern "js" fn js_on_enter(sel: String, handler: String)
-extern "js" fn js_media(q: String) -> int
 extern "js" fn js_count(sel: String) -> int
-extern "js" fn js_tz_offset_min() -> int
-
-// Externs propios extra (los provee static/assets/nyx-loader.js). Van aquí
-// (no en sismos) porque finanzas/clima también los usan (scope global plano).
-extern "js" fn js_ls_get(k: String) -> String
-extern "js" fn js_ls_set(k: String, v: String)
 extern "js" fn js_set_attr(sel: String, name: String, val: String)
 extern "js" fn js_remove_attr(sel: String, name: String)
 extern "js" fn js_toggle_class(sel: String, cls: String, on: int)

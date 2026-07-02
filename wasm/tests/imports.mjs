@@ -25,17 +25,21 @@ export default (nyx) => ({
   js_remove_attr: (sel, name) => { console.log("[remove_attr]", nyx.readString(sel), nyx.readString(name)); },
   js_toggle_class: (sel, cls, on) => { const rec = { sel: nyx.readString(sel), cls: nyx.readString(cls), on: Number(on) }; toggles.push(rec); console.log("[toggle_class]", rec.sel, rec.cls, rec.on); },
   js_set_value: (sel, v) => { values[nyx.readString(sel)] = nyx.readString(v); },
-  // Pasarela (fase A): en el test no hay red ni timers reales — se registran
-  // las llamadas y el test dispara los handlers a mano con fixtures.
-  js_fetch: (url, method, body, handler) => { fetches.push({ url: nyx.readString(url), method: nyx.readString(method), handler: nyx.readString(handler) }); },
-  js_interval: (ms, handler) => { timers.push({ kind: "interval", ms: Number(ms), handler: nyx.readString(handler) }); },
-  js_timeout: (ms, handler) => { timers.push({ kind: "timeout", ms: Number(ms), handler: nyx.readString(handler) }); },
+  // std/browser (fase 6): fetch/timers/ls/tz/media. En el test no hay red ni
+  // timers reales — se registran las llamadas y el test dispara los handlers a
+  // mano con fixtures. Nombres = imports que genera std/browser (js_browser_*).
+  js_browser_fetch: (url, method, body, handler) => { fetches.push({ url: nyx.readString(url), method: nyx.readString(method), handler: nyx.readString(handler) }); },
+  js_browser_interval: (ms, handler) => { timers.push({ kind: "interval", ms: Number(ms), handler: nyx.readString(handler) }); return BigInt(timers.length); },
+  js_browser_timeout: (ms, handler) => { timers.push({ kind: "timeout", ms: Number(ms), handler: nyx.readString(handler) }); return BigInt(timers.length); },
+  js_browser_clear_timer: (id) => {},
+  js_browser_geo: (handler) => { console.log("[browser_geo]", nyx.readString(handler)); },
+  js_tz_offset: () => BigInt(TZ_MIN),
+  js_match_media: (q) => 0n,
+  // Externs propios que se quedan locales (no migrados a std/browser)
   js_geo: (handler) => { console.log("[geo]", nyx.readString(handler)); },
   js_delegate: (c, i, a, h, f) => { console.log("[delegate]", nyx.readString(c), nyx.readString(i), "->", nyx.readString(f)); },
   js_on_enter: (sel, handler) => { console.log("[on_enter]", nyx.readString(sel), "->", nyx.readString(handler)); },
-  js_media: (q) => 0n,
   js_count: (sel) => 0n,
-  js_tz_offset_min: () => BigInt(TZ_MIN),
   js_share: (text, url) => { shares.push({ text: nyx.readString(text), url: nyx.readString(url) }); },
 });
 

@@ -311,11 +311,11 @@ fn s_apply_open() {
 
 #[export_name = "s_refiltrar"]
 fn s_refiltrar() {
-    js_ls_set("f_mag", dom_get_value("#f-mag"))
-    js_ls_set("f_text", dom_get_value("#f-text"))
-    js_ls_set("f_orden", dom_get_value("#f-orden"))
+    ls_set("f_mag", dom_get_value("#f-mag"))
+    ls_set("f_text", dom_get_value("#f-text"))
+    ls_set("f_orden", dom_get_value("#f-orden"))
     if s_uloc[0] == 1 {
-        js_ls_set("f_dist", dom_get_value("#f-dist"))
+        ls_set("f_dist", dom_get_value("#f-dist"))
     }
     s_page[0] = 0
     s_render()
@@ -349,7 +349,7 @@ fn s_select() {
 #[export_name = "s_toggle_filtros"]
 fn s_toggle_filtros() {
     if s_open[0] == 1 { s_open[0] = 0 } else { s_open[0] = 1 }
-    if s_open[0] == 1 { js_ls_set("f_open", "1") } else { js_ls_set("f_open", "0") }
+    if s_open[0] == 1 { ls_set("f_open", "1") } else { ls_set("f_open", "0") }
     s_apply_open()
 }
 
@@ -376,7 +376,7 @@ fn s_set_loc_internal(lats: String, lons: String) {
     s_dmax[0] = mx
     js_set_attr("#f-dist", "max", mx.to_string())
     // aplicar f_dist guardado si cabe; si el slider estaba inerte, abrirlo al máximo
-    let sd: String = js_ls_get("f_dist")
+    let sd: String = ls_get("f_dist")
     var sdv: int = 0
     if sd.length() > 0 { sdv = float_to_int(string_to_float(sd)) }
     if sdv > 0 and sdv <= mx {
@@ -441,13 +441,13 @@ fn s_push_row(id: String, epoch: int, iso: String, lats: String, lons: String, d
 
 fn s_finish_load() {
     // Filtros persistidos → controles (js_set_value fija la propiedad .value)
-    let fm: String = js_ls_get("f_mag")
+    let fm: String = ls_get("f_mag")
     if fm.length() > 0 { js_set_value("#f-mag", fm) }
-    let ft: String = js_ls_get("f_text")
+    let ft: String = ls_get("f_text")
     if ft.length() > 0 { js_set_value("#f-text", ft) }
-    let fo: String = js_ls_get("f_orden")
+    let fo: String = ls_get("f_orden")
     if fo.length() > 0 { js_set_value("#f-orden", fo) }
-    let fop: String = js_ls_get("f_open")
+    let fop: String = ls_get("f_open")
     if fop == "1" { s_open[0] = 1 }
     s_apply_open()
 
@@ -539,14 +539,14 @@ fn sismos_boot() {
         dom_set_text("#s-updated", "Actualizado " + uh + ":" + um)
     }
     // Geolocalización: la guardada primero, luego la fresca + refresco cada 2 min
-    let ula: String = js_ls_get("ulat")
-    let ulo: String = js_ls_get("ulon")
+    let ula: String = ls_get("ulat")
+    let ulo: String = ls_get("ulon")
     if ula.length() > 0 and ulo.length() > 0 {
         dom_set_text("#geo-status", "Ubicacion guardada")
         s_set_loc_internal(ula, ulo)
     }
     js_geo("sismos_geo_ok", "")
-    js_interval(120000, "sismos_geo_tick")
+    browser_interval(120000, "sismos_geo_tick")
 }
 
 #[export_name = "sismos_geo_tick"]
@@ -556,8 +556,8 @@ fn sismos_geo_tick() {
 
 #[export_name = "sismos_geo_ok"]
 fn sismos_geo_ok(lat: String, lon: String) {
-    js_ls_set("ulat", lat)
-    js_ls_set("ulon", lon)
+    ls_set("ulat", lat)
+    ls_set("ulon", lon)
     let np: Array = civil_parts(time()).split("|")
     let nh: String = np[3]
     let nm: String = np[4]

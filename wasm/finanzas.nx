@@ -280,12 +280,12 @@ fn fx_on_cripto(status: int, body: String) {
 fn fx_boot(con_cripto: int) {
     fxv = ["", "", "", "", "", ""]
     fxc = ["", "", ""]
-    js_fetch("https://ve.dolarapi.com/v1/dolares", "GET", "", "fx_on_dolares")
-    js_fetch("https://criptoya.com/api/USDT/VES/1", "GET", "", "fx_on_criptoya")
-    js_fetch("https://ve.dolarapi.com/v1/euros", "GET", "", "fx_on_euros")
-    js_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
+    browser_fetch("https://ve.dolarapi.com/v1/dolares", "GET", "", "fx_on_dolares")
+    browser_fetch("https://criptoya.com/api/USDT/VES/1", "GET", "", "fx_on_criptoya")
+    browser_fetch("https://ve.dolarapi.com/v1/euros", "GET", "", "fx_on_euros")
+    browser_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
     if con_cripto == 1 {
-        js_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")
+        browser_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")
         // Calculadora (solo en /finanzas)
         dom_on("#calc-amt", "input", "calc_render")
         dom_on("#calc-from", "change", "calc_render")

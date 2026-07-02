@@ -45,9 +45,9 @@ var cr_sub: Array = [""]
 // (solo la tarjeta) y default Caracas.
 fn wc_load_coords(usa_ulat: int) {
     wc = ["10.4806", "-66.9036", "Caracas"]
-    let sla: String = js_ls_get("w_lat")
-    let slo: String = js_ls_get("w_lon")
-    let snm: String = js_ls_get("w_name")
+    let sla: String = ls_get("w_lat")
+    let slo: String = ls_get("w_lon")
+    let snm: String = ls_get("w_name")
     if sla.length() > 0 and slo.length() > 0 {
         wc[0] = sla
         wc[1] = slo
@@ -55,8 +55,8 @@ fn wc_load_coords(usa_ulat: int) {
         return
     }
     if usa_ulat == 1 {
-        let ula: String = js_ls_get("ulat")
-        let ulo: String = js_ls_get("ulon")
+        let ula: String = ls_get("ulat")
+        let ulo: String = ls_get("ulon")
         if ula.length() > 0 and ulo.length() > 0 {
             wc[0] = ula
             wc[1] = ulo
@@ -70,13 +70,13 @@ fn wc_load_coords(usa_ulat: int) {
 fn wcard_fetch() {
     let la: String = wc[0]
     let lo: String = wc[1]
-    js_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto", "GET", "", "wcard_on_meteo")
+    browser_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto", "GET", "", "wcard_on_meteo")
 }
 
 fn revgeo_fetch(handler: String) {
     let la: String = wc[0]
     let lo: String = wc[1]
-    js_fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" + la + "&longitude=" + lo + "&localityLanguage=es", "GET", "", handler)
+    browser_fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" + la + "&longitude=" + lo + "&localityLanguage=es", "GET", "", handler)
 }
 
 #[export_name = "wcard_on_meteo"]
@@ -115,15 +115,15 @@ fn wcard_on_revgeo(status: int, body: String) {
     if cc.length() == 0 { return }
     wc[2] = cc
     dom_set_text("#w-city-name", cc)
-    js_ls_set("w_name", cc)
+    ls_set("w_name", cc)
 }
 
 #[export_name = "wcard_geo_ok"]
 fn wcard_geo_ok(lat: String, lon: String) {
     wc[0] = lat
     wc[1] = lon
-    js_ls_set("w_lat", lat)
-    js_ls_set("w_lon", lon)
+    ls_set("w_lat", lat)
+    ls_set("w_lon", lon)
     wcard_fetch()
     revgeo_fetch("wcard_on_revgeo")
 }
@@ -147,8 +147,8 @@ fn clima_fetch_all() {
     let nm: String = wc[2]
     dom_set_text("#c-title", nm)
     dom_set_text("#c-actual", "Cargando…")
-    js_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto", "GET", "", "clima_on_forecast")
-    js_fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + la + "&longitude=" + lo + "&current=pm2_5,pm10,us_aqi&timezone=auto", "GET", "", "clima_on_aire")
+    browser_fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto", "GET", "", "clima_on_forecast")
+    browser_fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + la + "&longitude=" + lo + "&current=pm2_5,pm10,us_aqi&timezone=auto", "GET", "", "clima_on_aire")
 }
 
 // "2026-07-02T06:15" local → "06:15"
@@ -213,7 +213,7 @@ fn clima_render_horas(body: String) {
     let probs: Array = jarr(hr, "precipitation_probability")
     let codes: Array = jarr(hr, "weather_code")
     // "ahora" en hora local plana (los ISO de Open-Meteo son locales)
-    let now_loc: int = time() + js_tz_offset_min() * 60
+    let now_loc: int = time() + tz_offset() * 60
     var out: String = ""
     var cnt: int = 0
     var i: int = 0
@@ -305,7 +305,7 @@ fn clima_buscar() {
     let term: String = dom_get_value("#c-q").trim()
     if term.length() == 0 { return }
     dom_set_text("#c-results", "Buscando…")
-    js_fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + url_encode(term) + "&count=6&language=es", "GET", "", "clima_on_geo")
+    browser_fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + url_encode(term) + "&count=6&language=es", "GET", "", "clima_on_geo")
 }
 
 #[export_name = "clima_on_geo"]
@@ -357,9 +357,9 @@ fn clima_set_city(la: String, lo: String, nm: String) {
     wc[0] = la
     wc[1] = lo
     wc[2] = nm
-    js_ls_set("w_lat", la)
-    js_ls_set("w_lon", lo)
-    js_ls_set("w_name", nm)
+    ls_set("w_lat", la)
+    ls_set("w_lon", lo)
+    ls_set("w_name", nm)
     clima_fetch_all()
 }
 

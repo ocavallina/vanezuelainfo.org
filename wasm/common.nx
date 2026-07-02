@@ -127,7 +127,7 @@ fn iso_to_epoch(iso: String) -> int {
 
 // epoch UTC -> "y|m|d|hh|mm" en hora LOCAL del navegador
 fn civil_parts(epoch_utc: int) -> String {
-    let loc: int = epoch_utc + js_tz_offset_min() * 60
+    let loc: int = epoch_utc + tz_offset() * 60
     var z: int = loc / 86400
     let sod: int = loc % 86400
     z = z + 719468
