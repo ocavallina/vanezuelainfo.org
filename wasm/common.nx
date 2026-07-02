@@ -1,0 +1,276 @@
+// ── Helpers puros compartidos (fase 1) ──────────────────────────────────────
+
+// Código WMO → "texto|icono" (tarjeta del clima y página /clima)
+#[export_name = "wdesc"]
+fn wdesc(c: int) -> String {
+    if c == 0 { return "Despejado|☀" }
+    if c == 1 or c == 2 { return "Parcialmente nublado|⛅" }
+    if c == 3 { return "Nublado|☁" }
+    if c == 45 or c == 48 { return "Niebla|☁" }
+    if c >= 51 and c <= 57 { return "Llovizna|☔" }
+    if c >= 61 and c <= 67 { return "Lluvia|☔" }
+    if c >= 71 and c <= 77 { return "Nieve|❄" }
+    if c >= 80 and c <= 82 { return "Chubascos|☔" }
+    if c >= 95 { return "Tormenta|⛈" }
+    return "Clima|☁"
+}
+
+// Delta en segundos → "hace X s/min/h/d" (fechas de noticias)
+#[export_name = "rel_time"]
+fn rel_time(delta_s: int) -> String {
+    var s: int = delta_s
+    if s < 0 { s = 0 }
+    if s < 60 { return "hace " + s.to_string() + " s" }
+    if s < 3600 { return "hace " + (s / 60).to_string() + " min" }
+    if s < 86400 { return "hace " + (s / 3600).to_string() + " h" }
+    return "hace " + (s / 86400).to_string() + " d"
+}
+
+// Grados → punto cardinal (viento en /clima). Igual que el JS original:
+// round(deg/45) % 8 sobre [N, NE, E, SE, S, SO, O, NO]
+#[export_name = "compass"]
+fn compass(deg: int) -> String {
+    var d: int = deg % 360
+    if d < 0 { d = d + 360 }
+    let idx: int = ((d + 22) / 45) % 8
+    if idx == 0 { return "N" }
+    if idx == 1 { return "NE" }
+    if idx == 2 { return "E" }
+    if idx == 3 { return "SE" }
+    if idx == 4 { return "S" }
+    if idx == 5 { return "SO" }
+    if idx == 6 { return "O" }
+    return "NO"
+}
+
+// AQI (US) → "etiqueta|#color" (calidad del aire en /clima)
+#[export_name = "aqi_label"]
+fn aqi_label(v: int) -> String {
+    if v <= 50 { return "Buena|#2e7d32" }
+    if v <= 100 { return "Moderada|#f9a825" }
+    if v <= 150 { return "Danina (sensibles)|#ef6c00" }
+    if v <= 200 { return "Danina|#c62828" }
+    if v <= 300 { return "Muy danina|#6a1b9a" }
+    return "Peligrosa|#4a148c"
+}
+
+// Haversine en km (redondeado a entero). Coordenadas como String porque los
+// floats no cruzan la frontera JS. Usado por /sismos y /sismos/{id}.
+fn hav_f(la1: float, lo1: float, la2: float, lo2: float) -> float {
+    let t: float = 3.141592653589793 / 180.0
+    let dla: float = (la2 - la1) * t
+    let dlo: float = (lo2 - lo1) * t
+    let a: float = math_sin(dla / 2.0) * math_sin(dla / 2.0) + math_cos(la1 * t) * math_cos(la2 * t) * math_sin(dlo / 2.0) * math_sin(dlo / 2.0)
+    return 6371.0 * 2.0 * math_atan2(math_sqrt(a), math_sqrt(1.0 - a))
+}
+
+#[export_name = "hav_km"]
+fn hav_km(la1s: String, lo1s: String, la2s: String, lo2s: String) -> String {
+    let la1: float = string_to_float(la1s)
+    let lo1: float = string_to_float(lo1s)
+    let la2: float = string_to_float(la2s)
+    let lo2: float = string_to_float(lo2s)
+    let d: float = hav_f(la1, lo1, la2, lo2)
+    let km: int = float_to_int(d + 0.5)
+    return km.to_string()
+}
+
+// ── Formateo de números estilo es-VE / es-CO ────────────────────────────────
+
+fn pad2(n: int) -> String {
+    if n < 10 { return "0" + n.to_string() }
+    return n.to_string()
+}
+
+// ── Fechas: ISO → epoch UTC y epoch → hora local del navegador ──────────────
+// (algoritmo de días civiles de Hinnant; el offset local viene de js_tz_offset_min)
+
+fn days_from_civil(y: int, m: int, d: int) -> int {
+    var yy: int = y
+    if m <= 2 { yy = yy - 1 }
+    let era: int = yy / 400
+    let yoe: int = yy - era * 400
+    var mp: int = m - 3
+    if m <= 2 { mp = m + 9 }
+    let doy: int = (153 * mp + 2) / 5 + d - 1
+    let doe: int = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+// "2026-07-02T13:01[:09[.862]][Z|±HH:MM]" -> epoch UTC en segundos (0 si corto).
+// Sin sufijo de zona se asume UTC (o "tiempo local plano", útil para comparar
+// los ISO locales de Open-Meteo entre sí).
+fn iso_to_epoch(iso: String) -> int {
+    if iso.length() < 16 { return 0 }
+    let y: int = float_to_int(string_to_float(iso.substring(0, 4)))
+    let mo: int = float_to_int(string_to_float(iso.substring(5, 7)))
+    let d: int = float_to_int(string_to_float(iso.substring(8, 10)))
+    let h: int = float_to_int(string_to_float(iso.substring(11, 13)))
+    let mi: int = float_to_int(string_to_float(iso.substring(14, 16)))
+    var se: int = 0
+    if iso.length() >= 19 and iso.substring(16, 17) == ":" {
+        se = float_to_int(string_to_float(iso.substring(17, 19)))
+    }
+    var ep: int = days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + se
+    let ln: int = iso.length()
+    if ln >= 22 {
+        let sgn: String = iso.substring(ln - 6, ln - 5)
+        if sgn == "+" or sgn == "-" {
+            let oh: int = float_to_int(string_to_float(iso.substring(ln - 5, ln - 3)))
+            let om: int = float_to_int(string_to_float(iso.substring(ln - 2, ln)))
+            let off: int = oh * 3600 + om * 60
+            if sgn == "+" { ep = ep - off } else { ep = ep + off }
+        }
+    }
+    return ep
+}
+
+// epoch UTC -> "y|m|d|hh|mm" en hora LOCAL del navegador
+fn civil_parts(epoch_utc: int) -> String {
+    let loc: int = epoch_utc + js_tz_offset_min() * 60
+    var z: int = loc / 86400
+    let sod: int = loc % 86400
+    z = z + 719468
+    let era: int = z / 146097
+    let doe: int = z - era * 146097
+    let yoe: int = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    var y: int = yoe + era * 400
+    let doy: int = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp: int = (5 * doy + 2) / 153
+    let d: int = doy - (153 * mp + 2) / 5 + 1
+    var m: int = mp + 3
+    if mp >= 10 { m = mp - 9 }
+    if m <= 2 { y = y + 1 }
+    let h: int = sod / 3600
+    let mi: int = (sod % 3600) / 60
+    return y.to_string() + "|" + m.to_string() + "|" + d.to_string() + "|" + pad2(h) + "|" + pad2(mi)
+}
+
+// epoch UTC -> "2/7/2026 13:01" local (formato del pie de finanzas)
+fn fmt_dmy_hm(epoch_utc: int) -> String {
+    let parts: Array = civil_parts(epoch_utc).split("|")
+    let y: String = parts[0]
+    let m: String = parts[1]
+    let d: String = parts[2]
+    let h: String = parts[3]
+    let mi: String = parts[4]
+    return d + "/" + m + "/" + y + " " + h + ":" + mi
+}
+
+// ── Scanning manual de JSON ──────────────────────────────────────────────────
+// std/json trunca floats (tarea 1 del HANDOFF), así que los valores numéricos
+// se extraen a mano. Tolera JSON con espacios/saltos tras los ":" (dolarapi).
+
+// Posición del valor tras "key" (saltando : y whitespace); -1 si no está.
+fn jvalpos(body: String, key: String) -> int {
+    let a: String = "\"" + key + "\""
+    let p: int = body.indexOf(a)
+    if p < 0 { return 0 - 1 }
+    var i: int = p + a.length()
+    var go: int = 1
+    while go == 1 and i < body.length() {
+        let c: String = body.substring(i, i + 1)
+        if c == ":" or c == " " or c == "\n" or c == "\t" or c == "\r" {
+            i = i + 1
+        } else {
+            go = 0
+        }
+    }
+    return i
+}
+
+// Literal numérico crudo tras "key" ("" si no está o es null).
+fn jnum(body: String, key: String) -> String {
+    let i0: int = jvalpos(body, key)
+    if i0 < 0 { return "" }
+    var i: int = i0
+    var out: String = ""
+    var go: int = 1
+    while go == 1 and i < body.length() {
+        let c: String = body.substring(i, i + 1)
+        if "0123456789.-".indexOf(c) >= 0 {
+            out = out + c
+            i = i + 1
+        } else {
+            go = 0
+        }
+    }
+    return out
+}
+
+// Valor string tras "key" ("" si no está o no es string).
+fn jstr(body: String, key: String) -> String {
+    let i0: int = jvalpos(body, key)
+    if i0 < 0 { return "" }
+    if body.substring(i0, i0 + 1) != "\"" { return "" }
+    let rest: String = body.substring(i0 + 1, body.length())
+    let q: int = rest.indexOf("\"")
+    if q < 0 { return "" }
+    return rest.substring(0, q)
+}
+
+// Recorte del objeto que EMPIEZA en la primera aparición de marker (hasta su
+// "}"). Suficiente para objetos planos (dolarapi item, binancep2p, bitcoin…).
+fn jseg(body: String, marker: String) -> String {
+    let p: int = body.indexOf(marker)
+    if p < 0 { return "" }
+    let rest: String = body.substring(p, body.length())
+    let e: int = rest.indexOf("}")
+    if e < 0 { return rest }
+    return rest.substring(0, e)
+}
+
+// Agrupa miles con "." (es-VE y es-CO usan el mismo separador)
+fn group_miles(n: int) -> String {
+    let s: String = n.to_string()
+    let ln: int = s.length()
+    if ln <= 3 { return s }
+    var out: String = ""
+    var i: int = 0
+    while i < ln {
+        if i > 0 and (ln - i) % 3 == 0 {
+            out = out + "."
+        }
+        out = out + s.substring(i, i + 1)
+        i = i + 1
+    }
+    return out
+}
+
+// Formateo estilo toLocaleString es-VE/es-CO: miles con ".", decimales con
+// ",", entre min_d y max_d decimales (los ceros finales se recortan hasta min_d)
+fn fmt_f(v: float, min_d: int, max_d: int) -> String {
+    var scale: int = 1
+    var i: int = 0
+    while i < max_d {
+        scale = scale * 10
+        i = i + 1
+    }
+    let n: int = float_to_int(v * int_to_float(scale) + 0.5)
+    let ip: int = n / scale
+    let fr: int = n % scale
+    var fs: String = fr.to_string()
+    while fs.length() < max_d {
+        fs = "0" + fs
+    }
+    while fs.length() > min_d and fs.endsWith("0") {
+        fs = fs.substring(0, fs.length() - 1)
+    }
+    if fs.length() == 0 or max_d == 0 {
+        return group_miles(ip)
+    }
+    return group_miles(ip) + "," + fs
+}
+
+// Float (como String) → "1.234,56" (es-VE, 2 decimales)
+#[export_name = "fmt_bs"]
+fn fmt_bs(vs: String) -> String {
+    return fmt_f(string_to_float(vs), 2, 2)
+}
+
+// Float (como String) → "4.124" (es-CO, 0 decimales, redondeado)
+#[export_name = "fmt_cop"]
+fn fmt_cop(vs: String) -> String {
+    return fmt_f(string_to_float(vs), 0, 0)
+}
+

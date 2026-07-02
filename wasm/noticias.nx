@@ -1,0 +1,61 @@
+// ── Rotador de titulares y expand de noticias (fase E) ──────────────────────
+// El rotador marca el slide activo con la clase .on vía :nth-child; el CSS
+// (.rot-live en el stage) apaga el fallback estático de :first-child. El
+// expand usa js_delegate + data-idx (los clicks en <a> se ignoran en la
+// pasarela, así los enlaces siguen navegando).
+
+var rot_n: Array = [0]
+var rot_i: Array = [0]
+var n_open: Array = [0]
+
+fn rot_mark(k: int, on: int) {
+    js_toggle_class(".news-rot .rot-slide:nth-child(" + (k + 1).to_string() + ")", "on", on)
+}
+
+#[export_name = "rot_tick"]
+fn rot_tick() {
+    if rot_n[0] < 2 { return }
+    rot_mark(rot_i[0], 0)
+    rot_i[0] = (rot_i[0] + 1) % rot_n[0]
+    rot_mark(rot_i[0], 1)
+}
+
+fn rot_boot() {
+    rot_n = [0]
+    rot_i = [0]
+    if js_media("(prefers-reduced-motion: reduce)") == 1 {
+        return // sin animación: el CSS estático deja visible el primer slide
+    }
+    let n: int = js_count(".news-rot .rot-slide")
+    if n <= 0 { return }
+    rot_n[0] = n
+    js_toggle_class(".news-rot .rot-stage", "rot-live", 1)
+    rot_mark(0, 1)
+    if n > 1 {
+        js_interval(4500, "rot_tick")
+    }
+}
+
+// Despliegue/colapso del detalle de una noticia (uno a la vez)
+#[export_name = "news_toggle"]
+fn news_toggle() {
+    let iv: String = dom_get_value("#n-sel")
+    if iv.length() == 0 { return }
+    let idx: int = float_to_int(string_to_float(iv))
+    if idx < 1 { return }
+    let cur: int = n_open[0]
+    if cur > 0 {
+        js_toggle_class(".news-list .news-item:nth-child(" + cur.to_string() + ")", "open", 0)
+    }
+    if idx == cur {
+        n_open[0] = 0
+        return
+    }
+    js_toggle_class(".news-list .news-item:nth-child(" + idx.to_string() + ")", "open", 1)
+    n_open[0] = idx
+}
+
+fn news_boot() {
+    n_open = [0]
+    js_delegate(".news-list", ".news-item", "data-idx", "#n-sel", "news_toggle")
+}

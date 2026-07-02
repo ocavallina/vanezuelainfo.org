@@ -93,10 +93,14 @@ src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenid
                  editable desde el panel admin. render_baquiano_index/zone() + baquiano_card().
 src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
                  baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
-wasm/veninfo.nx  Módulo Nyx→WASM del front (UN solo archivo: make wasm no resuelve imports
-                 locales). Secciones: pasarela (externs) / helpers puros / fechas (iso_to_epoch,
-                 civil_parts) / scanners JSON (jnum/jstr/jseg/jarr — std/json trunca floats) /
-                 finanzas / clima / sismos / rotador+expand / main() router por #pg.
+wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques de externs
+                 (pasarela) + main() router por #pg. PARTIDO en módulos (make wasm ya resuelve
+                 imports project-relative vía NYX_PROJECT_DIR=$PROJ/wasm; scope global plano →
+                 símbolos visibles entre archivos, NO redeclarar). Módulos hermanos en wasm/:
+                 common.nx (helpers puros / fechas iso_to_epoch,civil_parts / scanners JSON
+                 jnum/jstr/jseg — std/json ya NO trunca floats pero su adopción está diferida) /
+                 finanzas.nx (calculadora + fx_*) / clima.nx / sismos.nx / noticias.nx
+                 (rotador+expand). build-wasm.sh sigue pasando solo FILE=wasm/veninfo.nx.
 wasm/tests/imports.mjs  Test headless (mocks DOM/localStorage/pasarela + fixtures reales):
                  node NyxLang/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).

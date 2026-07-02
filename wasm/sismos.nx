@@ -1,0 +1,566 @@
+// ── Sismos (fase 3) ─────────────────────────────────────────────────────────
+// sismos.js serializa UNA vez las filas <tr data-*> que renderizó el servidor
+// (registros por "\n", campos por "\t") y llama sismos_load. Filtrado, orden,
+// paginación, selección y destacado 24h viven aquí; el tbody de la página
+// visible se regenera con dom_set_html. La geolocalización y los timers se
+// quedan en sismos.js (no existen en wasm). El MARKUP de fila debe ser
+// idéntico al de render_quakes en src/sismos.nx (duplicación consciente).
+
+
+fn esc(s: String) -> String {
+    var out: String = s.replace("&", "&amp;")
+    out = out.replace("<", "&lt;")
+    out = out.replace(">", "&gt;")
+    out = out.replace("\"", "&quot;")
+    return out
+}
+
+// Estado del módulo: arrays paralelos por sismo + holders escalares de 1
+// elemento (patrón del proyecto: los literales globales multi-elemento no se
+// materializan fiables; TODO se reasigna en sismos_load).
+var s_id: Array = [""]
+var s_iso: Array = [""]
+var s_dia: Array = [""]
+var s_hora: Array = [""]
+var s_depth: Array = [""]
+var s_mtype: Array = [""]
+var s_mag: Array = [""]
+var s_place: Array = [""]
+var s_lats: Array = [""]
+var s_lons: Array = [""]
+var s_epoch: Array = [0]
+var s_lat4: Array = [0]
+var s_lon4: Array = [0]
+var s_mag10: Array = [0]
+var s_dist: Array = [0]
+var s_n: Array = [0]
+var s_page: Array = [0]
+var s_sel: Array = [""]
+var s_uloc: Array = [0]
+var s_ulat4: Array = [0]
+var s_ulon4: Array = [0]
+var s_dmax: Array = [0]
+var s_open: Array = [0]
+
+fn s_minmag10() -> int {
+    let v: String = dom_get_value("#f-mag")
+    if v.length() == 0 { return 0 }
+    return float_to_int(string_to_float(v) * 10.0 + 0.5)
+}
+
+// Distancia máxima activa del slider (0 = sin límite)
+fn s_maxdist() -> int {
+    if s_uloc[0] == 0 { return 0 }
+    let v: String = dom_get_value("#f-dist")
+    if v.length() == 0 { return 0 }
+    let d: int = float_to_int(string_to_float(v))
+    let mx: int = s_dmax[0]
+    if d >= mx { return 0 }
+    return d
+}
+
+fn s_orden() -> String {
+    let v: String = dom_get_value("#f-orden")
+    if v.length() == 0 { return "fecha" }
+    return v
+}
+
+// ¿La fila i pasa los filtros actuales?
+fn s_passes(i: int, minmag: int, maxd: int, q: String) -> int {
+    let m: int = s_mag10[i]
+    if m < minmag { return 0 }
+    if maxd > 0 {
+        let d: int = s_dist[i]
+        if d >= 0 and d > maxd { return 0 }
+    }
+    if q.length() > 0 {
+        let pl: String = s_place[i]
+        if pl.toLower().indexOf(q) < 0 { return 0 }
+    }
+    return 1
+}
+
+// ¿idx[a] debe ir DESPUÉS de idx[b] según el orden elegido?
+fn s_after(ia: int, ib: int, ord: String) -> int {
+    if ord == "distancia" and s_uloc[0] == 1 {
+        let da: int = s_dist[ia]
+        let db: int = s_dist[ib]
+        if da < 0 { return 1 }
+        if db < 0 { return 0 }
+        if da > db { return 1 }
+        return 0
+    }
+    if ord == "magnitud" {
+        let ma: int = s_mag10[ia]
+        let mb: int = s_mag10[ib]
+        if ma < mb { return 1 }
+        if ma > mb { return 0 }
+    }
+    let ea: int = s_epoch[ia]
+    let eb: int = s_epoch[ib]
+    if ea < eb { return 1 }
+    return 0
+}
+
+// Fila de la tabla (MISMO markup que render_quakes en src/sismos.nx, pero con
+// fecha/hora local y la clase sel inline). Se escribe sobre el StringBuilder
+// del render para minimizar strings intermedios (sin GC en wasm).
+fn s_row_html(sb: StringBuilder, i: int, seld: int) {
+    let id: String = s_id[i]
+    let dia: String = s_dia[i]
+    let hora: String = s_hora[i]
+    let mag: String = s_mag[i]
+    let depth: String = s_depth[i]
+    let place: String = s_place[i]
+    sb.append("<tr data-id=\"")
+    sb.append(esc(id))
+    if seld == 1 { sb.append("\" class=\"sel") }
+    sb.append("\" style=\"cursor:pointer\"><td class=\"fh\"><span class=\"f-dia\">")
+    sb.append(esc(dia))
+    sb.append("</span><span class=\"f-hora\">")
+    sb.append(esc(hora))
+    sb.append("</span></td><td class=\"mag\">")
+    sb.append(esc(mag))
+    sb.append("</td><td>")
+    if depth.length() > 0 {
+        sb.append(esc(depth))
+        sb.append(" km")
+    } else {
+        sb.append("-")
+    }
+    sb.append("</td><td>")
+    sb.append(esc(place))
+    sb.append("</td><td class=\"dist\">")
+    let d: int = s_dist[i]
+    if d >= 0 {
+        sb.append(d.to_string())
+        sb.append(" km")
+    } else {
+        sb.append("&mdash;")
+    }
+    sb.append("</td></tr>\n")
+}
+
+// Fila de detalle desplegable bajo la fila seleccionada
+fn s_detail_html(sb: StringBuilder, i: int) {
+    let id: String = s_id[i]
+    let mag: String = s_mag[i]
+    let mtype: String = s_mtype[i]
+    let place: String = s_place[i]
+    let dia: String = s_dia[i]
+    let hora: String = s_hora[i]
+    let depth: String = s_depth[i]
+    let lats: String = s_lats[i]
+    let lons: String = s_lons[i]
+    sb.append("<tr class=\"detalle-row\"><td colspan=\"5\"><div class=\"detalle-band\"><b>M ")
+    sb.append(esc(mag))
+    sb.append(" ")
+    sb.append(esc(mtype))
+    sb.append("</b> &mdash; ")
+    sb.append(esc(place))
+    sb.append("<br>Fecha: ")
+    sb.append(esc(dia))
+    sb.append(" ")
+    sb.append(esc(hora))
+    sb.append("<br>Profundidad: ")
+    sb.append(esc(depth))
+    sb.append(" km<br>Coordenadas: ")
+    sb.append(esc(lats))
+    sb.append(", ")
+    sb.append(esc(lons))
+    let d: int = s_dist[i]
+    if d >= 0 {
+        sb.append("<br>Distancia desde ti: ")
+        sb.append(d.to_string())
+        sb.append(" km")
+    }
+    sb.append("<div class=\"detalle-acciones\"><a class=\"btn-map\" href=\"/sismos/")
+    sb.append(esc(id))
+    sb.append("\">Ver mapa y detalle &rarr;</a></div></div></td></tr>\n")
+}
+
+fn s_render() {
+    let minmag: int = s_minmag10()
+    let maxd: int = s_maxdist()
+    let q: String = dom_get_value("#f-text").toLower()
+    let ord: String = s_orden()
+
+    // Filtrar
+    var idx: Array = []
+    var i: int = 0
+    let n: int = s_n[0]
+    while i < n {
+        if s_passes(i, minmag, maxd, q) == 1 {
+            idx.push(i)
+        }
+        i = i + 1
+    }
+    // Ordenar (inserción; <=200 elementos)
+    var a: int = 1
+    while a < idx.length() {
+        let cur: int = idx[a]
+        var b: int = a - 1
+        var done: int = 0
+        while b >= 0 and done == 0 {
+            let pb: int = idx[b]
+            if s_after(pb, cur, ord) == 1 {
+                idx[b + 1] = pb
+                b = b - 1
+            } else {
+                done = 1
+            }
+        }
+        idx[b + 1] = cur
+        a = a + 1
+    }
+    // Paginación
+    let total: int = idx.length()
+    var pages: int = (total + 11) / 12
+    if pages < 1 { pages = 1 }
+    var pg: int = s_page[0]
+    if pg >= pages { pg = pages - 1 }
+    if pg < 0 { pg = 0 }
+    s_page[0] = pg
+    // tbody de la página visible (+ detalle si la fila seleccionada está en ella)
+    var sb: StringBuilder = StringBuilder.new()
+    let sel: String = s_sel[0]
+    var k: int = pg * 12
+    let fin: int = (pg + 1) * 12
+    while k < total and k < fin {
+        let ri: int = idx[k]
+        let rid: String = s_id[ri]
+        var seld: int = 0
+        if sel.length() > 0 and rid == sel { seld = 1 }
+        s_row_html(sb, ri, seld)
+        if seld == 1 {
+            s_detail_html(sb, ri)
+        }
+        k = k + 1
+    }
+    dom_set_html("#qtbody", sb.to_string())
+    dom_set_text("#s-count", total.to_string() + " sismos")
+    dom_set_text("#p-info", (pg + 1).to_string() + " / " + pages.to_string())
+    if pg <= 0 { js_set_attr("#p-prev", "disabled", "") } else { js_remove_attr("#p-prev", "disabled") }
+    if pg >= pages - 1 { js_set_attr("#p-next", "disabled", "") } else { js_remove_attr("#p-next", "disabled") }
+    // Badge de filtros activos + etiqueta del slider
+    var act: int = 0
+    if minmag > 0 or maxd > 0 or q.length() > 0 { act = 1 }
+    js_toggle_class("#filtros-btn", "has-active", act)
+    if s_uloc[0] == 0 {
+        dom_set_text("#f-dist-val", "activa tu ubicacion")
+    } else if maxd == 0 {
+        dom_set_text("#f-dist-val", "sin limite")
+    } else {
+        dom_set_text("#f-dist-val", "hasta " + maxd.to_string() + " km")
+    }
+}
+
+// Tarjeta "más fuerte 24 h" (#sismo-destacado)
+fn s_destacado() {
+    let now: int = time()
+    var best: int = 0 - 1
+    var bm: int = 0 - 1
+    var i: int = 0
+    let n: int = s_n[0]
+    while i < n {
+        let ep: int = s_epoch[i]
+        if ep > 0 and now - ep <= 86400 and ep <= now + 3600 {
+            let m: int = s_mag10[i]
+            if m > bm {
+                bm = m
+                best = i
+            } else if m == bm and best >= 0 {
+                let eb: int = s_epoch[best]
+                if ep > eb { best = i }
+            }
+        }
+        i = i + 1
+    }
+    if best < 0 {
+        js_remove_attr("#sismo-destacado", "href")
+        js_toggle_class("#sismo-destacado", "vacio", 1)
+        dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">Ultimas 24 h</span><span class=\"destacado-info\">Sin sismos registrados</span>")
+        js_remove_attr("#sismo-destacado", "hidden")
+        return
+    }
+    let id: String = s_id[best]
+    let mag: String = s_mag[best]
+    let mtype: String = s_mtype[best]
+    let place: String = s_place[best]
+    let dia: String = s_dia[best]
+    let hora: String = s_hora[best]
+    js_set_attr("#sismo-destacado", "href", "/sismos/" + esc(id))
+    js_toggle_class("#sismo-destacado", "vacio", 0)
+    dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">Mas fuerte (24 h)</span><span class=\"destacado-mag\">M " + esc(mag) + " " + esc(mtype) + "</span><span class=\"destacado-info\">" + esc(place) + " &middot; " + esc(dia) + " " + esc(hora) + "</span>")
+    js_remove_attr("#sismo-destacado", "hidden")
+}
+
+fn s_apply_open() {
+    if s_open[0] == 1 {
+        js_remove_attr("#filtros", "hidden")
+        js_set_attr("#filtros-btn", "aria-expanded", "true")
+        js_toggle_class("#filtros-btn", "on", 1)
+    } else {
+        js_set_attr("#filtros", "hidden", "")
+        js_set_attr("#filtros-btn", "aria-expanded", "false")
+        js_toggle_class("#filtros-btn", "on", 0)
+    }
+}
+
+// Handlers de dom_on (cero argumentos; el contexto va por estado del módulo)
+
+#[export_name = "s_refiltrar"]
+fn s_refiltrar() {
+    js_ls_set("f_mag", dom_get_value("#f-mag"))
+    js_ls_set("f_text", dom_get_value("#f-text"))
+    js_ls_set("f_orden", dom_get_value("#f-orden"))
+    if s_uloc[0] == 1 {
+        js_ls_set("f_dist", dom_get_value("#f-dist"))
+    }
+    s_page[0] = 0
+    s_render()
+}
+
+#[export_name = "s_prev"]
+fn s_prev() {
+    s_page[0] = s_page[0] - 1
+    s_render()
+}
+
+#[export_name = "s_next"]
+fn s_next() {
+    s_page[0] = s_page[0] + 1
+    s_render()
+}
+
+// Selección de fila: sismos.js escribe el data-id clicado en #s-selected
+#[export_name = "s_select"]
+fn s_select() {
+    let id: String = dom_get_value("#s-selected")
+    let cur: String = s_sel[0]
+    if id == cur {
+        s_sel[0] = ""
+    } else {
+        s_sel[0] = id
+    }
+    s_render()
+}
+
+#[export_name = "s_toggle_filtros"]
+fn s_toggle_filtros() {
+    if s_open[0] == 1 { s_open[0] = 0 } else { s_open[0] = 1 }
+    if s_open[0] == 1 { js_ls_set("f_open", "1") } else { js_ls_set("f_open", "0") }
+    s_apply_open()
+}
+
+// Ubicación del usuario (lat/lon como String: los floats no cruzan la frontera)
+fn s_set_loc_internal(lats: String, lons: String) {
+    let la: float = string_to_float(lats)
+    let lo: float = string_to_float(lons)
+    s_ulat4[0] = float_to_int(la * 10000.0)
+    s_ulon4[0] = float_to_int(lo * 10000.0)
+    s_uloc[0] = 1
+    var mx: int = 0
+    var i: int = 0
+    let n: int = s_n[0]
+    while i < n {
+        let rla: float = int_to_float(s_lat4[i]) / 10000.0
+        let rlo: float = int_to_float(s_lon4[i]) / 10000.0
+        let d: int = float_to_int(hav_f(la, lo, rla, rlo) + 0.5)
+        s_dist[i] = d
+        if d > mx { mx = d }
+        i = i + 1
+    }
+    mx = ((mx + 49) / 50) * 50
+    if mx < 50 { mx = 50 }
+    s_dmax[0] = mx
+    js_set_attr("#f-dist", "max", mx.to_string())
+    // aplicar f_dist guardado si cabe; si el slider estaba inerte, abrirlo al máximo
+    let sd: String = js_ls_get("f_dist")
+    var sdv: int = 0
+    if sd.length() > 0 { sdv = float_to_int(string_to_float(sd)) }
+    if sdv > 0 and sdv <= mx {
+        js_set_value("#f-dist", sdv.to_string())
+    } else {
+        js_set_value("#f-dist", mx.to_string())
+    }
+    js_remove_attr("#f-dist", "disabled")
+    s_render()
+}
+
+// Export para la suite de tests (el flujo real entra por sismos_geo_ok)
+#[export_name = "sismos_set_loc"]
+fn sismos_set_loc(lats: String, lons: String) {
+    s_set_loc_internal(lats, lons)
+}
+
+fn s_reset() {
+    s_id = []
+    s_iso = []
+    s_dia = []
+    s_hora = []
+    s_depth = []
+    s_mtype = []
+    s_mag = []
+    s_place = []
+    s_lats = []
+    s_lons = []
+    s_epoch = []
+    s_lat4 = []
+    s_lon4 = []
+    s_mag10 = []
+    s_dist = []
+    s_n = [0]
+    s_page = [0]
+    s_sel = [""]
+    s_uloc = [0]
+    s_ulat4 = [0]
+    s_ulon4 = [0]
+    s_dmax = [0]
+    s_open = [0]
+}
+
+fn s_push_row(id: String, epoch: int, iso: String, lats: String, lons: String, depth: String, mtype: String, mag: String, place: String, dia: String, hora: String) {
+    s_id.push(id)
+    s_epoch.push(epoch)
+    s_iso.push(iso)
+    s_lats.push(lats)
+    s_lons.push(lons)
+    s_lat4.push(float_to_int(string_to_float(lats) * 10000.0))
+    s_lon4.push(float_to_int(string_to_float(lons) * 10000.0))
+    s_depth.push(depth)
+    s_mtype.push(mtype)
+    s_mag.push(mag)
+    s_mag10.push(float_to_int(string_to_float(mag) * 10.0 + 0.5))
+    s_place.push(place)
+    s_dia.push(dia)
+    s_hora.push(hora)
+    s_dist.push(0 - 1)
+    s_n[0] = s_n[0] + 1
+}
+
+fn s_finish_load() {
+    // Filtros persistidos → controles (js_set_value fija la propiedad .value)
+    let fm: String = js_ls_get("f_mag")
+    if fm.length() > 0 { js_set_value("#f-mag", fm) }
+    let ft: String = js_ls_get("f_text")
+    if ft.length() > 0 { js_set_value("#f-text", ft) }
+    let fo: String = js_ls_get("f_orden")
+    if fo.length() > 0 { js_set_value("#f-orden", fo) }
+    let fop: String = js_ls_get("f_open")
+    if fop == "1" { s_open[0] = 1 }
+    s_apply_open()
+
+    // Listeners (por NOMBRE de export; re-entran a este módulo)
+    dom_on("#f-mag", "change", "s_refiltrar")
+    dom_on("#f-text", "change", "s_refiltrar")
+    dom_on("#f-orden", "change", "s_refiltrar")
+    dom_on("#f-dist", "change", "s_refiltrar")
+    dom_on("#p-prev", "click", "s_prev")
+    dom_on("#p-next", "click", "s_next")
+    dom_on("#filtros-btn", "click", "s_toggle_filtros")
+    js_delegate(".tabla-scroll", "tr[data-id]", "data-id", "#s-selected", "s_select")
+
+    s_destacado()
+    s_render()
+}
+
+// Carga desde serialización de 11 campos (id, epoch, iso, lat, lon, depth,
+// type, mag, place, dia, hora) — la usa la suite de tests.
+#[export_name = "sismos_load"]
+fn sismos_load(data: String) {
+    s_reset()
+    let recs: Array = data.split("\n")
+    var i: int = 0
+    while i < recs.length() {
+        let rec: String = recs[i]
+        let f: Array = rec.split("\t")
+        if f.length() >= 11 {
+            let f0: String = f[0]
+            let f1: String = f[1]
+            let f2: String = f[2]
+            let f3: String = f[3]
+            let f4: String = f[4]
+            let f5: String = f[5]
+            let f6: String = f[6]
+            let f7: String = f[7]
+            let f8: String = f[8]
+            let f9: String = f[9]
+            let f10: String = f[10]
+            s_push_row(f0, float_to_int(string_to_float(f1)), f2, f3, f4, f5, f6, f7, f8, f9, f10)
+        }
+        i = i + 1
+    }
+    s_finish_load()
+}
+
+// Arranque REAL de /sismos: lee el <textarea id="s-data"> que emite el
+// servidor (8 campos: id, iso, lat, lon, depth, type, mag, place), deriva
+// epoch y fecha/hora LOCAL él mismo, y arranca geolocalización y reloj.
+#[export_name = "sismos_boot"]
+fn sismos_boot() {
+    let data: String = dom_get_value("#s-data")
+    if data.length() == 0 { return }
+    s_reset()
+    let recs: Array = data.split("\n")
+    var i: int = 0
+    while i < recs.length() {
+        let rec: String = recs[i]
+        let f: Array = rec.split("\t")
+        if f.length() >= 8 {
+            let id: String = f[0]
+            let iso: String = f[1]
+            let lats: String = f[2]
+            let lons: String = f[3]
+            let depth: String = f[4]
+            let mtype: String = f[5]
+            let mag: String = f[6]
+            let place: String = f[7]
+            let ep: int = iso_to_epoch(iso)
+            let cp: Array = civil_parts(ep).split("|")
+            let cy: String = cp[0]
+            let cmo: String = cp[1]
+            let cd: String = cp[2]
+            let ch: String = cp[3]
+            let cmi: String = cp[4]
+            let dia: String = cy + "-" + pad2(float_to_int(string_to_float(cmo))) + "-" + pad2(float_to_int(string_to_float(cd)))
+            let hora: String = ch + ":" + cmi
+            s_push_row(id, ep, iso, lats, lons, depth, mtype, mag, place, dia, hora)
+        }
+        i = i + 1
+    }
+    s_finish_load()
+    // "Actualizado HH:MM" (hora local) desde el epoch de la última descarga
+    let ue: String = dom_get_value("#s-upd-epoch")
+    if ue.length() > 0 {
+        let up: Array = civil_parts(float_to_int(string_to_float(ue))).split("|")
+        let uh: String = up[3]
+        let um: String = up[4]
+        dom_set_text("#s-updated", "Actualizado " + uh + ":" + um)
+    }
+    // Geolocalización: la guardada primero, luego la fresca + refresco cada 2 min
+    let ula: String = js_ls_get("ulat")
+    let ulo: String = js_ls_get("ulon")
+    if ula.length() > 0 and ulo.length() > 0 {
+        dom_set_text("#geo-status", "Ubicacion guardada")
+        s_set_loc_internal(ula, ulo)
+    }
+    js_geo("sismos_geo_ok", "")
+    js_interval(120000, "sismos_geo_tick")
+}
+
+#[export_name = "sismos_geo_tick"]
+fn sismos_geo_tick() {
+    js_geo("sismos_geo_ok", "")
+}
+
+#[export_name = "sismos_geo_ok"]
+fn sismos_geo_ok(lat: String, lon: String) {
+    js_ls_set("ulat", lat)
+    js_ls_set("ulon", lon)
+    let np: Array = civil_parts(time()).split("|")
+    let nh: String = np[3]
+    let nm: String = np[4]
+    dom_set_text("#geo-status", "Ubicacion " + nh + ":" + nm)
+    s_set_loc_internal(lat, lon)
+}
