@@ -137,6 +137,34 @@ export async function afterStart({ exports, nyx }) {
   if (!texts["#fin-body"].includes("Bs 639,70")) throw new Error("FALLO: error de red piso el estado");
   console.log("ok manejo de status!=200");
 
+  // Calculadora: estado ya poblado por los fx_on_* de arriba
+  // (bcv=639.7029, uc=734.588, uv=733.5, eur=728.48086846, cop=3401.617171, btc=61835)
+  values["#calc-amt"] = "100";
+  values["#calc-from"] = "USD"; values["#calc-to"] = "BSP";
+  exports.calc_render();
+  // 100 USD → Bs paralelo = 100 * (734.588+733.5)/2 = 73.404,40
+  if (!texts["#calc-out"].includes("73.404,40 Bs")) throw new Error("FALLO calc USD→BSP: " + texts["#calc-out"]);
+  if (!texts["#calc-out"].includes("1 USD =")) throw new Error("FALLO calc línea de tasa: " + texts["#calc-out"]);
+  values["#calc-to"] = "BSV"; exports.calc_render();
+  if (!texts["#calc-out"].includes("63.970,29 Bs")) throw new Error("FALLO calc USD→BSV: " + texts["#calc-out"]);
+  values["#calc-to"] = "COP"; exports.calc_render();
+  if (!texts["#calc-out"].includes("340.162 COP")) throw new Error("FALLO calc USD→COP: " + texts["#calc-out"]);
+  values["#calc-to"] = "EUR"; exports.calc_render();
+  if (!texts["#calc-out"].includes("€ 87,8")) throw new Error("FALLO calc USD→EUR: " + texts["#calc-out"]);
+  values["#calc-to"] = "BTC"; exports.calc_render();
+  if (!/0,0016\d* BTC/.test(texts["#calc-out"])) throw new Error("FALLO calc USD→BTC: " + texts["#calc-out"]);
+  console.log("ok calculadora (USD→BSP/BSV/COP/EUR/BTC + línea de tasa)");
+
+  // Guard: moneda sin tasa base → "Esperando tasas…"
+  values["#calc-from"] = "ZZZ"; exports.calc_render();
+  if (!texts["#calc-out"].includes("Esperando tasas")) throw new Error("FALLO calc guard: " + texts["#calc-out"]);
+
+  // Swap: intercambia from/to (js_set_value escribe en el mock `values`)
+  values["#calc-from"] = "USD"; values["#calc-to"] = "BSP";
+  exports.calc_swap();
+  if (values["#calc-from"] !== "BSP" || values["#calc-to"] !== "USD") throw new Error("FALLO calc_swap: " + values["#calc-from"] + "/" + values["#calc-to"]);
+  console.log("ok calc_swap");
+
   // Fase C: clima — fixtures con decoys current_units/hourly_units (el marcador
   // "key":{ debe saltarlos). Horas generadas relativas a ahora (TZ -240).
   const nowLoc = new Date(Date.now() + TZ_MIN * 60000);

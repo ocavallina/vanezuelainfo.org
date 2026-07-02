@@ -191,6 +191,19 @@ a { color: var(--enlace); }
 .fz-s { display: block; color: var(--rojo); font-size: .78rem; font-weight: 600; }
 .finz-ibc { background: #0f5132; color: #fff; border-radius: 10px; padding: 12px 16px; font-weight: 700; margin-bottom: 10px; }
 
+/* ---- Calculadora de finanzas ---- */
+.fz-calc { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; }
+.fz-calc .finz-h { margin-top: 0; }
+.calc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.calc-amt { flex: 1 1 120px; min-width: 100px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; font-size: 1.05rem; background: var(--tarjeta); color: var(--tinta); }
+.calc-cur { flex: 1 1 150px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; background: var(--tarjeta); color: var(--tinta); cursor: pointer; }
+.calc-swap { flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid var(--azul); border-radius: 50%; background: var(--tarjeta); color: var(--enlace); font-size: 1.2rem; line-height: 1; cursor: pointer; }
+.calc-swap:hover { background: var(--azul); color: #fff; }
+.calc-out { margin-top: 12px; }
+.calc-res { display: block; font-size: 1.7rem; font-weight: 800; color: var(--enlace); }
+.calc-rate { display: block; margin-top: 2px; color: var(--gris); font-size: .85rem; }
+.calc-wait { color: var(--gris); font-size: 1rem; }
+
 /* ---- Articulos ---- */
 .articles h2 { font-size: 1.4rem; margin-bottom: 18px; }
 .card-grid {
@@ -440,9 +453,13 @@ a { color: var(--enlace); }
 #home-cards.editing .card-move { display: flex; flex-direction: column; gap: 6px; position: absolute; top: 8px; right: 8px; z-index: 6; }
 .cm-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--azul); background: var(--tarjeta); color: var(--enlace); font-size: .95rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,.25); }
 .cm-btn:active { background: var(--azul); color: #fff; }
-/* boton Instalar app */
+/* botones del header (Compartir + Instalar app) */
+.header-actions { display: flex; align-items: center; gap: 8px; }
 .pwa-install { background: var(--amarillo); color: var(--tinta); border: 0; border-radius: 8px; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
 .pwa-install:hover { filter: brightness(.96); }
+/* boton Compartir: outline que se adapta a claro/oscuro (--enlace) */
+.pwa-share { background: transparent; color: var(--enlace); border: 1.5px solid currentColor; border-radius: 8px; padding: 5.5px 13px; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.pwa-share:hover { color: var(--rojo); }
 
 /* tarjetas rotatorias (portada): noticias y sismos */
 .rot-card {

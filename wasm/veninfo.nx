@@ -387,6 +387,97 @@ fn fx_paint_cripto() {
     dom_set_html("#fz-cripto", h)
 }
 
+// ── Calculadora de conversión (/finanzas) ───────────────────────────────────
+// Reutiliza las tasas del estado (fxv/fxc). Pivote = USD: se convierte
+// out = monto * usd_per(origen) / usd_per(destino). usd_per devuelve 0.0 si
+// falta la tasa base → la UI muestra "Esperando tasas…".
+
+fn cf(s: String) -> float {
+    if s.length() == 0 { return 0.0 }
+    return string_to_float(s)
+}
+
+// Valor de 1 unidad de `code` en USD.
+fn usd_per(code: String) -> float {
+    if code == "USD" { return 1.0 }
+    if code == "USDT" {
+        let u: float = cf(fxc[2])
+        if u > 0.0 { return u }
+        return 1.0
+    }
+    if code == "BTC" { return cf(fxc[0]) }
+    if code == "ETH" { return cf(fxc[1]) }
+    if code == "EUR" {
+        let e: float = cf(fxv[1])
+        let b: float = cf(fxv[0])
+        if e > 0.0 and b > 0.0 { return e / b }
+        return 0.0
+    }
+    if code == "COP" {
+        let c: float = cf(fxv[4])
+        if c > 0.0 { return 1.0 / c }
+        return 0.0
+    }
+    if code == "BSV" {
+        let b: float = cf(fxv[0])
+        if b > 0.0 { return 1.0 / b }
+        return 0.0
+    }
+    if code == "BSP" {
+        let uc: float = cf(fxv[2])
+        let uv: float = cf(fxv[3])
+        if uc > 0.0 and uv > 0.0 { return 1.0 / ((uc + uv) / 2.0) }
+        return 0.0
+    }
+    return 0.0
+}
+
+// Monto formateado con símbolo/decimales según la moneda destino.
+fn fmt_money(code: String, v: float) -> String {
+    if code == "USD" { return "$ " + fmt_f(v, 2, 2) }
+    if code == "EUR" { return "€ " + fmt_f(v, 2, 2) }
+    if code == "USDT" { return fmt_f(v, 2, 2) + " USDT" }
+    if code == "BTC" { return fmt_f(v, 2, 8) + " BTC" }
+    if code == "ETH" { return fmt_f(v, 2, 6) + " ETH" }
+    if code == "COP" { return fmt_f(v, 0, 0) + " COP" }
+    return fmt_f(v, 2, 2) + " Bs"
+}
+
+// Nombre corto para la línea de tasa ("1 X = …").
+fn cur_name(code: String) -> String {
+    if code == "BSV" { return "Bs (BCV)" }
+    if code == "BSP" { return "Bs (paralelo)" }
+    return code
+}
+
+#[export_name = "calc_render"]
+fn calc_render() {
+    let src: String = dom_get_value("#calc-from")
+    let dst: String = dom_get_value("#calc-to")
+    let uf: float = usd_per(src)
+    let ut: float = usd_per(dst)
+    if uf <= 0.0 or ut <= 0.0 {
+        dom_set_html("#calc-out", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
+        return
+    }
+    let amt_s: String = dom_get_value("#calc-amt")
+    var amt: float = 0.0
+    if amt_s.length() > 0 { amt = string_to_float(amt_s) }
+    let out: float = amt * uf / ut
+    var h: String = "<span class=\"calc-res\">" + fmt_money(dst, out) + "</span>"
+    h = h + "<span class=\"calc-rate\">1 " + cur_name(src) + " = " + fmt_money(dst, uf / ut) + "</span>"
+    dom_set_html("#calc-out", h)
+}
+
+#[export_name = "calc_swap"]
+fn calc_swap() {
+    let src: String = dom_get_value("#calc-from")
+    let dst: String = dom_get_value("#calc-to")
+    js_set_value("#calc-from", dst)
+    js_set_value("#calc-to", src)
+    calc_render()
+}
+
 // Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
 
 #[export_name = "fx_on_dolares"]
@@ -399,6 +490,7 @@ fn fx_on_dolares(status: int, body: String) {
     let f: String = jstr(seg, "fechaActualizacion")
     if f.length() > 0 { fxv[5] = fmt_dmy_hm(iso_to_epoch(f)) }
     fx_paint()
+    calc_render()
 }
 
 #[export_name = "fx_on_euros"]
@@ -409,6 +501,7 @@ fn fx_on_euros(status: int, body: String) {
     let v: String = jnum(seg, "promedio")
     if v.length() > 0 { fxv[1] = v }
     fx_paint()
+    calc_render()
 }
 
 #[export_name = "fx_on_criptoya"]
@@ -421,6 +514,7 @@ fn fx_on_criptoya(status: int, body: String) {
     if a.length() > 0 { fxv[2] = a }
     if b.length() > 0 { fxv[3] = b }
     fx_paint()
+    calc_render()
 }
 
 #[export_name = "fx_on_cop"]
@@ -429,6 +523,7 @@ fn fx_on_cop(status: int, body: String) {
     let v: String = jnum(body, "COP")
     if v.length() > 0 { fxv[4] = v }
     fx_paint()
+    calc_render()
 }
 
 #[export_name = "fx_on_cripto"]
@@ -444,6 +539,7 @@ fn fx_on_cripto(status: int, body: String) {
     if e.length() > 0 { fxc[1] = e }
     if t.length() > 0 { fxc[2] = t }
     fx_paint_cripto()
+    calc_render()
 }
 
 // Arranque de finanzas: con_cripto=1 solo en /finanzas (la portada no lo pinta)
@@ -456,6 +552,12 @@ fn fx_boot(con_cripto: int) {
     js_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
     if con_cripto == 1 {
         js_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")
+        // Calculadora (solo en /finanzas)
+        dom_on("#calc-amt", "input", "calc_render")
+        dom_on("#calc-from", "change", "calc_render")
+        dom_on("#calc-to", "change", "calc_render")
+        dom_on("#calc-swap", "click", "calc_swap")
+        calc_render()
     }
 }
 

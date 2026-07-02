@@ -29,10 +29,10 @@ pub fn sismos_init() {
 
 fn emsc_url() -> String {
     // EMSC FDSN: ruta /event/1/ y parametros minmag/minlat/maxlat/minlon/maxlon.
-    // Bounding box de Venezuela: lat 0..13, lon -74..-59. Por tiempo, mag>=3.0.
-    // EMSC no publica sismos M<3 en Venezuela (esos solo los registra FUNVISIS),
-    // asi que pedir menos de 3 no aporta nada. render_quakes ademas filtra a
-    // eventos cuyo lugar contiene VENEZUELA.
+    // Bounding box de Venezuela: lat 0..13, lon -74..-59. Filtramos a mag>=3.0
+    // (los sismos menores en Venezuela los cubre FUNVISIS, sin API publica; y la
+    // cobertura de EMSC para M<3 en la zona es escasa). render_quakes ademas
+    // filtra a eventos cuyo lugar contiene VENEZUELA.
     var u: String = "https://www.seismicportal.eu/fdsnws/event/1/query?format=text"
     u = u + "&orderby=time&limit=200&minmag=3.0"
     u = u + "&minlat=0&maxlat=13&minlon=-74&maxlon=-59"

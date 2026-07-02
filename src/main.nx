@@ -57,7 +57,30 @@ fn finanzas_card() -> String {
     return sb.to_string()
 }
 
-// Landing /finanzas — divisas (USD/EUR), cripto (USD) y Bolsa de Caracas.
+// Una <option> de la calculadora (marcada selected si val == sel).
+fn cur_opt(val: String, label: String, sel: String) -> String {
+    var s: String = ""
+    if val == sel {
+        s = " selected"
+    }
+    return "<option value=\"" + val + "\"" + s + ">" + label + "</option>"
+}
+
+// Las 8 monedas de la calculadora, con `sel` preseleccionada.
+fn cur_options(sel: String) -> String {
+    var o: String = ""
+    o = o + cur_opt("USD", "Dolar (USD)", sel)
+    o = o + cur_opt("BSV", "Bolivar (BCV)", sel)
+    o = o + cur_opt("BSP", "Bolivar (paralelo)", sel)
+    o = o + cur_opt("EUR", "Euro (EUR)", sel)
+    o = o + cur_opt("COP", "Peso colombiano (COP)", sel)
+    o = o + cur_opt("USDT", "USDT", sel)
+    o = o + cur_opt("BTC", "Bitcoin (BTC)", sel)
+    o = o + cur_opt("ETH", "Ethereum (ETH)", sel)
+    return o
+}
+
+// Landing /finanzas — calculadora, divisas (USD/EUR), cripto (USD) y Bolsa de Caracas.
 fn handle_finanzas(req: Request) -> Response {
     let ibc: String = bvc_ibc_text()
     let bvc: String = bvc_list_html()
@@ -66,6 +89,20 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
     sb.append("<h1>Finanzas</h1>\n")
     sb.append("<p class=\"lede\">Tipos de cambio, cripto e informacion de la Bolsa de Valores de Caracas.</p>\n")
+    sb.append("<section class=\"fz-calc\">\n")
+    sb.append("<h2 class=\"finz-h\">Calculadora</h2>\n")
+    sb.append("<div class=\"calc-row\">")
+    sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\">")
+    sb.append("<select id=\"calc-from\" class=\"calc-cur\" aria-label=\"Moneda de origen\">")
+    sb.append(cur_options("USD"))
+    sb.append("</select>")
+    sb.append("<button id=\"calc-swap\" class=\"calc-swap\" type=\"button\" aria-label=\"Intercambiar monedas\" title=\"Intercambiar\">&#8646;</button>")
+    sb.append("<select id=\"calc-to\" class=\"calc-cur\" aria-label=\"Moneda de destino\">")
+    sb.append(cur_options("BSP"))
+    sb.append("</select>")
+    sb.append("</div>\n")
+    sb.append("<div id=\"calc-out\" class=\"calc-out\"><span class=\"calc-wait\">Esperando tasas&hellip;</span></div>\n")
+    sb.append("</section>\n")
     sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
     sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
     sb.append("<h2 class=\"finz-h\">Cripto (USD)</h2>\n")
@@ -83,7 +120,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -133,7 +170,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -151,7 +188,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -258,7 +295,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -282,8 +319,8 @@ fn handle_sismos(req: Request) -> Response {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"sismos\">\n")
     sb.append("<h1>Sismos recientes en Venezuela</h1>\n")
-    sb.append("<p class=\"lede\">Sismos recientes en Venezuela (magnitud &ge; 3). Fuente: EMSC.</p>\n")
-    sb.append("<p class=\"hint\">Nota: EMSC no publica sismos de magnitud menor a 3 en Venezuela (esos solo los registra FUNVISIS), por eso no aparecen aqui.</p>\n")
+    sb.append("<p class=\"lede\">Sismos recientes en Venezuela (magnitud &ge; 3). Fuente: red sismica <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
+    sb.append("<p class=\"hint\">Nota: mostramos sismos de magnitud &ge; 3. Los de menor magnitud los registra FUNVISIS (autoridad sismica nacional de Venezuela), que no ofrece API publica, por eso no aparecen aqui.</p>\n")
     sb.append("<div class=\"sismos-top\"><span id=\"s-count\" class=\"s-count\">&mdash; sismos</span>")
     sb.append("<span id=\"s-updated\" class=\"s-updated\" data-updated=\"")
     sb.append(ts_str)
@@ -313,7 +350,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -382,7 +419,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=7\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=8\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))

@@ -1,4 +1,12 @@
-# venezuelainfo.org
+<p align="center">
+  <img src="docs/banner.svg" alt="VenezuelaInfo" width="820">
+</p>
+
+<p align="center">
+  <a href="https://venezuelainfo.org"><b>venezuelainfo.org</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/ocavallina/vanezuelainfo.org">Repositorio en GitHub</a> &nbsp;·&nbsp;
+  Hecho en <a href="https://nyxlang.com">Nyx</a>
+</p>
 
 Portal de noticias e información sobre Venezuela: **sismos en vivo** (EMSC),
 clima, finanzas (BCV/USDT/COP), noticias agregadas, guía de sitios por zona
