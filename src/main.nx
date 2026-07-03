@@ -522,6 +522,13 @@ fn main() {
     thread_spawn(refresher_worker)
 
     let app: App = app_new()
+    setup_routes(app)
+    serve_ws(chat_ws_handler)
+    serve_app(app, port, 16)
+}
+
+// Registro de rutas (extraído de main() para mantenerla legible).
+fn setup_routes(app: App) {
     app_get(app, "/", handle_index)
     app_get(app, "/clima", handle_clima)
     app_get(app, "/finanzas", handle_finanzas)
@@ -553,6 +560,4 @@ fn main() {
     app_get(app, "/icon-192.png", handle_icon_192)
     app_get(app, "/icon-512.png", handle_icon_512)
     app_static(app, "/assets/", "static/assets/")
-    serve_ws(chat_ws_handler)
-    serve_app(app, port, 16)
 }

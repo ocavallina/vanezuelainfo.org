@@ -6,8 +6,16 @@ import "std/web"
 import "std/http"
 import "nyx-serve/src/files"
 
-// Global App reference for the MT handler (set by serve_app)
-var __serve_app: App = app_new()
+// Estado del App para el MT handler (set por serve_app). PARCHE LOCAL de
+// venezuelainfo.org: en vez de un global `App` (struct por valor), guardamos sus
+// 3 campos por separado (Array/Array/String, todos por puntero). Motivo: el
+// codegen del compilador (nyx v0.18.0) numera MAL el inicializador de un global
+// struct-por-valor `= app_new()` en __nyx_init_globals (SSA fuera de secuencia →
+// clang rechaza el IR); los globales por puntero no lo disparan. Al re-vendorear
+// nyx-serve, re-aplicar (o quitar si upstream ya no usa un global App así).
+var __serve_mw: Array = []
+var __serve_routes: Array = []
+var __serve_static: String = ""
 
 // Hook WebSocket opcional (parche local de venezuelainfo.org sobre v0.2.0).
 // Guardado en un Array para no necesitar un valor Fn por defecto en el global.
@@ -121,7 +129,7 @@ fn __serve_mt_dispatch(raw: Array) -> String {
     }
 
     // Run middlewares
-    let middlewares: Array = __serve_app.middlewares
+    let middlewares: Array = __serve_mw
     var mi: int = 0
     while mi < middlewares.length() {
         let mw: Fn(Request) -> Response = middlewares[mi]
@@ -134,7 +142,7 @@ fn __serve_mt_dispatch(raw: Array) -> String {
     }
 
     // Try each route
-    let routes: Array = __serve_app.routes
+    let routes: Array = __serve_routes
     var i: int = 0
     while i < routes.length() {
         let route: Route = routes[i]
@@ -165,7 +173,7 @@ fn __serve_mt_dispatch(raw: Array) -> String {
     }
 
     // Try fallback static file serving (serve_static registration)
-    let static_dir: String = __serve_app.static_dir
+    let static_dir: String = __serve_static
     if static_dir.length() > 0 {
         let file_resp: Response = try_serve_static(static_dir, clean_path)
         if file_resp.status != 0 {
@@ -234,7 +242,9 @@ fn __serve_ka_worker() -> int {
 // Start the app server on the given port with the given number of workers.
 // This function blocks (runs the accept loop forever).
 pub fn serve_app(app: App, port: int, workers: int) -> int {
-    __serve_app = app
+    __serve_mw = app.middlewares
+    __serve_routes = app.routes
+    __serve_static = app.static_dir
     print("nyx-serve starting on port " + int_to_string(port) + " with " + int_to_string(workers) + " workers")
 
     __serve_ch = channel_new(512)
