@@ -137,6 +137,14 @@ packages/        nyx-serve vendoreado.
   entrega `[fd, path, headers_flat]` a un handler `Fn(Array) -> int` registrado con
   `serve_ws(...)`; si devuelve 1 el server NO cierra el fd. **Al re-vendorear
   nyx-serve hay que re-aplicar el parche** (upstream `products/serve` no lo tiene).
+- **2º PARCHE LOCAL de nyx-serve: sin global `App` por valor** (`server.nx`, commit
+  `ebb2e97`). Upstream tenía `var __serve_app: App = app_new()` (global struct por
+  valor). El compilador **nyx v0.18.0** numera MAL ese inicializador en
+  `__nyx_init_globals` (SSA fuera de secuencia → `clang: instruction expected to be
+  numbered … or greater`), y revienta CUALQUIER `nyx build` del proyecto. Workaround:
+  se guardan los 3 campos que usa el worker por separado (`__serve_mw`/`__serve_routes`/
+  `__serve_static`, punteros) seteados en `serve_app()`. **Re-aplicar al re-vendorear**
+  mientras el compilador tenga la regresión (o si upstream mete otro global struct).
 - **nyx-serve ignora `headers_flat` en 301/302** (`packages/nyx-serve/src/server.nx`):
   en un redirect usa `resp.body` como valor de `Location` y NO emite otras
   cabeceras → **no se puede fijar `Set-Cookie` en un redirect**. Para fijar/limpiar
