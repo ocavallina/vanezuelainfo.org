@@ -7,16 +7,20 @@
 // restantes hacen nyxReady.then(...).catch(...): si el wasm no carga, cada uno
 // pinta su aviso. Subir el ?v= de este archivo y del .wasm JUNTOS
 // (ver deploy/build-wasm.sh).
-import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=8';
+import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=9';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=8')).arrayBuffer();
+  const bytes = await (await fetch('/assets/veninfo.wasm?v=9')).arrayBuffer();
   const dom = domBindings();
   const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref
-  const call = (h, ...args) => { if (ref.exports && ref.exports[h]) ref.exports[h](...args); };
+  // Arena (Fase F): solo en /chat, cuyo estado persistente es arena-safe (ints).
+  const pgEl = document.querySelector('#pg');
+  const useArena = !!pgEl && pgEl.value === 'chat';
+  // En /chat, cada re-entrada libera su memoria de turno (reset por evento).
+  const call = (h, ...args) => { try { if (ref.exports && ref.exports[h]) ref.exports[h](...args); } finally { if (useArena && r && r.arenaReset) r.arenaReset(); } };
   let chatWs = null, chatSeen = {};         // Fase F: WS activo + dedup del historial (en JS, arena-safe)
-  const r = await runNyxWasm(bytes, { js: (nyx) => {
+  const r = await runNyxWasm(bytes, { arena: useArena, js: (nyx) => {
     const S = (p) => nyx.readString(p), M = (s) => nyx.makeString(s);
     return {
     ...dom.imports(nyx),
@@ -105,6 +109,7 @@ window.nyxReady = (async () => {
   ref.exports = r.exports;
   dom.ref.exports = r.exports; // habilita la re-entrada de dom_on
   br.ref.exports = r.exports;  // habilita las re-entradas de std/browser (fetch/timers/geo)
+  if (useArena) { dom.ref.afterEvent = r.arenaReset; br.ref.afterEvent = r.arenaReset; } // reset por evento en /chat
   const S = (p) => r.nyx.readString(p), M = (s) => r.nyx.makeString(s);
   // El wasm pinta finanzas/clima/sismos/noticias internamente (dom_set_html).
   // Único wrapper con consumidor JS: havKm (quake.js, distancia en el mapa Leaflet).
