@@ -7,10 +7,10 @@
 // restantes hacen nyxReady.then(...).catch(...): si el wasm no carga, cada uno
 // pinta su aviso. Subir el ?v= de este archivo y del .wasm JUNTOS
 // (ver deploy/build-wasm.sh).
-import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=9';
+import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=10';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=9')).arrayBuffer();
+  const bytes = await (await fetch('/assets/veninfo.wasm?v=10')).arrayBuffer();
   const dom = domBindings();
   const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref
@@ -40,6 +40,14 @@ window.nyxReady = (async () => {
       const full = t + ' ' + u;
       if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(full).then(flash, () => prompt('Copia el enlace:', full)); return; }
       try { const ta = document.createElement('textarea'); ta.value = full; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); flash(); } catch (e) { prompt('Copia el enlace:', full); }
+    },
+    // — Copiar el resultado al portapapeles (botón Copiar de la calculadora) —
+    js_copy: (textPtr) => {
+      const t = S(textPtr);
+      const btn = document.querySelector('#calc-copy');
+      const flash = () => { if (!btn) return; const o = btn.getAttribute('data-lbl') || btn.textContent; btn.setAttribute('data-lbl', o); btn.textContent = '¡Copiado!'; setTimeout(() => { btn.textContent = o; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(flash, () => prompt('Copia el resultado:', t)); return; }
+      try { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); flash(); } catch (e) { prompt('Copia el resultado:', t); }
     },
     // — Geolocalización: ok → handler(lat:String, lon:String); error → err_handler() ("" = ignorar) —
     //   (se queda local: std/browser.browser_geo no propaga el err_handler) —

@@ -195,8 +195,17 @@ a { color: var(--enlace); }
 .fz-calc { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; }
 .calc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .calc-head .finz-h { margin: 0; }
-.calc-share { background: transparent; color: var(--enlace); border: 1.5px solid currentColor; border-radius: 8px; padding: 5px 12px; font: inherit; font-weight: 700; font-size: .9rem; cursor: pointer; white-space: nowrap; }
-.calc-share:hover { color: var(--rojo); }
+.calc-actions { display: flex; gap: 8px; }
+.calc-share, .calc-copy { background: transparent; color: var(--enlace); border: 1.5px solid currentColor; border-radius: 8px; padding: 5px 12px; font: inherit; font-weight: 700; font-size: .9rem; cursor: pointer; white-space: nowrap; }
+.calc-share:hover, .calc-copy:hover { color: var(--rojo); }
+/* Enlace a la calculadora desde /finanzas */
+.finz-calc-link { display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 6px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; text-decoration: none; color: var(--tinta); }
+.finz-calc-link:hover { border-color: var(--azul); }
+.finz-calc-ico { font-size: 1.6rem; line-height: 1; }
+.finz-calc-txt { display: flex; flex-direction: column; flex: 1 1 auto; }
+.finz-calc-txt strong { color: var(--enlace); }
+.finz-calc-txt span { color: var(--gris); font-size: .85rem; }
+.finz-calc-arrow { color: var(--enlace); font-size: 1.3rem; }
 .calc-panel { display: flex; align-items: center; gap: 8px; border: 1px solid var(--borde); border-radius: 10px; padding: 4px 10px; background: var(--tarjeta); }
 .calc-amt { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--tinta); font: inherit; font-size: 1.5rem; font-weight: 700; padding: 8px 2px; outline: none; }
 .calc-result { flex: 1 1 auto; min-width: 0; font-size: 1.5rem; font-weight: 800; color: var(--enlace); padding: 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

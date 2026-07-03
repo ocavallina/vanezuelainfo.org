@@ -1,7 +1,7 @@
 // src/layout.nx — Plantilla HTML compartida (header, footer, wrapper).
 // Tema visual con los colores de la bandera de Venezuela.
 
-fn page_v(title: String, content: String, viewport: String) -> String {
+fn page_v(title: String, content: String, viewport: String, manifest: String, app_title: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n")
     sb.append("<meta charset=\"utf-8\">\n")
@@ -17,12 +17,16 @@ fn page_v(title: String, content: String, viewport: String) -> String {
     sb.append("<link rel=\"icon\" href=\"/icon.svg\" type=\"image/svg+xml\">\n")
     sb.append("<link rel=\"icon\" href=\"/icon-192.png\" type=\"image/png\" sizes=\"192x192\">\n")
     sb.append("<link rel=\"apple-touch-icon\" href=\"/icon-192.png\">\n")
-    sb.append("<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n")
+    sb.append("<link rel=\"manifest\" href=\"")
+    sb.append(manifest)
+    sb.append("\">\n")
     sb.append("<meta name=\"theme-color\" content=\"#00247D\">\n")
     sb.append("<meta name=\"color-scheme\" content=\"light dark\">\n")
     sb.append("<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\n")
     sb.append("<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\n")
-    sb.append("<meta name=\"apple-mobile-web-app-title\" content=\"VenezuelaInfo\">\n")
+    sb.append("<meta name=\"apple-mobile-web-app-title\" content=\"")
+    sb.append(app_title)
+    sb.append("\">\n")
     sb.append("</head>\n<body>\n")
 
     sb.append("<header class=\"site-header\">\n")
@@ -75,11 +79,18 @@ fn page_v(title: String, content: String, viewport: String) -> String {
 }
 
 pub fn page(title: String, content: String) -> String {
-    return page_v(title, content, "width=device-width, initial-scale=1")
+    return page_v(title, content, "width=device-width, initial-scale=1", "/manifest.webmanifest", "VenezuelaInfo")
 }
 
 // Igual que page() pero bloquea el zoom del usuario (paginas con tabla/mapa que
 // de otro modo obligan a alejar en movil).
 pub fn page_fixed(title: String, content: String) -> String {
-    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no")
+    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest.webmanifest", "VenezuelaInfo")
+}
+
+// Shell para la Calculadora como PWA instalable APARTE: su propio manifest
+// (start_url/scope /calculadora) y titulo de app, para que el navegador la
+// instale como una app distinta de VenezuelaInfo.
+pub fn page_calc(title: String, content: String) -> String {
+    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest-calc.webmanifest", "Calculadora VE")
 }

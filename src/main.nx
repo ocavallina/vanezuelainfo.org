@@ -85,10 +85,46 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
     sb.append("<h1>Finanzas</h1>\n")
     sb.append("<p class=\"lede\">Tipos de cambio, cripto e informacion de la Bolsa de Valores de Caracas.</p>\n")
+    sb.append("<a href=\"/calculadora\" class=\"finz-calc-link\">")
+    sb.append("<span class=\"finz-calc-ico\">&#128200;</span>")
+    sb.append("<span class=\"finz-calc-txt\"><strong>Calculadora de cambio</strong><span>D&oacute;lar &middot; Bol&iacute;var &middot; USDT &middot; Euro</span></span>")
+    sb.append("<span class=\"finz-calc-arrow\">&rarr;</span>")
+    sb.append("</a>\n")
+    sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
+    sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
+    sb.append("<h2 class=\"finz-h\">Cripto (USD)</h2>\n")
+    sb.append("<div id=\"fz-cripto\" class=\"finz-grid\">Cargando&hellip;</div>\n")
+    sb.append("<h2 class=\"finz-h\">Bolsa de Valores de Caracas</h2>\n")
+    if ibc.length() > 0 {
+        sb.append("<div class=\"finz-ibc\">")
+        sb.append(html_escape(ibc))
+        sb.append("</div>\n")
+    }
+    sb.append("<div class=\"news-list\">")
+    sb.append(bvc)
+    sb.append("</div>\n")
+    sb.append("<p class=\"news-fuentes\">Divisas: DolarAPI &middot; USDT P2P: CriptoYa (Binance) &middot; USD/COP: open.er-api.com &middot; Cripto: CoinGecko &middot; Bolsa: bolsadecaracas.com</p>\n")
+    sb.append("</section>\n")
+    sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
+    return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
+}
+
+// Pagina propia de la calculadora de cambio (acceso desde /finanzas).
+fn handle_calculadora(req: Request) -> Response {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"finz\">\n")
+    sb.append("<p><a href=\"/finanzas\">&larr; Volver a Finanzas</a></p>\n")
+    sb.append("<h1>Calculadora de cambio</h1>\n")
+    sb.append("<p class=\"lede\">Convierte entre D&oacute;lar, Bol&iacute;var, USDT y Euro con las tasas del d&iacute;a.</p>\n")
     sb.append("<section class=\"fz-calc\">\n")
     sb.append("<div class=\"calc-head\">")
     sb.append("<h2 class=\"finz-h\">Calculadora</h2>")
+    sb.append("<div class=\"calc-actions\">")
+    sb.append("<button id=\"calc-copy\" class=\"calc-copy\" type=\"button\" aria-label=\"Copiar el resultado\">Copiar</button>")
     sb.append("<button id=\"calc-share\" class=\"calc-share\" type=\"button\" aria-label=\"Compartir esta conversion\">Compartir</button>")
+    sb.append("</div>")
     sb.append("</div>\n")
     sb.append("<div class=\"calc-panel\">")
     sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\">")
@@ -110,25 +146,9 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("<button id=\"calc-chip-eur\" class=\"calc-chip\" type=\"button\">D&oacute;lar&rarr;Euro</button>")
     sb.append("</div>\n")
     sb.append("</section>\n")
-    sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
-    sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
-    sb.append("<h2 class=\"finz-h\">Cripto (USD)</h2>\n")
-    sb.append("<div id=\"fz-cripto\" class=\"finz-grid\">Cargando&hellip;</div>\n")
-    sb.append("<h2 class=\"finz-h\">Bolsa de Valores de Caracas</h2>\n")
-    if ibc.length() > 0 {
-        sb.append("<div class=\"finz-ibc\">")
-        sb.append(html_escape(ibc))
-        sb.append("</div>\n")
-    }
-    sb.append("<div class=\"news-list\">")
-    sb.append(bvc)
-    sb.append("</div>\n")
-    sb.append("<p class=\"news-fuentes\">Divisas: DolarAPI &middot; USDT P2P: CriptoYa (Binance) &middot; USD/COP: open.er-api.com &middot; Cripto: CoinGecko &middot; Bolsa: bolsadecaracas.com</p>\n")
-    sb.append("</section>\n")
-    sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
-    sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
-    return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
+    sb.append("<input type=\"hidden\" id=\"pg\" value=\"calculadora\">\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
+    return html_nocache(200, page_calc("Calculadora de cambio", sb.to_string()))
 }
 
 fn rot_news_card(rot: String) -> String {
@@ -177,7 +197,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -195,7 +215,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -233,7 +253,7 @@ fn handle_chat(req: Request) -> Response {
     sb.append("</form>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"chat\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
@@ -303,7 +323,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -358,7 +378,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -427,7 +447,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=11\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=12\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))
@@ -443,6 +463,12 @@ fn handle_manifest(req: Request) -> Response {
     return Response { status: 200, headers_flat: h, body: read_file("static/manifest.webmanifest") }
 }
 
+// Manifest de la Calculadora como app PWA aparte (scope /calculadora).
+fn handle_manifest_calc(req: Request) -> Response {
+    let h: Array = ["Content-Type", "application/manifest+json; charset=utf-8"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/manifest-calc.webmanifest") }
+}
+
 fn handle_sw(req: Request) -> Response {
     let h: Array = ["Content-Type", "text/javascript; charset=utf-8", "Service-Worker-Allowed", "/"]
     return Response { status: 200, headers_flat: h, body: read_file("static/sw.js") }
@@ -451,6 +477,11 @@ fn handle_sw(req: Request) -> Response {
 fn handle_icon_svg(req: Request) -> Response {
     let h: Array = ["Content-Type", "image/svg+xml"]
     return Response { status: 200, headers_flat: h, body: read_file("static/icon.svg") }
+}
+
+fn handle_icon_calc_svg(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/svg+xml"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon-calc.svg") }
 }
 
 fn handle_icon_192(req: Request) -> Response {
@@ -494,6 +525,7 @@ fn main() {
     app_get(app, "/", handle_index)
     app_get(app, "/clima", handle_clima)
     app_get(app, "/finanzas", handle_finanzas)
+    app_get(app, "/calculadora", handle_calculadora)
     app_get(app, "/noticias", handle_noticias)
     app_get(app, "/chat", handle_chat)
     app_get(app, "/api/rooms", handle_chat_rooms)
@@ -514,8 +546,10 @@ fn main() {
     app_get(app, "/articulo/{slug}", handle_article)
     app_get(app, "/api/health", handle_health)
     app_get(app, "/manifest.webmanifest", handle_manifest)
+    app_get(app, "/manifest-calc.webmanifest", handle_manifest_calc)
     app_get(app, "/sw.js", handle_sw)
     app_get(app, "/icon.svg", handle_icon_svg)
+    app_get(app, "/icon-calc.svg", handle_icon_calc_svg)
     app_get(app, "/icon-192.png", handle_icon_192)
     app_get(app, "/icon-512.png", handle_icon_512)
     app_static(app, "/assets/", "static/assets/")

@@ -209,7 +209,22 @@ fn calc_share() {
         let out: float = amt * uf / ut
         txt = fmt_money(src, amt) + " = " + fmt_money(dst, out) + " · Convierte divisas de Venezuela en"
     }
-    js_share(txt, "/finanzas")
+    js_share(txt, "/calculadora")
+}
+
+// Copiar solo el resultado al portapapeles (js_copy de la pasarela).
+#[export_name = "calc_copy"]
+fn calc_copy() {
+    let src: String = dom_get_value("#calc-from")
+    let dst: String = dom_get_value("#calc-to")
+    let uf: float = usd_per(src)
+    let ut: float = usd_per(dst)
+    if uf <= 0.0 or ut <= 0.0 { return }
+    let amt_s: String = dom_get_value("#calc-amt")
+    var amt: float = 0.0
+    if amt_s.length() > 0 { amt = string_to_float(amt_s) }
+    let out: float = amt * uf / ut
+    js_copy(fmt_money(dst, out))
 }
 
 // Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
@@ -276,7 +291,8 @@ fn fx_on_cripto(status: int, body: String) {
     calc_render()
 }
 
-// Arranque de finanzas: con_cripto=1 solo en /finanzas (la portada no lo pinta)
+// Arranque de tasas: con_cripto=1 trae también CoinGecko (cripto + USDT-USD),
+// necesario en /finanzas (sección cripto) y /calculadora (USDT).
 fn fx_boot(con_cripto: int) {
     fxv = ["", "", "", "", "", ""]
     fxc = ["", "", ""]
@@ -286,16 +302,21 @@ fn fx_boot(con_cripto: int) {
     browser_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
     if con_cripto == 1 {
         browser_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")
-        // Calculadora (solo en /finanzas)
-        dom_on("#calc-amt", "input", "calc_render")
-        dom_on("#calc-from", "change", "calc_render")
-        dom_on("#calc-to", "change", "calc_render")
-        dom_on("#calc-swap", "click", "calc_swap")
-        dom_on("#calc-chip-bsv", "click", "calc_chip_bsv")
-        dom_on("#calc-chip-usdt", "click", "calc_chip_usdt")
-        dom_on("#calc-chip-eur", "click", "calc_chip_eur")
-        dom_on("#calc-share", "click", "calc_share")
-        calc_render()
     }
+}
+
+// Arranque de la calculadora (página propia /calculadora). Reusa las tasas que
+// deja fx_boot(1); solo cablea los controles y pinta.
+fn calc_boot() {
+    dom_on("#calc-amt", "input", "calc_render")
+    dom_on("#calc-from", "change", "calc_render")
+    dom_on("#calc-to", "change", "calc_render")
+    dom_on("#calc-swap", "click", "calc_swap")
+    dom_on("#calc-chip-bsv", "click", "calc_chip_bsv")
+    dom_on("#calc-chip-usdt", "click", "calc_chip_usdt")
+    dom_on("#calc-chip-eur", "click", "calc_chip_eur")
+    dom_on("#calc-share", "click", "calc_share")
+    dom_on("#calc-copy", "click", "calc_copy")
+    calc_render()
 }
 

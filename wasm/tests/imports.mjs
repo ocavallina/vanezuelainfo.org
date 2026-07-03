@@ -11,6 +11,7 @@ export const fetches = []; // llamadas a js_fetch registradas: {url, method, han
 export const toggles = []; // llamadas a js_toggle_class: {sel, cls, on}
 export const timers = [];  // llamadas a js_interval/js_timeout: {ms, handler}
 export const shares = []; // llamadas a js_share: {text, url}
+export const copies = []; // llamadas a js_copy: text
 export const chatAdds = []; // llamadas a js_chat_add: {key, html, fromWs}
 export const TZ_MIN = -240; // zona fija del test: UTC-4 (Venezuela)
 export const NOW_EPOCH = 1782000000; // "ahora" fijo del test (2026-07-... UTC)
@@ -43,6 +44,7 @@ export default (nyx) => ({
   js_on_enter: (sel, handler) => { console.log("[on_enter]", nyx.readString(sel), "->", nyx.readString(handler)); },
   js_count: (sel) => 0n,
   js_share: (text, url) => { shares.push({ text: nyx.readString(text), url: nyx.readString(url) }); },
+  js_copy: (text) => { copies.push(nyx.readString(text)); },
   // Chat (Fase F): WS/submit/visibility mockeados; el historial se captura en chatAdds.
   js_ws: (u, a, b, c) => { console.log("[ws]", nyx.readString(u)); },
   js_ws_send: (d) => {},
@@ -191,9 +193,15 @@ export async function afterStart({ exports, nyx }) {
   values["#calc-amt"] = "100"; values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
   exports.calc_share();
   const sh = shares[shares.length - 1];
-  if (!sh || sh.url !== "/finanzas") throw new Error("FALLO calc_share url: " + JSON.stringify(sh));
+  if (!sh || sh.url !== "/calculadora") throw new Error("FALLO calc_share url: " + JSON.stringify(sh));
   if (!sh.text.includes("63.970,29 Bs") || !sh.text.includes("Convierte")) throw new Error("FALLO calc_share text: " + sh.text);
   console.log("ok calc_share");
+
+  // Copiar: copia solo el resultado formateado (100 USD → BSV = 63.970,29 Bs)
+  exports.calc_copy();
+  const cp = copies[copies.length - 1];
+  if (cp !== "63.970,29 Bs") throw new Error("FALLO calc_copy: " + cp);
+  console.log("ok calc_copy");
 
   // ── Chat (Fase F): fila escapada, parseo de lista y de mensaje WS ──────────
   values["#chat-room"] = "general";
