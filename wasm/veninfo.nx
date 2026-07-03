@@ -9,12 +9,14 @@
 import "std/dom"
 import "std/url"
 import "std/browser"
+import "std/json"
 // Módulos del front (scope global plano; se re-inlinan en una sola unidad).
 import "common"
 import "finanzas"
 import "clima"
 import "sismos"
 import "noticias"
+import "chat"
 
 // ── Pasarela de capacidades del navegador (los provee nyx-loader.js) ────────
 // Patrón callback-por-NOMBRE-de-export (como dom_on): lo async re-entra al
@@ -32,6 +34,18 @@ extern "js" fn js_remove_attr(sel: String, name: String)
 extern "js" fn js_toggle_class(sel: String, cls: String, on: int)
 extern "js" fn js_set_value(sel: String, v: String)
 extern "js" fn js_share(text: String, url: String)
+
+// Chat (Fase F): WebSocket + submit/visibility + historial en DOM (js_chat_*).
+extern "js" fn js_ws(url: String, on_open: String, on_msg: String, on_close: String)
+extern "js" fn js_ws_send(data: String)
+extern "js" fn js_ws_close()
+extern "js" fn js_on_submit(sel: String, handler: String)
+extern "js" fn js_on_visibility(handler: String)
+extern "js" fn js_hidden() -> int
+extern "js" fn js_now_epoch() -> int
+extern "js" fn js_chat_add(key: String, html: String, from_ws: int)
+extern "js" fn js_chat_clear()
+extern "js" fn js_chat_empty_check()
 
 // Router de arranque: el servidor emite <input type="hidden" id="pg" value="X">
 // en cada página; aquí se decide qué boots disparar (así el fetch de finanzas

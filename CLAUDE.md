@@ -100,7 +100,9 @@ wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques d
                  common.nx (helpers puros / fechas iso_to_epoch,civil_parts / scanners JSON
                  jnum/jstr/jseg — std/json ya NO trunca floats pero su adopción está diferida) /
                  finanzas.nx (calculadora + fx_*) / clima.nx / sismos.nx / noticias.nx
-                 (rotador+expand). build-wasm.sh sigue pasando solo FILE=wasm/veninfo.nx.
+                 (rotador+expand) / chat.nx (Fase F: cliente de chat en Nyx, ESCRITO EN FRÍO
+                 —compila pero NO enchufado: /chat sigue con chat.js; ver go-live abajo).
+                 build-wasm.sh sigue pasando solo FILE=wasm/veninfo.nx.
 wasm/tests/imports.mjs  Test headless (mocks DOM/localStorage/pasarela + fixtures reales):
                  node NyxLang/examples/browser/run-node.mjs static/assets/veninfo.wasm wasm/tests/imports.mjs
 content/         index.txt (slugs) + articles/*.md (front-matter + cuerpo).

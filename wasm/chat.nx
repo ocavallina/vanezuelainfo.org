@@ -1,0 +1,285 @@
+// ── Chat colectivo (Fase F: cliente en Nyx sobre arena) ─────────────────────
+// Reemplazo en Nyx de static/assets/chat.js. Recepción en vivo por WebSocket
+// (pasarela js_ws) con respaldo de polling; envío por POST /api/chat/send.
+//
+// DISCIPLINA DE ARENA (clave): el HISTORIAL de mensajes vive en el DOM y el
+// dedup en JS (js_chat_add), NO en globales del wasm. Los únicos globales de
+// este módulo son INTS (ids de timers, flags) — seguros por valor bajo el
+// reset-por-evento de la arena. La sala se lee del DOM/localStorage on-demand,
+// nunca se guarda una String de evento en un global. Así /chat puede correr con
+// arena:true sin corromper estado (a diferencia de finanzas/sismos, que sí
+// guardan substrings del fetch en globales y por eso NO usan arena).
+//
+// EN FRÍO: este módulo está escrito y compilado pero NO enchufado — handle_chat
+// (src/main.nx) sigue sirviendo chat.js y no carga el loader, y main() no rutea
+// pg=="chat". Go-live = añadir el loader + #pg a handle_chat, rutear chat_boot,
+// activar arena en el loader para pg=="chat", y borrar chat.js.
+
+var chat_tries: Array = [0]    // reintentos de WS (backoff exponencial)
+var chat_wsok: Array = [0]     // 1 si el WS está en vivo
+var chat_poll: Array = [0]     // id del setInterval de polling (0 = ninguno)
+var chat_ping_id: Array = [0]     // id del setInterval de keepalive
+var chat_re: Array = [0]       // id del setTimeout de reconexión
+var chat_rooms_id: Array = [0] // id del setInterval de recarga de salas
+
+// Sala activa: del <select>, si no de localStorage, si no "general".
+fn chat_room() -> String {
+    let sel: String = dom_get_value("#chat-room")
+    if sel.length() > 0 { return sel }
+    let saved: String = ls_get("chat_room")
+    if saved.length() > 0 { return saved }
+    return "general"
+}
+
+// Hora local del mensaje: "HH:MM" si es hoy, "DD/MM HH:MM" si no.
+fn chat_fmt_time(t: int) -> String {
+    let p: Array = civil_parts(t).split("|")
+    let y: String = p[0]
+    let mo: String = p[1]
+    let d: String = p[2]
+    let h: String = p[3]
+    let mi: String = p[4]
+    let now: Array = civil_parts(js_now_epoch()).split("|")
+    let ny: String = now[0]
+    let nmo: String = now[1]
+    let nd: String = now[2]
+    if y == ny and mo == nmo and d == nd {
+        return h + ":" + mi
+    }
+    return d + "/" + mo + " " + h + ":" + mi
+}
+
+// Markup de una fila de mensaje (escapado — mismo shape que chat.js).
+#[export_name = "chat_row_html"]
+fn chat_row_html(t: int, n: String, m: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<div class=\"chat-msg\"><div class=\"chat-msg-head\"><span class=\"chat-msg-nick\">")
+    sb.append(esc(n))
+    sb.append("</span><span class=\"chat-msg-time\">")
+    sb.append(chat_fmt_time(t))
+    sb.append("</span></div><div class=\"chat-msg-body\">")
+    sb.append(esc(m))
+    sb.append("</div></div>")
+    return sb.to_string()
+}
+
+// Anexa un objeto de mensaje {t,n,m}; dedup+scroll los hace JS (js_chat_add).
+fn chat_add_obj(obj: Array, from_ws: int) {
+    let t: int = json_as_int(json_get(obj, "t"))
+    let n: String = json_as_string(json_get(obj, "n"))
+    let m: String = json_as_string(json_get(obj, "m"))
+    if m.length() == 0 { return }
+    let key: String = t.to_string() + "|" + n + "|" + m
+    js_chat_add(key, chat_row_html(t, n, m), from_ws)
+}
+
+// WS: llega un mensaje (JSON {t,n,m}).
+#[export_name = "chat_on_msg"]
+fn chat_on_msg(data: String) {
+    let obj: Array = json_parse(data)
+    chat_add_obj(obj, 1)
+}
+
+// Respuesta de /api/chat/<sala>: array de {t,n,m}.
+#[export_name = "chat_on_list"]
+fn chat_on_list(status: int, body: String) {
+    if status != 200 { return }
+    let root: Array = json_parse(body)
+    let items: Array = root[1]
+    var i: int = 0
+    while i < items.length() {
+        let it: Array = items[i]
+        chat_add_obj(it, 0)
+        i = i + 1
+    }
+    js_chat_empty_check()
+}
+
+#[export_name = "chat_load"]
+fn chat_load() {
+    browser_fetch("/api/chat/" + chat_room(), "GET", "", "chat_on_list")
+}
+
+fn chat_stop_poll() {
+    if chat_poll[0] != 0 {
+        browser_clear_timer(chat_poll[0])
+        chat_poll[0] = 0
+    }
+}
+fn chat_start_poll() {
+    if chat_poll[0] != 0 { return }
+    chat_load()
+    chat_poll[0] = browser_interval(4000, "chat_load")
+}
+fn chat_stop_ping() {
+    if chat_ping_id[0] != 0 {
+        browser_clear_timer(chat_ping_id[0])
+        chat_ping_id[0] = 0
+    }
+}
+
+fn chat_set_live(on: int) {
+    chat_wsok[0] = on
+    if on == 1 {
+        dom_set_html("#chat-live", "&#9679; en vivo")
+        js_toggle_class("#chat-live", "on", 1)
+    } else {
+        dom_set_html("#chat-live", "&#9675; actualizando")
+        js_toggle_class("#chat-live", "on", 0)
+    }
+}
+
+fn chat_connect() {
+    js_ws("/ws/chat/" + chat_room(), "chat_on_open", "chat_on_msg", "chat_on_close")
+}
+
+#[export_name = "chat_on_open"]
+fn chat_on_open() {
+    chat_tries[0] = 0
+    chat_set_live(1)
+    chat_stop_poll()
+    chat_load()
+    chat_stop_ping()
+    chat_ping_id[0] = browser_interval(25000, "chat_ping")
+}
+
+#[export_name = "chat_ping"]
+fn chat_ping() {
+    js_ws_send("p")
+}
+
+#[export_name = "chat_on_close"]
+fn chat_on_close() {
+    chat_set_live(0)
+    chat_stop_ping()
+    if js_hidden() == 0 { chat_start_poll() }
+    if chat_re[0] != 0 { browser_clear_timer(chat_re[0]) }
+    chat_tries[0] = chat_tries[0] + 1
+    var e: int = chat_tries[0]
+    if e > 5 { e = 5 }
+    var d: int = 1000
+    var k: int = 0
+    while k < e {
+        d = d * 2
+        k = k + 1
+    }
+    if d > 30000 { d = 30000 }
+    chat_re[0] = browser_timeout(d, "chat_reconnect")
+}
+
+#[export_name = "chat_reconnect"]
+fn chat_reconnect() {
+    chat_re[0] = 0
+    if js_hidden() == 0 { chat_connect() }
+}
+
+#[export_name = "chat_visibility"]
+fn chat_visibility() {
+    if js_hidden() == 1 {
+        chat_stop_poll()
+    } else {
+        if chat_wsok[0] == 1 {
+            chat_load()
+        } else {
+            chat_start_poll()
+            chat_connect()
+        }
+    }
+}
+
+// Contador N/280 del textarea.
+#[export_name = "chat_count"]
+fn chat_count() {
+    let t: String = dom_get_value("#chat-text")
+    dom_set_html("#chat-count", t.length().to_string() + "/280")
+}
+
+// Envío por POST (el servidor valida/sanea/limita).
+#[export_name = "chat_send"]
+fn chat_send() {
+    let nick: String = dom_get_value("#chat-nick")
+    let text: String = dom_get_value("#chat-text")
+    let m: String = text.trim()
+    if m.length() == 0 { return }
+    ls_set("chat_nick", nick)
+    dom_set_html("#chat-status", "Enviando&hellip;")
+    let body: String = "room=" + url_encode(chat_room()) + "&nick=" + url_encode(nick) + "&texto=" + url_encode(m)
+    browser_fetch("/api/chat/send", "POST", body, "chat_on_send")
+}
+
+#[export_name = "chat_on_send"]
+fn chat_on_send(status: int, body: String) {
+    if status != 200 {
+        dom_set_html("#chat-status", "Error de red")
+        return
+    }
+    let obj: Array = json_parse(body)
+    let ok: int = json_as_int(json_get(obj, "ok"))
+    if ok == 1 {
+        js_set_value("#chat-text", "")
+        chat_count()
+        dom_set_html("#chat-status", "")
+        if chat_wsok[0] == 0 { chat_load() }
+    } else {
+        var err: String = json_as_string(json_get(obj, "error"))
+        if err.length() == 0 { err = "No se pudo enviar" }
+        dom_set_html("#chat-status", esc(err))
+    }
+}
+
+// Salas: pobla el <select> desde /api/rooms.
+#[export_name = "chat_rooms_load"]
+fn chat_rooms_load() {
+    browser_fetch("/api/rooms", "GET", "", "chat_on_rooms")
+}
+
+#[export_name = "chat_on_rooms"]
+fn chat_on_rooms(status: int, body: String) {
+    if status != 200 { return }
+    let root: Array = json_parse(body)
+    let items: Array = root[1]
+    let cur: String = chat_room()
+    var sb: StringBuilder = StringBuilder.new()
+    var i: int = 0
+    while i < items.length() {
+        let it: Array = items[i]
+        let id: String = json_as_string(json_get(it, "id"))
+        let nm: String = json_as_string(json_get(it, "n"))
+        sb.append("<option value=\"")
+        sb.append(esc(id))
+        sb.append("\"")
+        if id == cur { sb.append(" selected") }
+        sb.append(">")
+        sb.append(esc(nm))
+        sb.append("</option>")
+        i = i + 1
+    }
+    dom_set_html("#chat-room", sb.to_string())
+}
+
+#[export_name = "chat_room_change"]
+fn chat_room_change() {
+    let r: String = dom_get_value("#chat-room")
+    ls_set("chat_room", r)
+    js_chat_clear()
+    chat_stop_ping()
+    js_ws_close()
+    chat_load()
+    chat_connect()
+}
+
+// Arranque (se llamará desde main() en el go-live para pg=="chat").
+fn chat_boot() {
+    let sn: String = ls_get("chat_nick")
+    if sn.length() > 0 { js_set_value("#chat-nick", sn) }
+    dom_on("#chat-text", "input", "chat_count")
+    dom_on("#chat-room", "change", "chat_room_change")
+    js_on_submit("#chat-form", "chat_send")
+    js_on_visibility("chat_visibility")
+    chat_count()
+    chat_rooms_load()
+    chat_rooms_id[0] = browser_interval(60000, "chat_rooms_load")
+    chat_load()
+    chat_start_poll()
+    chat_connect()
+}

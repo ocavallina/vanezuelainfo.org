@@ -11,7 +11,9 @@ export const fetches = []; // llamadas a js_fetch registradas: {url, method, han
 export const toggles = []; // llamadas a js_toggle_class: {sel, cls, on}
 export const timers = [];  // llamadas a js_interval/js_timeout: {ms, handler}
 export const shares = []; // llamadas a js_share: {text, url}
+export const chatAdds = []; // llamadas a js_chat_add: {key, html, fromWs}
 export const TZ_MIN = -240; // zona fija del test: UTC-4 (Venezuela)
+export const NOW_EPOCH = 1782000000; // "ahora" fijo del test (2026-07-... UTC)
 
 export default (nyx) => ({
   js_console_log: (p) => console.log("[log]", nyx.readString(p)),
@@ -41,6 +43,17 @@ export default (nyx) => ({
   js_on_enter: (sel, handler) => { console.log("[on_enter]", nyx.readString(sel), "->", nyx.readString(handler)); },
   js_count: (sel) => 0n,
   js_share: (text, url) => { shares.push({ text: nyx.readString(text), url: nyx.readString(url) }); },
+  // Chat (Fase F): WS/submit/visibility mockeados; el historial se captura en chatAdds.
+  js_ws: (u, a, b, c) => { console.log("[ws]", nyx.readString(u)); },
+  js_ws_send: (d) => {},
+  js_ws_close: () => {},
+  js_on_submit: (sel, h) => { console.log("[on_submit]", nyx.readString(sel), "->", nyx.readString(h)); },
+  js_on_visibility: (h) => {},
+  js_hidden: () => 0n,
+  js_now_epoch: () => BigInt(NOW_EPOCH),
+  js_chat_add: (key, html, fromWs) => { chatAdds.push({ key: nyx.readString(key), html: nyx.readString(html), fromWs: Number(fromWs) }); },
+  js_chat_clear: () => { chatAdds.length = 0; },
+  js_chat_empty_check: () => {},
 });
 
 // main() corre en _start y lee #pg — se pre-siembra ANTES de instanciar
@@ -181,6 +194,23 @@ export async function afterStart({ exports, nyx }) {
   if (!sh || sh.url !== "/finanzas") throw new Error("FALLO calc_share url: " + JSON.stringify(sh));
   if (!sh.text.includes("63.970,29 Bs") || !sh.text.includes("Convierte")) throw new Error("FALLO calc_share text: " + sh.text);
   console.log("ok calc_share");
+
+  // ── Chat (Fase F): fila escapada, parseo de lista y de mensaje WS ──────────
+  values["#chat-room"] = "general";
+  chatAdds.length = 0;
+  const rowHtml = S(exports.chat_row_html(BigInt(NOW_EPOCH), M("Ana <b>"), M("hola & chau")));
+  if (!rowHtml.includes("Ana &lt;b&gt;") || !rowHtml.includes("hola &amp; chau")) throw new Error("FALLO chat_row_html escape: " + rowHtml);
+  if (!rowHtml.includes("chat-msg-nick") || !rowHtml.includes("chat-msg-body")) throw new Error("FALLO chat_row_html markup: " + rowHtml);
+  console.log("ok chat_row_html (escape + markup)");
+  exports.chat_on_list(200n, M('[{"t":1782000000,"n":"Ana","m":"hola"},{"t":1782000100,"n":"Beto","m":"que tal"}]'));
+  if (chatAdds.length !== 2) throw new Error("FALLO chat_on_list count: " + chatAdds.length);
+  if (chatAdds[0].key !== "1782000000|Ana|hola") throw new Error("FALLO chat_on_list key: " + chatAdds[0].key);
+  if (chatAdds[0].fromWs !== 0 || !chatAdds[1].html.includes("que tal")) throw new Error("FALLO chat_on_list contenido");
+  console.log("ok chat_on_list (parse array {t,n,m})");
+  chatAdds.length = 0;
+  exports.chat_on_msg(M('{"t":1782000200,"n":"Caro","m":"buenas"}'));
+  if (chatAdds.length !== 1 || chatAdds[0].fromWs !== 1 || chatAdds[0].key !== "1782000200|Caro|buenas") throw new Error("FALLO chat_on_msg: " + JSON.stringify(chatAdds));
+  console.log("ok chat_on_msg (mensaje WS en vivo)");
 
   // Fase C: clima — fixtures con decoys current_units/hourly_units (el marcador
   // "key":{ debe saltarlos). Horas generadas relativas a ahora (TZ -240).

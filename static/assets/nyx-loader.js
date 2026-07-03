@@ -15,6 +15,7 @@ window.nyxReady = (async () => {
   const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref
   const call = (h, ...args) => { if (ref.exports && ref.exports[h]) ref.exports[h](...args); };
+  let chatWs = null, chatSeen = {};         // Fase F: WS activo + dedup del historial (en JS, arena-safe)
   const r = await runNyxWasm(bytes, { js: (nyx) => {
     const S = (p) => nyx.readString(p), M = (s) => nyx.makeString(s);
     return {
@@ -65,6 +66,40 @@ window.nyxReady = (async () => {
       const s = S(sel), h = S(handler);
       const el = document.querySelector(s);
       if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); call(h); } });
+    },
+    // — Chat (Fase F): WebSocket, submit/visibility y anexado del historial —
+    //   El historial y el dedup viven aquí (JS/DOM), no en el wasm → arena-safe.
+    js_ws: (pathPtr, onOpenPtr, onMsgPtr, onClosePtr) => {
+      const path = S(pathPtr), onOpen = S(onOpenPtr), onMsg = S(onMsgPtr), onClose = S(onClosePtr);
+      if (typeof WebSocket === 'undefined') { call(onClose); return; }
+      try { if (chatWs) { chatWs.onclose = null; chatWs.close(); } } catch (e) {}
+      const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + path;
+      let s; try { s = new WebSocket(url); } catch (e) { call(onClose); return; }
+      chatWs = s;
+      s.onopen = () => { if (s === chatWs) call(onOpen); };
+      s.onmessage = (ev) => { if (s === chatWs) call(onMsg, M(ev.data)); };
+      s.onclose = () => { if (s === chatWs) { chatWs = null; call(onClose); } };
+      s.onerror = () => {};
+    },
+    js_ws_send: (dataPtr) => { try { if (chatWs) chatWs.send(S(dataPtr)); } catch (e) {} },
+    js_ws_close: () => { try { if (chatWs) { chatWs.onclose = null; chatWs.close(); chatWs = null; } } catch (e) {} },
+    js_on_submit: (selPtr, hPtr) => { const el = document.querySelector(S(selPtr)); const h = S(hPtr); if (el) el.addEventListener('submit', (e) => { e.preventDefault(); call(h); }); },
+    js_on_visibility: (hPtr) => { const h = S(hPtr); document.addEventListener('visibilitychange', () => call(h)); },
+    js_hidden: () => BigInt(document.hidden ? 1 : 0),
+    js_now_epoch: () => BigInt(Math.floor(Date.now() / 1000)),
+    js_chat_clear: () => { const log = document.getElementById('chat-log'); if (log) log.innerHTML = ''; chatSeen = {}; },
+    js_chat_empty_check: () => {
+      const log = document.getElementById('chat-log');
+      if (log && !log.childNodes.length) { const e = document.createElement('div'); e.className = 'chat-empty'; e.textContent = 'Aun no hay mensajes. Se el primero.'; log.appendChild(e); }
+    },
+    js_chat_add: (keyPtr, htmlPtr, fromWs) => {
+      const key = S(keyPtr), html = S(htmlPtr);
+      const log = document.getElementById('chat-log'); if (!log) return;
+      if (chatSeen[key]) return; chatSeen[key] = 1;
+      const empty = log.querySelector('.chat-empty'); if (empty) empty.remove();
+      const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+      log.insertAdjacentHTML('beforeend', html); // html ya escapado por el wasm (esc)
+      if (atBottom) log.scrollTop = log.scrollHeight;
     },
   }; }});
   ref.exports = r.exports;
