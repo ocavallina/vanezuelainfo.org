@@ -495,6 +495,16 @@ fn handle_icon_512(req: Request) -> Response {
     return Response { status: 200, headers_flat: h, body: read_file("static/icon-512.png") }
 }
 
+fn handle_icon_calc_192(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/png"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon-calc-192.png") }
+}
+
+fn handle_icon_calc_512(req: Request) -> Response {
+    let h: Array = ["Content-Type", "image/png"]
+    return Response { status: 200, headers_flat: h, body: read_file("static/icon-calc-512.png") }
+}
+
 // Hilo en segundo plano: pre-calienta al arrancar y refresca cada 30 min, para
 // que las noticias/BVC esten siempre frescas (< 1 hora) aunque no haya trafico.
 fn refresher_worker() -> int {
@@ -558,6 +568,8 @@ fn setup_routes(app: App) {
     app_get(app, "/sw.js", handle_sw)
     app_get(app, "/icon.svg", handle_icon_svg)
     app_get(app, "/icon-calc.svg", handle_icon_calc_svg)
+    app_get(app, "/icon-calc-192.png", handle_icon_calc_192)
+    app_get(app, "/icon-calc-512.png", handle_icon_calc_512)
     app_get(app, "/icon-192.png", handle_icon_192)
     app_get(app, "/icon-512.png", handle_icon_512)
     app_static(app, "/assets/", "static/assets/")

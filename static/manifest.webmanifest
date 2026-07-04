@@ -12,5 +12,16 @@
     { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
     { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any maskable" },
     { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Calculadora de cambio",
+      "short_name": "Calculadora",
+      "description": "Convierte Dolar, Bolivar (BCV), USDT y Euro con las tasas del dia.",
+      "url": "/calculadora",
+      "icons": [
+        { "src": "/icon-calc-192.png", "type": "image/png", "sizes": "192x192" }
+      ]
+    }
   ]
 }

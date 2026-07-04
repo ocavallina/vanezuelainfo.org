@@ -55,12 +55,15 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append(content)
     sb.append("</main>\n")
 
-    sb.append("<footer class=\"site-footer\">\n")
-    sb.append("<p>venezuelainfo.org — Hecho con <a href=\"https://nyxlang.com\">Nyx</a>. ")
-    sb.append("Datos sismicos: <a href=\"https://www.emsc-csem.org\">EMSC</a>. ")
-    sb.append("Mapa: <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>. ")
-    sb.append("Codigo: <a href=\"https://github.com/ocavallina/vanezuelainfo.org\">GitHub</a>.</p>\n")
-    sb.append("</footer>\n")
+    // full_chrome=0 (Calculadora app aparte): sin footer.
+    if full_chrome == 1 {
+        sb.append("<footer class=\"site-footer\">\n")
+        sb.append("<p>venezuelainfo.org — Hecho con <a href=\"https://nyxlang.com\">Nyx</a>. ")
+        sb.append("Datos sismicos: <a href=\"https://www.emsc-csem.org\">EMSC</a>. ")
+        sb.append("Mapa: <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>. ")
+        sb.append("Codigo: <a href=\"https://github.com/ocavallina/vanezuelainfo.org\">GitHub</a>.</p>\n")
+        sb.append("</footer>\n")
+    }
     // Registro del service worker (PWA)
     sb.append("<script>\n")
     sb.append("if('serviceWorker' in navigator){\n")
