@@ -1,7 +1,7 @@
 // src/layout.nx — Plantilla HTML compartida (header, footer, wrapper).
 // Tema visual con los colores de la bandera de Venezuela.
 
-fn page_v(title: String, content: String, viewport: String, manifest: String, app_title: String) -> String {
+fn page_v(title: String, content: String, viewport: String, manifest: String, app_title: String, full_chrome: int) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n")
     sb.append("<meta charset=\"utf-8\">\n")
@@ -33,18 +33,22 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("<div class=\"flag-stripe\"></div>\n")
     sb.append("<div class=\"header-inner\">\n")
     sb.append("<a class=\"brand\" href=\"/\">Venezuela<span>Info</span></a>\n")
-    sb.append("<nav class=\"site-nav\">\n")
-    sb.append("<a href=\"/sismos\">Sismos</a>\n")
-    sb.append("<a href=\"/clima\">Clima</a>\n")
-    sb.append("<a href=\"/noticias\">Noticias</a>\n")
-    sb.append("<a href=\"/finanzas\">Finanzas</a>\n")
-    sb.append("<a href=\"/baquiano\">Baquiano</a>\n")
-    sb.append("<a href=\"/chat\">Chat</a>\n")
-    sb.append("</nav>\n")
-    sb.append("<div class=\"header-actions\">\n")
-    sb.append("<button id=\"pwa-share\" class=\"pwa-share\" type=\"button\" aria-label=\"Compartir VenezuelaInfo\">Compartir</button>\n")
-    sb.append("<button id=\"pwa-install\" class=\"pwa-install\" type=\"button\" hidden>Instalar app</button>\n")
-    sb.append("</div>\n")
+    // full_chrome=0 (Calculadora como app aparte): sin barra de navegacion ni
+    // acciones del sitio; la pagina lleva su propio boton de instalar/compartir.
+    if full_chrome == 1 {
+        sb.append("<nav class=\"site-nav\">\n")
+        sb.append("<a href=\"/sismos\">Sismos</a>\n")
+        sb.append("<a href=\"/clima\">Clima</a>\n")
+        sb.append("<a href=\"/noticias\">Noticias</a>\n")
+        sb.append("<a href=\"/finanzas\">Finanzas</a>\n")
+        sb.append("<a href=\"/baquiano\">Baquiano</a>\n")
+        sb.append("<a href=\"/chat\">Chat</a>\n")
+        sb.append("</nav>\n")
+        sb.append("<div class=\"header-actions\">\n")
+        sb.append("<button id=\"pwa-share\" class=\"pwa-share\" type=\"button\" aria-label=\"Compartir VenezuelaInfo\">Compartir</button>\n")
+        sb.append("<button id=\"pwa-install\" class=\"pwa-install js-pwa-install\" type=\"button\" hidden>Instalar app</button>\n")
+        sb.append("</div>\n")
+    }
     sb.append("</div>\n</header>\n")
 
     sb.append("<main class=\"container\">\n")
@@ -62,10 +66,11 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("if('serviceWorker' in navigator){\n")
     sb.append("  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});\n")
     sb.append("}\n")
-    sb.append("(function(){var dfp=null,ib=document.getElementById('pwa-install');\n")
-    sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;if(ib)ib.hidden=false;});\n")
-    sb.append("if(ib)ib.addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;ib.hidden=true;});});\n")
-    sb.append("window.addEventListener('appinstalled',function(){if(ib)ib.hidden=true;});})();\n")
+    sb.append("(function(){var dfp=null,btns=document.querySelectorAll('.js-pwa-install');\n")
+    sb.append("function show(h){for(var i=0;i<btns.length;i++)btns[i].hidden=h;}\n")
+    sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;show(false);});\n")
+    sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
+    sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
     // Compartir la app: Web Share API (movil) con respaldo a copiar el enlace.
     sb.append("(function(){var sh=document.getElementById('pwa-share');if(!sh)return;\n")
     sb.append("var U=location.origin+'/',D={title:'VenezuelaInfo',text:'Noticias, clima, finanzas y sismos de Venezuela en vivo',url:U};\n")
@@ -79,18 +84,18 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
 }
 
 pub fn page(title: String, content: String) -> String {
-    return page_v(title, content, "width=device-width, initial-scale=1", "/manifest.webmanifest", "VenezuelaInfo")
+    return page_v(title, content, "width=device-width, initial-scale=1", "/manifest.webmanifest", "VenezuelaInfo", 1)
 }
 
 // Igual que page() pero bloquea el zoom del usuario (paginas con tabla/mapa que
 // de otro modo obligan a alejar en movil).
 pub fn page_fixed(title: String, content: String) -> String {
-    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest.webmanifest", "VenezuelaInfo")
+    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest.webmanifest", "VenezuelaInfo", 1)
 }
 
 // Shell para la Calculadora como PWA instalable APARTE: su propio manifest
-// (start_url/scope /calculadora) y titulo de app, para que el navegador la
-// instale como una app distinta de VenezuelaInfo.
+// (start_url/scope /calculadora), titulo de app, y SIN barra de navegacion
+// (full_chrome=0) para que se sienta una app aparte.
 pub fn page_calc(title: String, content: String) -> String {
-    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest-calc.webmanifest", "Calculadora VE")
+    return page_v(title, content, "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no", "/manifest-calc.webmanifest", "Calculadora VE", 0)
 }

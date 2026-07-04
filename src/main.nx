@@ -118,6 +118,7 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("<p><a href=\"/finanzas\">&larr; Volver a Finanzas</a></p>\n")
     sb.append("<h1>Calculadora de cambio</h1>\n")
     sb.append("<p class=\"lede\">Convierte entre D&oacute;lar, Bol&iacute;var, USDT y Euro con las tasas del d&iacute;a.</p>\n")
+    sb.append("<button id=\"calc-install\" class=\"calc-install js-pwa-install\" type=\"button\" hidden>&#128241; Instalar la calculadora</button>\n")
     sb.append("<section class=\"fz-calc\">\n")
     sb.append("<div class=\"calc-head\">")
     sb.append("<h2 class=\"finz-h\">Calculadora</h2>")
