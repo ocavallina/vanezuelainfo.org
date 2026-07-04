@@ -66,11 +66,22 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("if('serviceWorker' in navigator){\n")
     sb.append("  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});\n")
     sb.append("}\n")
-    sb.append("(function(){var dfp=null,btns=document.querySelectorAll('.js-pwa-install');\n")
-    sb.append("function show(h){for(var i=0;i<btns.length;i++)btns[i].hidden=h;}\n")
-    sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;show(false);});\n")
-    sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
-    sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
+    if full_chrome == 1 {
+        // Sitio: botón(es) de instalar del header (.js-pwa-install).
+        sb.append("(function(){var dfp=null,btns=document.querySelectorAll('.js-pwa-install');\n")
+        sb.append("function show(h){for(var i=0;i<btns.length;i++)btns[i].hidden=h;}\n")
+        sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;show(false);});\n")
+        sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
+        sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
+    } else {
+        // Calculadora (app aparte): sin botón. Si NO está instalada y es elegible,
+        // beforeinstallprompt se emite; se auto-lanza el diálogo en el primer gesto
+        // del usuario (los navegadores exigen un gesto; no hay auto sin interacción).
+        sb.append("(function(){var dfp=null;\n")
+        sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;});\n")
+        sb.append("function ask(){document.removeEventListener('pointerdown',ask,true);if(!dfp)return;var p=dfp;dfp=null;p.prompt();p.userChoice.then(function(){});}\n")
+        sb.append("document.addEventListener('pointerdown',ask,true);})();\n")
+    }
     // Compartir la app: Web Share API (movil) con respaldo a copiar el enlace.
     sb.append("(function(){var sh=document.getElementById('pwa-share');if(!sh)return;\n")
     sb.append("var U=location.origin+'/',D={title:'VenezuelaInfo',text:'Noticias, clima, finanzas y sismos de Venezuela en vivo',url:U};\n")
