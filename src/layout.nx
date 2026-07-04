@@ -33,17 +33,11 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("<div class=\"flag-stripe\"></div>\n")
     sb.append("<div class=\"header-inner\">\n")
     sb.append("<a class=\"brand\" href=\"/\">Venezuela<span>Info</span></a>\n")
-    // full_chrome=0 (Calculadora como app aparte): sin barra de navegacion ni
-    // acciones del sitio; la pagina lleva su propio boton de instalar/compartir.
+    // Sin barra de navegación: se navega por las tarjetas de la portada (el logo
+    // vuelve al inicio; cada página tiene su enlace "Volver al inicio"). En el
+    // header solo quedan las acciones (Compartir + Instalar); en full_chrome=0
+    // (Calculadora app aparte) ni eso.
     if full_chrome == 1 {
-        sb.append("<nav class=\"site-nav\">\n")
-        sb.append("<a href=\"/sismos\">Sismos</a>\n")
-        sb.append("<a href=\"/clima\">Clima</a>\n")
-        sb.append("<a href=\"/noticias\">Noticias</a>\n")
-        sb.append("<a href=\"/finanzas\">Finanzas</a>\n")
-        sb.append("<a href=\"/baquiano\">Baquiano</a>\n")
-        sb.append("<a href=\"/chat\">Chat</a>\n")
-        sb.append("</nav>\n")
         sb.append("<div class=\"header-actions\">\n")
         sb.append("<button id=\"pwa-share\" class=\"pwa-share\" type=\"button\" aria-label=\"Compartir VenezuelaInfo\">Compartir</button>\n")
         sb.append("<button id=\"pwa-install\" class=\"pwa-install js-pwa-install\" type=\"button\" hidden>Instalar app</button>\n")
