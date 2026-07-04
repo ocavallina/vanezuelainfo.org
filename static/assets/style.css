@@ -206,6 +206,9 @@ a { color: var(--enlace); }
 .finz-calc-txt strong { color: var(--enlace); }
 .finz-calc-txt span { color: var(--gris); font-size: .85rem; }
 .finz-calc-arrow { color: var(--enlace); font-size: 1.3rem; }
+/* Enlace discreto "Instalar como app" (/calculadora) */
+.calc-install-link { display: inline-block; margin: 0 0 12px; padding: 0; border: 0; background: none; color: var(--enlace); font: inherit; font-size: .9rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.calc-install-link:hover { color: var(--rojo); }
 /* Hint de instalación en iOS (/calculadora) */
 .calc-ios-hint { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; font-size: .9rem; color: var(--tinta); }
 .calc-ios-hint span { flex: 1 1 auto; }

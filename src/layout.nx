@@ -74,16 +74,18 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
         sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
         sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
     } else {
-        // Calculadora (app aparte): sin botón. Auto-lanza el diálogo de instalar en el
-        // PRIMER gesto del usuario SOLO UNA VEZ (guard en localStorage: no insistir),
-        // si NO está instalada y es elegible (los navegadores exigen un gesto).
-        sb.append("(function(){var dfp=null,K='calc_install_asked';\n")
-        sb.append("function done(){try{return localStorage.getItem(K)==='1';}catch(e){return false;}}\n")
-        sb.append("function mark(){try{localStorage.setItem(K,'1');}catch(e){}}\n")
+        // Calculadora (app aparte): enlace discreto "Instalar como app". Se muestra en
+        // navegadores que pueden instalar PWA (no iOS, no ya instalada); al tocarlo
+        // dispara el diálogo (fiable: es un gesto del usuario). iOS lo cubre el hint.
+        sb.append("(function(){var lnk=document.getElementById('calc-install-link');if(!lnk)return;\n")
+        sb.append("var ua=navigator.userAgent||'',iOS=/iphone|ipad|ipod/i.test(ua);\n")
+        sb.append("var sa=(navigator.standalone===true)||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);\n")
+        sb.append("if(iOS||sa){lnk.remove();return;}\n")
+        sb.append("lnk.hidden=false;var dfp=null;\n")
         sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;});\n")
-        sb.append("function ask(){document.removeEventListener('pointerdown',ask,true);if(!dfp||done())return;mark();var p=dfp;dfp=null;p.prompt();p.userChoice.then(function(){});}\n")
-        sb.append("document.addEventListener('pointerdown',ask,true);\n")
-        sb.append("window.addEventListener('appinstalled',function(){mark();});})();\n")
+        sb.append("lnk.addEventListener('click',function(){if(dfp){var p=dfp;dfp=null;p.prompt();p.userChoice.then(function(){});return;}\n")
+        sb.append("alert('Para instalar: abre el men\\u00fa del navegador (\\u22ee) y elige \"Instalar aplicaci\\u00f3n\" o \"Agregar a pantalla principal\".');});\n")
+        sb.append("window.addEventListener('appinstalled',function(){lnk.remove();});})();\n")
         // iOS Safari no emite beforeinstallprompt → hint dismissable "Compartir →
         // Añadir a inicio" (solo iOS, no instalada, una vez; recuerda el descarte).
         sb.append("(function(){var ua=navigator.userAgent||'';\n")
