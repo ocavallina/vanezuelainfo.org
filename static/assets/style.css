@@ -206,6 +206,11 @@ a { color: var(--enlace); }
 .finz-calc-txt strong { color: var(--enlace); }
 .finz-calc-txt span { color: var(--gris); font-size: .85rem; }
 .finz-calc-arrow { color: var(--enlace); font-size: 1.3rem; }
+/* Hint de instalación en iOS (/calculadora) */
+.calc-ios-hint { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; font-size: .9rem; color: var(--tinta); }
+.calc-ios-hint span { flex: 1 1 auto; }
+.calc-ios-hint strong { color: var(--enlace); }
+.calc-ios-hint button { flex: 0 0 auto; border: 0; background: transparent; color: var(--gris); font-size: 1.3rem; line-height: 1; cursor: pointer; padding: 0 4px; }
 .calc-panel { display: flex; align-items: center; gap: 8px; border: 1px solid var(--borde); border-radius: 10px; padding: 4px 10px; background: var(--tarjeta); }
 .calc-amt { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--tinta); font: inherit; font-size: 1.5rem; font-weight: 700; padding: 8px 2px; outline: none; }
 .calc-result { flex: 1 1 auto; min-width: 0; font-size: 1.5rem; font-weight: 800; color: var(--enlace); padding: 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

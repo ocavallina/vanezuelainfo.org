@@ -74,13 +74,27 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
         sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
         sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
     } else {
-        // Calculadora (app aparte): sin botón. Si NO está instalada y es elegible,
-        // beforeinstallprompt se emite; se auto-lanza el diálogo en el primer gesto
-        // del usuario (los navegadores exigen un gesto; no hay auto sin interacción).
-        sb.append("(function(){var dfp=null;\n")
+        // Calculadora (app aparte): sin botón. Auto-lanza el diálogo de instalar en el
+        // PRIMER gesto del usuario SOLO UNA VEZ (guard en localStorage: no insistir),
+        // si NO está instalada y es elegible (los navegadores exigen un gesto).
+        sb.append("(function(){var dfp=null,K='calc_install_asked';\n")
+        sb.append("function done(){try{return localStorage.getItem(K)==='1';}catch(e){return false;}}\n")
+        sb.append("function mark(){try{localStorage.setItem(K,'1');}catch(e){}}\n")
         sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;});\n")
-        sb.append("function ask(){document.removeEventListener('pointerdown',ask,true);if(!dfp)return;var p=dfp;dfp=null;p.prompt();p.userChoice.then(function(){});}\n")
-        sb.append("document.addEventListener('pointerdown',ask,true);})();\n")
+        sb.append("function ask(){document.removeEventListener('pointerdown',ask,true);if(!dfp||done())return;mark();var p=dfp;dfp=null;p.prompt();p.userChoice.then(function(){});}\n")
+        sb.append("document.addEventListener('pointerdown',ask,true);\n")
+        sb.append("window.addEventListener('appinstalled',function(){mark();});})();\n")
+        // iOS Safari no emite beforeinstallprompt → hint dismissable "Compartir →
+        // Añadir a inicio" (solo iOS, no instalada, una vez; recuerda el descarte).
+        sb.append("(function(){var ua=navigator.userAgent||'';\n")
+        sb.append("var iOS=/iphone|ipad|ipod/i.test(ua);\n")
+        sb.append("var sa=(navigator.standalone===true)||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);\n")
+        sb.append("var K='calc_ios_hint',d=false;try{d=localStorage.getItem(K)==='1';}catch(e){}\n")
+        sb.append("if(!iOS||sa||d)return;\n")
+        sb.append("var b=document.createElement('div');b.className='calc-ios-hint';\n")
+        sb.append("b.innerHTML='<span>Para instalar la calculadora: toca <strong>Compartir</strong> y luego <strong>\\u00abA\\u00f1adir a inicio\\u00bb</strong>.</span><button type=\"button\" aria-label=\"Cerrar\">\\u00d7</button>';\n")
+        sb.append("b.querySelector('button').addEventListener('click',function(){b.remove();try{localStorage.setItem(K,'1');}catch(e){}});\n")
+        sb.append("var m=document.querySelector('main.container')||document.body;m.insertBefore(b,m.firstChild);})();\n")
     }
     // Compartir la app: Web Share API (movil) con respaldo a copiar el enlace.
     sb.append("(function(){var sh=document.getElementById('pwa-share');if(!sh)return;\n")
