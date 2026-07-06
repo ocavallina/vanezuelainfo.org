@@ -635,10 +635,12 @@ a { color: var(--enlace); }
 .visit-num { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; text-align: center; }
 .visit-num .vn-n { display: block; font-size: 2rem; font-weight: 800; color: var(--enlace); line-height: 1.1; }
 .visit-num small { color: var(--gris); }
-.visit-days { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
-.visit-day { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; align-items: center; min-width: 68px; }
-.visit-day span { color: var(--gris); font-size: .8rem; }
-.visit-day b { font-size: 1.1rem; }
+.visit-bars { display: flex; align-items: flex-end; gap: 8px; margin: 8px 0 6px; }
+.visit-bar { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.vb-n { font-size: .78rem; color: var(--gris); }
+.vb-track { width: 100%; height: 100px; display: flex; align-items: flex-end; justify-content: center; }
+.vb-fill { width: 70%; max-width: 34px; background: var(--azul); border-radius: 4px 4px 0 0; min-height: 2px; }
+.vb-lab { font-size: .72rem; color: var(--gris); margin-top: 4px; text-align: center; }
 .visit-log { display: flex; flex-direction: column; gap: 2px; }
 .visit-row { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; padding: 7px 0; border-top: 1px solid var(--borde); font-size: .9rem; }
 .visit-row .vr-when { color: var(--gris); }

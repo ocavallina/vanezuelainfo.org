@@ -557,11 +557,71 @@ fn visit_num(h: int, key: String) -> int {
     return string_to_int(v)
 }
 
+// Entero con separador de miles (1284 -> "1.284").
+fn fmt_miles(n: int) -> String {
+    let s: String = int_to_string(n)
+    let len: int = s.length()
+    if len <= 3 {
+        return s
+    }
+    var out: String = ""
+    var i: int = 0
+    while i < len {
+        if i > 0 and (len - i) % 3 == 0 {
+            out = out + "."
+        }
+        out = out + s.substring(i, i + 1)
+        i = i + 1
+    }
+    return out
+}
+
+// User-Agent -> etiqueta corta "Navegador · SO" (el UA completo va en el title).
+fn ua_short(ua: String) -> String {
+    if ua.length() == 0 {
+        return "?"
+    }
+    var br: String = "Otro"
+    if ua.indexOf("Edg") >= 0 {
+        br = "Edge"
+    } else if ua.indexOf("OPR") >= 0 or ua.indexOf("Opera") >= 0 {
+        br = "Opera"
+    } else if ua.indexOf("Firefox") >= 0 {
+        br = "Firefox"
+    } else if ua.indexOf("Chrome") >= 0 {
+        br = "Chrome"
+    } else if ua.indexOf("Safari") >= 0 {
+        br = "Safari"
+    } else if ua.indexOf("curl") >= 0 {
+        br = "curl"
+    } else if ua.indexOf("bot") >= 0 or ua.indexOf("Bot") >= 0 or ua.indexOf("spider") >= 0 {
+        br = "Bot"
+    }
+    var os: String = ""
+    if ua.indexOf("Android") >= 0 {
+        os = "Android"
+    } else if ua.indexOf("iPhone") >= 0 {
+        os = "iPhone"
+    } else if ua.indexOf("iPad") >= 0 {
+        os = "iPad"
+    } else if ua.indexOf("Windows") >= 0 {
+        os = "Windows"
+    } else if ua.indexOf("Mac OS") >= 0 or ua.indexOf("Macintosh") >= 0 {
+        os = "Mac"
+    } else if ua.indexOf("Linux") >= 0 {
+        os = "Linux"
+    }
+    if os.length() > 0 {
+        return br + " · " + os
+    }
+    return br
+}
+
 fn render_admin_visitas(csrf: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"admin\">\n")
-    sb.append("<div class=\"admin-top\"><h1>Visitas</h1>")
-    sb.append("<form method=\"post\" action=\"/admin/logout\" class=\"admin-inline\"><button type=\"submit\" class=\"admin-logout\">Salir</button></form></div>\n")
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("<h1>Visitas</h1>\n")
     let h: int = admin_conn()
     if h < 0 {
         sb.append("<p class=\"admin-err\">Almacen no disponible.</p>\n</section>\n")
@@ -572,19 +632,31 @@ fn render_admin_visitas(csrf: String) -> String {
     let d0: int = ven_day()
     let today: int = visit_num(h, "visits:day:" + int_to_string(d0))
     sb.append("<div class=\"visit-nums\">")
-    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(total) + "</span><small>Visitas totales</small></div>")
-    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(uniq) + "</span><small>Visitantes unicos</small></div>")
-    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(today) + "</span><small>Hoy</small></div>")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + fmt_miles(total) + "</span><small>Visitas totales</small></div>")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + fmt_miles(uniq) + "</span><small>Visitantes unicos</small></div>")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + fmt_miles(today) + "</span><small>Hoy</small></div>")
     sb.append("</div>\n")
-    sb.append("<h2 class=\"finz-h\">Ultimos 7 dias</h2>\n<div class=\"visit-days\">")
+    // Mini-grafico de 7 dias (barras proporcionales; hoy a la derecha).
+    var dayvals: Array = []
+    var maxv: int = 1
     var i: int = 0
     while i < 7 {
         let n: int = visit_num(h, "visits:day:" + int_to_string(d0 - i))
-        var lab: String = "hace " + int_to_string(i) + " d"
-        if i == 0 { lab = "Hoy" }
-        if i == 1 { lab = "Ayer" }
-        sb.append("<div class=\"visit-day\"><span>" + lab + "</span><b>" + int_to_string(n) + "</b></div>")
+        dayvals.push(n)
+        if n > maxv { maxv = n }
         i = i + 1
+    }
+    sb.append("<h2 class=\"finz-h\">Ultimos 7 dias</h2>\n<div class=\"visit-bars\">")
+    var k: int = 6
+    while k >= 0 {
+        let n: int = dayvals[k]
+        var lab: String = int_to_string(k) + "d"
+        if k == 0 { lab = "Hoy" }
+        if k == 1 { lab = "Ayer" }
+        var pct: int = n * 100 / maxv
+        if pct < 3 and n > 0 { pct = 3 }
+        sb.append("<div class=\"visit-bar\"><span class=\"vb-n\">" + fmt_miles(n) + "</span><div class=\"vb-track\"><div class=\"vb-fill\" style=\"height:" + int_to_string(pct) + "%\"></div></div><span class=\"vb-lab\">" + lab + "</span></div>")
+        k = k - 1
     }
     sb.append("</div>\n")
     sb.append("<h2 class=\"finz-h\">Registro (ultimas 300)</h2>\n")
@@ -602,10 +674,12 @@ fn render_admin_visitas(csrf: String) -> String {
             let ip0: String = parts[2]
             let ua0: String = parts[3]
             let ep: int = string_to_int(ts0)
+            var meta: String = "&mdash;"
+            if ip0.length() > 0 { meta = aesc(ip0) }
             sb.append("<div class=\"visit-row\">")
             sb.append("<span class=\"vr-when\">" + rel_txt(now - ep) + "</span>")
             sb.append("<span class=\"vr-path\">" + aesc(pth) + "</span>")
-            sb.append("<span class=\"vr-meta\">" + aesc(ip0) + " &middot; " + aesc(ua0) + "</span>")
+            sb.append("<span class=\"vr-meta\" title=\"" + aesc(ua0) + "\">" + meta + " &middot; " + aesc(ua_short(ua0)) + "</span>")
             sb.append("</div>")
         }
         j = j - 1
