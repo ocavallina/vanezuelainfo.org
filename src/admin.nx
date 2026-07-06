@@ -11,11 +11,13 @@
 // let tipado antes de usar.
 
 import "std/random"
+import "std/http"
 import "nyx-serve/src/server"
 import "src/kv"
 import "src/md"
 import "src/layout"
 import "src/chat"
+import "src/news"
 import "src/baquiano"
 
 const SESS_COOKIE: String = "veninfo_admin"
@@ -254,6 +256,7 @@ fn render_dashboard() -> String {
     sb.append("<div class=\"admin-nav\">\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/baquiano\"><span class=\"admin-tile-ico\">&#128205;</span><span>Baquiano</span><small>Zonas y sitios</small></a>\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>Crear, borrar, moderar</small></a>\n")
+    sb.append("<a class=\"admin-tile\" href=\"/admin/visitas\"><span class=\"admin-tile-ico\">&#128202;</span><span>Visitas</span><small>Contador y registro</small></a>\n")
     sb.append("</div>\n")
     sb.append("<p><a href=\"/\">&larr; Ver el sitio</a></p>\n")
     sb.append("</section>\n")
@@ -477,4 +480,189 @@ pub fn handle_admin_salas_post(req: Request) -> Response {
         chat_room_clear(form_field(req.body, "id"))
     }
     return redirect("/admin/salas")
+}
+
+// ── Visitas: contador + log ────────────────────────────────────────────────────
+// Un middleware global (app_use en main.nx) hace INCR por cada carga de pagina
+// publica y anexa al log. La cookie "vv" (visitante) la crea un <script> del
+// layout; aqui solo se LEE (nyx-serve no deja fijar Set-Cookie al continuar).
+
+// Indice de dia civil de Venezuela (UTC-4) desde epoch.
+fn ven_day() -> int {
+    return (time() - 14400) / 86400
+}
+
+// IP del cliente segun el gateway (X-Forwarded-For / X-Real-IP; "" si no llega).
+fn client_ip(req: Request) -> String {
+    var ip: String = http_find_header(req.headers_flat, "X-Forwarded-For")
+    if ip.length() > 0 {
+        let c: int = ip.indexOf(",")
+        if c > 0 {
+            ip = ip.substring(0, c)
+        }
+        return md_trim(ip)
+    }
+    ip = http_find_header(req.headers_flat, "X-Real-IP")
+    if ip.length() > 0 {
+        return md_trim(ip)
+    }
+    return ""
+}
+
+// True si la ruta NO debe contar (assets, API, admin, iconos, WS, PWA files).
+fn visit_skip(method: String, path: String) -> bool {
+    if method != "GET" { return true }
+    if path.startsWith("/assets/") { return true }
+    if path.startsWith("/api/") { return true }
+    if path.startsWith("/admin") { return true }
+    if path.startsWith("/icon") { return true }
+    if path.startsWith("/ws/") { return true }
+    if path.startsWith("/manifest") { return true }
+    if path == "/sw.js" { return true }
+    if path == "/favicon.ico" { return true }
+    return false
+}
+
+// Middleware global: cuenta la visita y la registra. Devuelve status 0 (continuar)
+// SIEMPRE (una metrica jamas debe romper ni bloquear la pagina).
+pub fn visit_middleware(req: Request) -> Response {
+    let cont: Array = []
+    if visit_skip(req.method, req.path) {
+        return Response { status: 0, headers_flat: cont, body: "" }
+    }
+    let h: int = admin_conn()
+    if h < 0 {
+        return Response { status: 0, headers_flat: cont, body: "" }
+    }
+    kv_incr(h, "visits:total")
+    if !req.cookies.contains("vv") {
+        kv_incr(h, "visits:unique")
+    }
+    kv_incr(h, "visits:day:" + int_to_string(ven_day()))
+    let ip: String = client_ip(req)
+    var ua: String = http_find_header(req.headers_flat, "User-Agent")
+    ua = ua.replace("|", "/")
+    let pth: String = req.path.replace("|", "/")
+    kv_rpush(h, "visits:log", int_to_string(time()) + "|" + pth + "|" + ip + "|" + ua)
+    kv_ltrim(h, "visits:log", -300, -1)
+    kv_close(h)
+    return Response { status: 0, headers_flat: cont, body: "" }
+}
+
+fn visit_num(h: int, key: String) -> int {
+    let v: String = kv_get(h, key)
+    if v.length() == 0 {
+        return 0
+    }
+    return string_to_int(v)
+}
+
+fn render_admin_visitas(csrf: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin\">\n")
+    sb.append("<div class=\"admin-top\"><h1>Visitas</h1>")
+    sb.append("<form method=\"post\" action=\"/admin/logout\" class=\"admin-inline\"><button type=\"submit\" class=\"admin-logout\">Salir</button></form></div>\n")
+    let h: int = admin_conn()
+    if h < 0 {
+        sb.append("<p class=\"admin-err\">Almacen no disponible.</p>\n</section>\n")
+        return page("Admin visitas", sb.to_string())
+    }
+    let total: int = visit_num(h, "visits:total")
+    let uniq: int = visit_num(h, "visits:unique")
+    let d0: int = ven_day()
+    let today: int = visit_num(h, "visits:day:" + int_to_string(d0))
+    sb.append("<div class=\"visit-nums\">")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(total) + "</span><small>Visitas totales</small></div>")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(uniq) + "</span><small>Visitantes unicos</small></div>")
+    sb.append("<div class=\"visit-num\"><span class=\"vn-n\">" + int_to_string(today) + "</span><small>Hoy</small></div>")
+    sb.append("</div>\n")
+    sb.append("<h2 class=\"finz-h\">Ultimos 7 dias</h2>\n<div class=\"visit-days\">")
+    var i: int = 0
+    while i < 7 {
+        let n: int = visit_num(h, "visits:day:" + int_to_string(d0 - i))
+        var lab: String = "hace " + int_to_string(i) + " d"
+        if i == 0 { lab = "Hoy" }
+        if i == 1 { lab = "Ayer" }
+        sb.append("<div class=\"visit-day\"><span>" + lab + "</span><b>" + int_to_string(n) + "</b></div>")
+        i = i + 1
+    }
+    sb.append("</div>\n")
+    sb.append("<h2 class=\"finz-h\">Registro (ultimas 300)</h2>\n")
+    let log: Array = kv_lrange(h, "visits:log", -300, -1)
+    kv_close(h)
+    sb.append("<div class=\"visit-log\">")
+    let now: int = time()
+    var j: int = log.length() - 1
+    while j >= 0 {
+        let row: String = log[j]
+        let parts: Array = row.split("|")
+        if parts.length() >= 4 {
+            let ts0: String = parts[0]
+            let pth: String = parts[1]
+            let ip0: String = parts[2]
+            let ua0: String = parts[3]
+            let ep: int = string_to_int(ts0)
+            sb.append("<div class=\"visit-row\">")
+            sb.append("<span class=\"vr-when\">" + rel_txt(now - ep) + "</span>")
+            sb.append("<span class=\"vr-path\">" + aesc(pth) + "</span>")
+            sb.append("<span class=\"vr-meta\">" + aesc(ip0) + " &middot; " + aesc(ua0) + "</span>")
+            sb.append("</div>")
+        }
+        j = j - 1
+    }
+    if log.length() == 0 {
+        sb.append("<p>Sin visitas registradas.</p>")
+    }
+    sb.append("</div>\n")
+    sb.append("<div class=\"admin-actions\">")
+    sb.append("<form method=\"post\" action=\"/admin/visitas\" class=\"admin-inline\" onsubmit=\"return confirm('Vaciar el registro?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"clear_log\"><button type=\"submit\" class=\"admin-del\">Vaciar registro</button></form>")
+    sb.append("<form method=\"post\" action=\"/admin/visitas\" class=\"admin-inline\" onsubmit=\"return confirm('Reiniciar el contador a cero?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"reset_counter\"><button type=\"submit\" class=\"admin-del\">Reiniciar contador</button></form>")
+    sb.append("</div>\n")
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("</section>\n")
+    return page("Admin visitas", sb.to_string())
+}
+
+pub fn handle_admin_visitas(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(200, render_login(""))
+    }
+    return admin_html(200, render_admin_visitas(csrf))
+}
+
+pub fn handle_admin_visitas_post(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(403, render_login("Sesion expirada."))
+    }
+    let tok: String = form_field(req.body, "csrf")
+    if tok != csrf {
+        return admin_html(403, render_login("Token invalido."))
+    }
+    let act: String = form_field(req.body, "act")
+    let h: int = admin_conn()
+    if h < 0 {
+        return redirect("/admin/visitas")
+    }
+    if act == "clear_log" {
+        kv_del(h, "visits:log")
+    } else if act == "reset_counter" {
+        kv_del(h, "visits:total")
+        kv_del(h, "visits:unique")
+        let d0: int = ven_day()
+        var i: int = 0
+        while i < 30 {
+            kv_del(h, "visits:day:" + int_to_string(d0 - i))
+            i = i + 1
+        }
+    }
+    kv_close(h)
+    return redirect("/admin/visitas")
 }

@@ -86,7 +86,7 @@ fn main() {
         chat_boot()
     }
     if pg == "calculadora" {
-        fx_boot(1)
+        fx_boot(0) // la calculadora solo usa BCV/EUR/Binance P2P (sin CoinGecko)
         calc_boot()
     }
 }

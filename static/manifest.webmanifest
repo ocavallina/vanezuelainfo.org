@@ -17,7 +17,7 @@
     {
       "name": "Calculadora de cambio",
       "short_name": "Calculadora",
-      "description": "Convierte Dolar, Bolivar (BCV), USDT y Euro con las tasas del dia.",
+      "description": "Convierte Bolivares a Dolar BCV, Euro BCV o Dolar Binance con las tasas del dia.",
       "url": "/calculadora",
       "icons": [
         { "src": "/icon-calc-192.png", "type": "image/png", "sizes": "192x192" }

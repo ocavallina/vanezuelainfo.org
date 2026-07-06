@@ -135,8 +135,9 @@ export async function afterStart({ exports, nyx }) {
   exports.fx_on_euros(200n, M(FIX_EUROS));
   exports.fx_on_cop(200n, M(FIX_COP));
   const card = texts["#fin-body"], page = texts["#fz-div"];
-  if (!card.includes("BCV") || !card.includes(" Bs 639,70")) throw new Error("FALLO BCV (scanner con espacios): " + card);
-  if (!card.includes("USDT compra") || !card.includes("Bs 734,59")) throw new Error("FALLO USDT ask: " + card);
+  if (!card.includes("Dólar BCV") || !card.includes(" Bs 639,70")) throw new Error("FALLO Dólar BCV (scanner con espacios): " + card);
+  // Dólar Binance = promedio compra/venta = (734,588+733,5)/2 = 734,044 → 734,04
+  if (!card.includes("Dólar Binance") || !card.includes("Bs 734,04")) throw new Error("FALLO Dólar Binance (promedio P2P): " + card);
   if (!card.includes("Euro BCV") || !card.includes("Bs 728,48")) throw new Error("FALLO EUR: " + card);
   if (!card.includes("USD en COP") || !card.includes("COP 3.402")) throw new Error("FALLO COP: " + card);
   // base=(734.588+733.5)/2=734.044; 1.000 COP = 734.044/3401.617171*1000 = 215,79
@@ -159,45 +160,52 @@ export async function afterStart({ exports, nyx }) {
   console.log("ok manejo de status!=200");
 
   // Calculadora: estado ya poblado por los fx_on_* de arriba
-  // (bcv=639.7029, uc=734.588, uv=733.5, eur=728.48086846, cop=3401.617171, btc=61835)
+  // Tasas Bs por divisa: bcv=639,7029 · eur=728,48086846 · bin=(734,588+733,5)/2=734,044
   values["#calc-amt"] = "100";
-  values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
+  values["#calc-dir"] = "d2b";
+  values["#calc-rate-sel"] = "bcv";
   exports.calc_render();
-  // 100 USD → Bs (BCV) = 100 * 639,7029 = 63.970,29 ; resultado y tasa separados
-  if (!texts["#calc-result"].includes("63.970,29 Bs")) throw new Error("FALLO calc USD→BSV: " + texts["#calc-result"]);
-  if (!texts["#calc-rate"].includes("1 USD =")) throw new Error("FALLO calc línea de tasa: " + texts["#calc-rate"]);
-  values["#calc-to"] = "USDT"; exports.calc_render();
-  // 100 USD / 0,998706 = 100,13 USDT
-  if (!texts["#calc-result"].includes("100,13 USDT")) throw new Error("FALLO calc USD→USDT: " + texts["#calc-result"]);
-  values["#calc-to"] = "EUR"; exports.calc_render();
-  if (!texts["#calc-result"].includes("€ 87,8")) throw new Error("FALLO calc USD→EUR: " + texts["#calc-result"]);
-  console.log("ok calculadora (USD→BSV/USDT/EUR + línea de tasa)");
+  // 100 Dólar BCV → Bs = 100 * 639,7029 = 63.970,29. El resultado es SOLO el número:
+  // la unidad la muestra el span #calc-to-unit (no debe repetirse dentro del resultado).
+  if (texts["#calc-result"] !== "63.970,29") throw new Error("FALLO calc bcv→Bs: " + texts["#calc-result"]);
+  if (!texts["#calc-rate"].includes("1 Dólar BCV = 639,70 Bs")) throw new Error("FALLO calc línea de tasa: " + texts["#calc-rate"]);
+  if (texts["#calc-from-unit"] !== "$" || texts["#calc-to-unit"] !== "Bs") throw new Error("FALLO calc unidades d2b: " + texts["#calc-from-unit"] + "/" + texts["#calc-to-unit"]);
+  values["#calc-rate-sel"] = "eur"; exports.calc_render();
+  // 100 Euro BCV → Bs = 100 * 728,48086846 = 72.848,09
+  if (texts["#calc-result"] !== "72.848,09") throw new Error("FALLO calc eur→Bs: " + texts["#calc-result"]);
+  if (texts["#calc-to-unit"] !== "Bs" || texts["#calc-from-unit"] !== "€") throw new Error("FALLO calc unidades eur: " + texts["#calc-from-unit"] + "/" + texts["#calc-to-unit"]);
+  values["#calc-rate-sel"] = "bin"; exports.calc_render();
+  // 100 Dólar Binance → Bs = 100 * 734,044 = 73.404,40 (paralelo, NO el BCV 63.970)
+  if (texts["#calc-result"] !== "73.404,40") throw new Error("FALLO calc bin→Bs: " + texts["#calc-result"]);
+  if (!texts["#calc-rate"].includes("1 Dólar Binance = 734,04 Bs")) throw new Error("FALLO calc bin línea de tasa: " + texts["#calc-rate"]);
+  // Sentido inverso Bs→divisa: 100 Bs / 639,7029 = 0,16 (resultado sin símbolo; el span da "$")
+  values["#calc-rate-sel"] = "bcv"; values["#calc-dir"] = "b2d"; exports.calc_render();
+  if (texts["#calc-result"] !== "0,16") throw new Error("FALLO calc Bs→bcv: " + texts["#calc-result"]);
+  if (texts["#calc-from-unit"] !== "Bs" || texts["#calc-to-unit"] !== "$") throw new Error("FALLO calc unidades b2d: " + texts["#calc-from-unit"] + "/" + texts["#calc-to-unit"]);
+  console.log("ok calculadora (bcv/eur/bin en Bs + inverso Bs→divisa + unidades + línea de tasa)");
 
-  // Guard: moneda sin tasa base → "Esperando tasas…" y tasa vacía
-  values["#calc-from"] = "ZZZ"; exports.calc_render();
+  // Guard: tasa sin base → "Esperando tasas…" y tasa vacía
+  values["#calc-dir"] = "d2b"; values["#calc-rate-sel"] = "zzz"; exports.calc_render();
   if (!texts["#calc-result"].includes("Esperando tasas")) throw new Error("FALLO calc guard: " + texts["#calc-result"]);
   if (texts["#calc-rate"] !== "") throw new Error("FALLO calc guard rate: " + texts["#calc-rate"]);
 
-  // Swap: intercambia from/to (js_set_value escribe en el mock `values`)
-  values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
+  // Swap: invierte el sentido (js_set_value escribe en el mock `values`)
+  values["#calc-dir"] = "d2b";
   exports.calc_swap();
-  if (values["#calc-from"] !== "BSV" || values["#calc-to"] !== "USD") throw new Error("FALLO calc_swap: " + values["#calc-from"] + "/" + values["#calc-to"]);
-  console.log("ok calc_swap");
+  if (values["#calc-dir"] !== "b2d") throw new Error("FALLO calc_swap d2b→b2d: " + values["#calc-dir"]);
+  exports.calc_swap();
+  if (values["#calc-dir"] !== "d2b") throw new Error("FALLO calc_swap b2d→d2b: " + values["#calc-dir"]);
+  console.log("ok calc_swap (invierte sentido)");
 
-  // Chip: Dólar→USDT fija origen=USD y destino=USDT
-  exports.calc_chip_usdt();
-  if (values["#calc-from"] !== "USD" || values["#calc-to"] !== "USDT") throw new Error("FALLO calc_chip_usdt: " + values["#calc-from"] + "/" + values["#calc-to"]);
-  console.log("ok calc_chip");
-
-  // Compartir: arma texto con la conversión y llama js_share(text, "/finanzas")
-  values["#calc-amt"] = "100"; values["#calc-from"] = "USD"; values["#calc-to"] = "BSV";
+  // Compartir: arma texto con la conversión y llama js_share(text, "/calculadora")
+  values["#calc-amt"] = "100"; values["#calc-dir"] = "d2b"; values["#calc-rate-sel"] = "bcv";
   exports.calc_share();
   const sh = shares[shares.length - 1];
   if (!sh || sh.url !== "/calculadora") throw new Error("FALLO calc_share url: " + JSON.stringify(sh));
   if (!sh.text.includes("63.970,29 Bs") || !sh.text.includes("Convierte")) throw new Error("FALLO calc_share text: " + sh.text);
   console.log("ok calc_share");
 
-  // Copiar: copia solo el resultado formateado (100 USD → BSV = 63.970,29 Bs)
+  // Copiar: copia solo el resultado formateado (100 Dólar BCV → 63.970,29 Bs)
   exports.calc_copy();
   const cp = copies[copies.length - 1];
   if (cp !== "63.970,29 Bs") throw new Error("FALLO calc_copy: " + cp);

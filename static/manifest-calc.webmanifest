@@ -1,7 +1,7 @@
 {
   "name": "Calculadora de cambio — Venezuela",
   "short_name": "Calculadora VE",
-  "description": "Convierte Dolar, Bolivar (BCV), USDT y Euro con las tasas del dia.",
+  "description": "Convierte Bolivares a Dolar BCV, Euro BCV o Dolar Binance con las tasas del dia.",
   "lang": "es",
   "id": "/calculadora",
   "start_url": "/calculadora",

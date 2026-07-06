@@ -63,6 +63,8 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("if('serviceWorker' in navigator){\n")
     sb.append("  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});\n")
     sb.append("}\n")
+    // Cookie de visitante (para contar únicos server-side; el server solo la lee).
+    sb.append("if(!/(?:^|; )vv=/.test(document.cookie)){document.cookie='vv=1; path=/; max-age=31536000; samesite=lax';}\n")
     if full_chrome == 1 {
         // Sitio: botón(es) de instalar del header (.js-pwa-install).
         sb.append("(function(){var dfp=null,btns=document.querySelectorAll('.js-pwa-install');\n")

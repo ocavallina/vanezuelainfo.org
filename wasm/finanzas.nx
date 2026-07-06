@@ -44,9 +44,10 @@ fn fx_paint() {
 
     // Tarjeta de la portada
     var h: String = ""
-    if bcv.length() > 0 { h = h + fin_row("BCV", " Bs " + fmt_bs(bcv)) }
-    if uc.length() > 0 { h = h + fin_row("USDT compra", "Bs " + fmt_bs(uc)) }
-    if uv.length() > 0 { h = h + fin_row("USDT venta", "Bs " + fmt_bs(uv)) }
+    if bcv.length() > 0 { h = h + fin_row("Dólar BCV", " Bs " + fmt_bs(bcv)) }
+    if uc.length() > 0 and uv.length() > 0 {
+        h = h + fin_row("Dólar Binance", "Bs " + fmt_f(base, 2, 2))
+    }
     if eur.length() > 0 { h = h + fin_row("Euro BCV", "Bs " + fmt_bs(eur)) }
     if cop.length() > 0 { h = h + fin_row("USD en COP", "COP " + fmt_cop(cop)) }
     if base > 0.0 and copf > 0.0 {
@@ -86,76 +87,58 @@ fn fx_paint_cripto() {
     dom_set_html("#fz-cripto", h)
 }
 
-// ── Calculadora de conversión (/finanzas) ───────────────────────────────────
-// Reutiliza las tasas del estado (fxv/fxc). Pivote = USD: se convierte
-// out = monto * usd_per(origen) / usd_per(destino). usd_per devuelve 0.0 si
-// falta la tasa base → la UI muestra "Esperando tasas…".
+// ── Calculadora de conversión (/calculadora) ────────────────────────────────
+// Tres tasas (Dólar BCV, Euro BCV, Dólar Binance) tomadas del estado (fxv), con
+// conversión bidireccional Bs↔divisa. rate_bs() devuelve Bs por 1 unidad de la
+// divisa (0.0 si falta la tasa base → la UI muestra "Esperando tasas…").
 
 fn cf(s: String) -> float {
     if s.length() == 0 { return 0.0 }
     return string_to_float(s)
 }
 
-// Valor de 1 unidad de `code` en USD.
-fn usd_per(code: String) -> float {
-    if code == "USD" { return 1.0 }
-    if code == "USDT" {
-        let u: float = cf(fxc[2])
-        if u > 0.0 { return u }
-        return 1.0
-    }
-    if code == "BTC" { return cf(fxc[0]) }
-    if code == "ETH" { return cf(fxc[1]) }
-    if code == "EUR" {
-        let e: float = cf(fxv[1])
-        let b: float = cf(fxv[0])
-        if e > 0.0 and b > 0.0 { return e / b }
-        return 0.0
-    }
-    if code == "COP" {
-        let c: float = cf(fxv[4])
-        if c > 0.0 { return 1.0 / c }
-        return 0.0
-    }
-    if code == "BSV" {
-        let b: float = cf(fxv[0])
-        if b > 0.0 { return 1.0 / b }
-        return 0.0
-    }
-    if code == "BSP" {
+// Tasa en Bs por 1 unidad de la divisa elegida en el selector.
+// sel ∈ {"bcv" (Dólar BCV), "eur" (Euro BCV), "bin" (Dólar Binance = promedio
+// compra/venta P2P)}. Devuelve 0.0 si aún falta la tasa base.
+fn rate_bs(sel: String) -> float {
+    if sel == "bcv" { return cf(fxv[0]) }
+    if sel == "eur" { return cf(fxv[1]) }
+    if sel == "bin" {
         let uc: float = cf(fxv[2])
         let uv: float = cf(fxv[3])
-        if uc > 0.0 and uv > 0.0 { return 1.0 / ((uc + uv) / 2.0) }
+        if uc > 0.0 and uv > 0.0 { return (uc + uv) / 2.0 }
         return 0.0
     }
     return 0.0
 }
 
-// Monto formateado con símbolo/decimales según la moneda destino.
-fn fmt_money(code: String, v: float) -> String {
-    if code == "USD" { return "$ " + fmt_f(v, 2, 2) }
-    if code == "EUR" { return "€ " + fmt_f(v, 2, 2) }
-    if code == "USDT" { return fmt_f(v, 2, 2) + " USDT" }
-    if code == "BTC" { return fmt_f(v, 2, 8) + " BTC" }
-    if code == "ETH" { return fmt_f(v, 2, 6) + " ETH" }
-    if code == "COP" { return fmt_f(v, 0, 0) + " COP" }
-    return fmt_f(v, 2, 2) + " Bs"
+// Nombre largo de la tasa (línea "1 X = … Bs").
+fn div_name(sel: String) -> String {
+    if sel == "bcv" { return "Dólar BCV" }
+    if sel == "eur" { return "Euro BCV" }
+    if sel == "bin" { return "Dólar Binance" }
+    return ""
 }
 
-// Nombre corto para la línea de tasa ("1 X = …").
-fn cur_name(code: String) -> String {
-    if code == "BSV" { return "Bs (BCV)" }
-    if code == "BSP" { return "Bs (paralelo)" }
-    return code
+// Símbolo/etiqueta de la divisa (junto al monto/resultado).
+fn div_sym(sel: String) -> String {
+    if sel == "eur" { return "€" }
+    return "$"
 }
 
+// Monto de divisa formateado con su símbolo (para resultado en sentido Bs→divisa).
+fn fmt_div(sel: String, v: float) -> String {
+    return div_sym(sel) + " " + fmt_f(v, 2, 2)
+}
+
+// Pinta la conversión. Lee la tasa (#calc-rate-sel), el sentido (#calc-dir:
+// "d2b" divisa→Bs por defecto, "b2d" Bs→divisa) y el monto (#calc-amt).
 #[export_name = "calc_render"]
 fn calc_render() {
-    let src: String = dom_get_value("#calc-from")
-    let dst: String = dom_get_value("#calc-to")
-    let uf: float = usd_per(src)
-    let ut: float = usd_per(dst)
-    if uf <= 0.0 or ut <= 0.0 {
+    let sel: String = dom_get_value("#calc-rate-sel")
+    let dir: String = dom_get_value("#calc-dir")
+    let r: float = rate_bs(sel)
+    if r <= 0.0 {
         dom_set_html("#calc-result", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
         dom_set_html("#calc-rate", "")
         return
@@ -163,51 +146,55 @@ fn calc_render() {
     let amt_s: String = dom_get_value("#calc-amt")
     var amt: float = 0.0
     if amt_s.length() > 0 { amt = string_to_float(amt_s) }
-    let out: float = amt * uf / ut
-    dom_set_html("#calc-result", fmt_money(dst, out))
-    dom_set_html("#calc-rate", "1 " + cur_name(src) + " = " + fmt_money(dst, uf / ut))
+    if dir == "b2d" {
+        // Bs → divisa (la unidad la muestra el span #calc-to-unit, no el resultado)
+        dom_set_html("#calc-from-unit", "Bs")
+        dom_set_html("#calc-to-unit", div_sym(sel))
+        dom_set_html("#calc-result", fmt_f(amt / r, 2, 2))
+    } else {
+        // divisa → Bs
+        dom_set_html("#calc-from-unit", div_sym(sel))
+        dom_set_html("#calc-to-unit", "Bs")
+        dom_set_html("#calc-result", fmt_f(amt * r, 2, 2))
+    }
+    dom_set_html("#calc-rate", "1 " + div_name(sel) + " = " + fmt_f(r, 2, 2) + " Bs")
 }
 
+// Invierte el sentido (divisa↔Bs) y recalcula.
 #[export_name = "calc_swap"]
 fn calc_swap() {
-    let src: String = dom_get_value("#calc-from")
-    let dst: String = dom_get_value("#calc-to")
-    js_set_value("#calc-from", dst)
-    js_set_value("#calc-to", src)
+    let dir: String = dom_get_value("#calc-dir")
+    if dir == "b2d" {
+        js_set_value("#calc-dir", "d2b")
+    } else {
+        js_set_value("#calc-dir", "b2d")
+    }
     calc_render()
 }
 
-// Accesos rápidos: fijan origen=USD y destino, y recalculan.
-fn calc_chip(dst: String) {
-    js_set_value("#calc-from", "USD")
-    js_set_value("#calc-to", dst)
-    calc_render()
+// Texto de la conversión actual (para compartir/copiar).
+fn calc_line() -> String {
+    let sel: String = dom_get_value("#calc-rate-sel")
+    let dir: String = dom_get_value("#calc-dir")
+    let r: float = rate_bs(sel)
+    if r <= 0.0 { return "" }
+    let amt_s: String = dom_get_value("#calc-amt")
+    var amt: float = 0.0
+    if amt_s.length() > 0 { amt = string_to_float(amt_s) }
+    if dir == "b2d" {
+        return fmt_f(amt, 2, 2) + " Bs = " + fmt_div(sel, amt / r)
+    }
+    return fmt_div(sel, amt) + " = " + fmt_f(amt * r, 2, 2) + " Bs"
 }
-
-#[export_name = "calc_chip_bsv"]
-fn calc_chip_bsv() { calc_chip("BSV") }
-
-#[export_name = "calc_chip_usdt"]
-fn calc_chip_usdt() { calc_chip("USDT") }
-
-#[export_name = "calc_chip_eur"]
-fn calc_chip_eur() { calc_chip("EUR") }
 
 // Compartir la conversión actual (Web Share / portapapeles via pasarela). El
 // texto se arma aquí; el enlace lo completa el loader con location.origin.
 #[export_name = "calc_share"]
 fn calc_share() {
-    let src: String = dom_get_value("#calc-from")
-    let dst: String = dom_get_value("#calc-to")
-    let uf: float = usd_per(src)
-    let ut: float = usd_per(dst)
-    var txt: String = "Convierte divisas de Venezuela (USD, Bs, USDT, Euro) en"
-    if uf > 0.0 and ut > 0.0 {
-        let amt_s: String = dom_get_value("#calc-amt")
-        var amt: float = 0.0
-        if amt_s.length() > 0 { amt = string_to_float(amt_s) }
-        let out: float = amt * uf / ut
-        txt = fmt_money(src, amt) + " = " + fmt_money(dst, out) + " · Convierte divisas de Venezuela en"
+    let line: String = calc_line()
+    var txt: String = "Convierte Bolívares y Dólar BCV, Euro BCV o Dólar Binance en"
+    if line.length() > 0 {
+        txt = line + " · Convierte divisas de Venezuela en"
     }
     js_share(txt, "/calculadora")
 }
@@ -215,16 +202,18 @@ fn calc_share() {
 // Copiar solo el resultado al portapapeles (js_copy de la pasarela).
 #[export_name = "calc_copy"]
 fn calc_copy() {
-    let src: String = dom_get_value("#calc-from")
-    let dst: String = dom_get_value("#calc-to")
-    let uf: float = usd_per(src)
-    let ut: float = usd_per(dst)
-    if uf <= 0.0 or ut <= 0.0 { return }
+    let sel: String = dom_get_value("#calc-rate-sel")
+    let dir: String = dom_get_value("#calc-dir")
+    let r: float = rate_bs(sel)
+    if r <= 0.0 { return }
     let amt_s: String = dom_get_value("#calc-amt")
     var amt: float = 0.0
     if amt_s.length() > 0 { amt = string_to_float(amt_s) }
-    let out: float = amt * uf / ut
-    js_copy(fmt_money(dst, out))
+    if dir == "b2d" {
+        js_copy(fmt_div(sel, amt / r))
+    } else {
+        js_copy(fmt_f(amt * r, 2, 2) + " Bs")
+    }
 }
 
 // Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
@@ -305,18 +294,22 @@ fn fx_boot(con_cripto: int) {
     }
 }
 
+// Re-descarga la tasa Binance P2P (fx_on_criptoya re-pinta tarjeta y calculadora).
+// Se dispara cada hora desde calc_boot para que el paralelo no quede viejo.
+#[export_name = "fx_tick_binance"]
+fn fx_tick_binance() {
+    browser_fetch("https://criptoya.com/api/USDT/VES/1", "GET", "", "fx_on_criptoya")
+}
+
 // Arranque de la calculadora (página propia /calculadora). Reusa las tasas que
-// deja fx_boot(1); solo cablea los controles y pinta.
+// deja fx_boot(0); cablea los controles, pinta y refresca Binance cada hora.
 fn calc_boot() {
     dom_on("#calc-amt", "input", "calc_render")
-    dom_on("#calc-from", "change", "calc_render")
-    dom_on("#calc-to", "change", "calc_render")
+    dom_on("#calc-rate-sel", "change", "calc_render")
     dom_on("#calc-swap", "click", "calc_swap")
-    dom_on("#calc-chip-bsv", "click", "calc_chip_bsv")
-    dom_on("#calc-chip-usdt", "click", "calc_chip_usdt")
-    dom_on("#calc-chip-eur", "click", "calc_chip_eur")
     dom_on("#calc-share", "click", "calc_share")
     dom_on("#calc-copy", "click", "calc_copy")
+    browser_interval(3600000, "fx_tick_binance") // 1 h: refresca la tasa Binance
     calc_render()
 }
 
