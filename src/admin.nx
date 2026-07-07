@@ -507,17 +507,24 @@ fn client_ip(req: Request) -> String {
     return ""
 }
 
-// True si la ruta NO debe contar (assets, API, admin, iconos, WS, PWA files).
-fn visit_skip(method: String, path: String) -> bool {
-    if method != "GET" { return true }
-    if path.startsWith("/assets/") { return true }
-    if path.startsWith("/api/") { return true }
-    if path.startsWith("/admin") { return true }
-    if path.startsWith("/icon") { return true }
-    if path.startsWith("/ws/") { return true }
-    if path.startsWith("/manifest") { return true }
-    if path == "/sw.js" { return true }
-    if path == "/favicon.ico" { return true }
+// True SOLO si la ruta es una página real del sitio (lista blanca). Así los sondeos
+// de bots (/wp-admin, *.php, /.env, /xmlrpc…) y todo lo demás (assets, /api, /admin,
+// iconos, typos) no cuentan de forma natural, sin perseguir patrones uno por uno.
+fn visit_counts(method: String, path: String) -> bool {
+    if method != "GET" { return false }
+    // Páginas estáticas conocidas.
+    if path == "/" { return true }
+    if path == "/clima" { return true }
+    if path == "/finanzas" { return true }
+    if path == "/calculadora" { return true }
+    if path == "/noticias" { return true }
+    if path == "/chat" { return true }
+    if path == "/baquiano" { return true }
+    if path == "/sismos" { return true }
+    // Secciones dinámicas.
+    if path.startsWith("/articulo/") { return true }
+    if path.startsWith("/baquiano/") { return true }
+    if path.startsWith("/sismos/") { return true }
     return false
 }
 
@@ -526,7 +533,7 @@ fn visit_skip(method: String, path: String) -> bool {
 // sql_exec no lanza, y nyx-db serializa internamente con su g_db_mtx).
 pub fn visit_middleware(req: Request) -> Response {
     let cont: Array = []
-    if visit_skip(req.method, req.path) {
+    if !visit_counts(req.method, req.path) {
         return Response { status: 0, headers_flat: cont, body: "" }
     }
     let ip: String = client_ip(req)

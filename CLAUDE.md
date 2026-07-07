@@ -101,8 +101,10 @@ src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenid
                  editable desde el panel admin. render_baquiano_index/zone() + baquiano_card().
 src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
                  baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
-                 También: visit_middleware (INSERT por hit en nyx-db) + /admin/visitas
-                 (contadores/serie/registro/"Lo más visto" por SQL sobre la tabla visits).
+                 También: visit_middleware (INSERT por hit en nyx-db; cuenta por LISTA
+                 BLANCA de páginas reales vía visit_counts → excluye sondeos de bots
+                 /wp-*, *.php, /.env…) + /admin/visitas (contadores/serie/registro/"Lo
+                 más visto" por SQL sobre la tabla visits).
 wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques de externs
                  (pasarela) + main() router por #pg. PARTIDO en módulos (make wasm ya resuelve
                  imports project-relative vía NYX_PROJECT_DIR=$PROJ/wasm; scope global plano →
