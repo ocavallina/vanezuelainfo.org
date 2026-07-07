@@ -25,11 +25,13 @@ tiempo real**. Aplicación web instalable (PWA).
 > | **Proxy / TLS** | nginx | **nyx-proxy** — el reverse proxy escrito en Nyx |
 > | **Servidor web** | Express, Rails, … | **nyx-serve** — el framework web escrito en Nyx |
 > | **Front-end** | React / JavaScript | **Nyx compilado a WebAssembly** |
-> | **Base de datos** | Redis / Postgres | **nyx-kv** — la base de datos escrita en Nyx |
+> | **Base de datos (KV)** | Redis | **nyx-kv** — el key-value escrito en Nyx |
+> | **Base de datos (SQL)** | Postgres / SQLite | **nyx-db** — la base SQL relacional escrita en Nyx |
 >
 > Un request **entra** por un proxy Nyx, lo **atiende y renderiza** un servidor Nyx,
 > se **hidrata** en el navegador con **Nyx compilado a WASM**, habla con las APIs
-> externas desde Nyx y **persiste** en una base de datos Nyx.
+> externas desde Nyx y **persiste** en bases de datos Nyx — un **key-value** (nyx-kv,
+> para sesiones y chat) y una **base SQL** (nyx-db, para analítica e histórico de tasas).
 
 ---
 

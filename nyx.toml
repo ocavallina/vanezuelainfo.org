@@ -6,3 +6,4 @@ description = "venezuelainfo.org — portal de noticias e informacion sobre Vene
 
 [dependencies]
 nyx-serve = "*"
+nyx-db = "*"

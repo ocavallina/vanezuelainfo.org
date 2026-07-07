@@ -1,0 +1,393 @@
+// planner.nx — Query planner for nyx-db v0.3
+//
+// Rewrites the WHERE AST before execution:
+//   1. Flattens left-heavy AND trees into conjunct lists (OR/NOT stay opaque).
+//   2. Assigns each conjunct a static selectivity score.
+//   3. Stable-sorts ascending (most selective first).
+//   4. Hoists the first `=` on an indexed column as a separate lookup hint
+//      so db_select can use index_lookup instead of a full table scan.
+//
+// Reads g_index_def from store.nx. Must run under g_db_mtx (caller's lock).
+// No mutation of storage state — pure transformation of the AST.
+
+// ── Env flag for EXPLAIN-style debug output ──
+fn planner_explain_enabled() -> bool {
+    let v: String = getenv("NYX_DB_EXPLAIN")
+    if v == "1" { return true }
+    return false
+}
+
+// ── Flatten left-heavy AND tree into a flat conjunct list ──
+// Does NOT descend into OR / NOT / comparison leaves — those are opaque.
+fn flatten_and_into(expr: Array, acc: Array) {
+    let tag: String = expr[0]
+    if tag == "AND" {
+        let l: Array = expr[1]
+        let r: Array = expr[2]
+        flatten_and_into(l, acc)
+        flatten_and_into(r, acc)
+        return
+    }
+    acc.push(expr)
+}
+
+fn flatten_and(expr: Array) -> Array {
+    let result: Array = []
+    flatten_and_into(expr, result)
+    return result
+}
+
+// ── Helpers: is col indexed / of BTREE kind ──
+fn col_indexed(table: String, col: String) -> bool {
+    let key: String = table + "::" + col
+    return g_index_def.contains(key)
+}
+
+fn col_is_btree(table: String, col: String) -> bool {
+    let key: String = table + "::" + col
+    if g_index_kind.contains(key) == false { return false }
+    let k: String = g_index_kind.get(key)
+    return k == "BTREE"
+}
+
+// ── Static selectivity score; lower = more selective = evaluate first ──
+fn score_predicate(leaf: Array, table: String) -> int {
+    let tag: String = leaf[0]
+
+    if tag == "=" {
+        let col: String = leaf[1]
+        if col_indexed(table, col) { return 1 }
+        return 10
+    }
+
+    if tag == "IS_NULL" { return 8 }
+
+    if tag == "IN" {
+        let vals: Array = leaf[2]
+        let n: int = vals.length()
+        if n == 0 { return 0 }  // empty IN — always false, short-circuit fastest
+        let s: int = 5 * n
+        if s > 40 { return 40 }
+        return s
+    }
+
+    if tag == "BETWEEN" {
+        let col: String = leaf[1]
+        if col_is_btree(table, col) { return 3 }
+        return 30
+    }
+
+    if tag == "LIKE" {
+        let pat: String = leaf[2]
+        let plen: int = pat.length()
+        if plen > 0 {
+            let c0: int = pat.charAt(0)
+            if c0 != 37 { return 40 }  // no leading '%' (prefix-anchored)
+        }
+        return 85
+    }
+
+    if tag == "<" or tag == ">" or tag == "<=" or tag == ">=" {
+        let col: String = leaf[1]
+        if col_is_btree(table, col) { return 5 }
+        return 50
+    }
+
+    if tag == "IS_NOT_NULL" { return 70 }
+
+    if tag == "!=" { return 80 }
+
+    // OR, NOT, or unknown — opaque subtree, defer to the end
+    return 95
+}
+
+// ── Stable sort (insertion sort into a fresh array) ──
+// Ties preserve original order because we only insert when strictly greater.
+fn sort_conjuncts_stable(conjuncts: Array, scores: Array) -> Array {
+    let n: int = conjuncts.length()
+    let out: Array = []
+    let out_scores: Array = []
+    var i: int = 0
+    while i < n {
+        let c: Array = conjuncts[i]
+        let s: int = scores[i]
+        var j: int = 0
+        var placed: bool = false
+        while j < out.length() {
+            let os: int = out_scores[j]
+            if os > s {
+                out.insert(j, c)
+                out_scores.insert(j, s)
+                placed = true
+                break
+            }
+            j = j + 1
+        }
+        if placed == false {
+            out.push(c)
+            out_scores.push(s)
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// ── Rebuild a left-heavy AND tree from an ordered conjunct list ──
+fn rebuild_and(conjuncts: Array) -> Array {
+    let n: int = conjuncts.length()
+    if n == 0 {
+        let none: Array = ["NONE"]
+        return none
+    }
+    if n == 1 {
+        return conjuncts[0]
+    }
+    var acc: Array = conjuncts[0]
+    var i: int = 1
+    while i < n {
+        let c: Array = conjuncts[i]
+        let node: Array = ["AND", acc, c]
+        acc = node
+        i = i + 1
+    }
+    return acc
+}
+
+fn is_range_tag(tag: String) -> bool {
+    if tag == ">" { return true }
+    if tag == "<" { return true }
+    if tag == ">=" { return true }
+    if tag == "<=" { return true }
+    if tag == "BETWEEN" { return true }
+    return false
+}
+
+// ── Pluck the best hoist out of the conjunct list ──
+// Returns [remaining_conjuncts, hoisted_pred_or_NONE].
+//
+// Priority:
+//   1. First `=` on ANY indexed column (HASH or BTREE). Always wins —
+//      it's the single most selective predicate possible.
+//   2. If no `=`, fuse two range predicates on the same BTREE column
+//      (eg. `age > 20 AND age < 40`) into one hoist:
+//      `["RANGE", col, lo, hi, lo_incl, hi_incl]`.
+//   3. If no pair, a single range (>/</>=/<=) or BETWEEN on a BTREE
+//      column — hoist it as-is.
+// HASH indices only accept the `=` hoist; ranges fall through to eval.
+fn extract_indexed_hoist(conjuncts: Array, table: String) -> Array {
+    let n: int = conjuncts.length()
+
+    // Pass 1: indexed equality.
+    var eq_idx: int = -1
+    var i: int = 0
+    while i < n {
+        let c: Array = conjuncts[i]
+        let ctag: String = c[0]
+        if ctag == "=" {
+            let col: String = c[1]
+            if col_indexed(table, col) {
+                eq_idx = i
+                i = n
+            }
+        }
+        i = i + 1
+    }
+    if eq_idx >= 0 {
+        let remaining: Array = []
+        var j: int = 0
+        while j < n {
+            if j != eq_idx {
+                let cj: Array = conjuncts[j]
+                remaining.push(cj)
+            }
+            j = j + 1
+        }
+        let hoisted: Array = conjuncts[eq_idx]
+        let r: Array = [remaining, hoisted]
+        return r
+    }
+
+    // Pass 2: range fusion on BTREE indexed column.
+    // Find up to 2 range predicates on the same column (first hit).
+    var first_idx: int = -1
+    var second_idx: int = -1
+    var target_col: String = ""
+    i = 0
+    while i < n {
+        let c2: Array = conjuncts[i]
+        let t2: String = c2[0]
+        if is_range_tag(t2) {
+            let col: String = c2[1]
+            if col_is_btree(table, col) {
+                if first_idx < 0 {
+                    first_idx = i
+                    target_col = col
+                } else {
+                    if col == target_col and second_idx < 0 {
+                        second_idx = i
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    if first_idx < 0 {
+        // Nothing hoistable.
+        let none: Array = ["NONE"]
+        let r: Array = [conjuncts, none]
+        return r
+    }
+
+    let a: Array = conjuncts[first_idx]
+    let a_tag: String = a[0]
+    var hoisted: Array = ["NONE"]
+    if second_idx >= 0 {
+        let b: Array = conjuncts[second_idx]
+        let b_tag: String = b[0]
+        let a_val: String = a[2]
+        let b_val: String = b[2]
+        // Try to resolve (lo, hi, lo_incl, hi_incl) from the two preds.
+        // Valid pairs: one of {>, >=} with one of {<, <=}. BETWEEN alone
+        // skips this pass (handled below).
+        var lo: String = "__NEG_INF__"
+        var hi: String = "__POS_INF__"
+        var lo_incl: bool = true
+        var hi_incl: bool = true
+        var ok: bool = false
+        if a_tag == ">" and (b_tag == "<" or b_tag == "<=") {
+            lo = a_val
+            lo_incl = false
+            hi = b_val
+            if b_tag == "<" { hi_incl = false }
+            ok = true
+        }
+        if a_tag == ">=" and (b_tag == "<" or b_tag == "<=") {
+            lo = a_val
+            lo_incl = true
+            hi = b_val
+            if b_tag == "<" { hi_incl = false }
+            ok = true
+        }
+        if (a_tag == "<" or a_tag == "<=") and (b_tag == ">" or b_tag == ">=") {
+            hi = a_val
+            if a_tag == "<" { hi_incl = false }
+            lo = b_val
+            if b_tag == ">" { lo_incl = false }
+            ok = true
+        }
+        if ok {
+            hoisted = ["RANGE", target_col, lo, hi, lo_incl, hi_incl]
+            let remaining: Array = []
+            var k: int = 0
+            while k < n {
+                if k != first_idx and k != second_idx {
+                    let ck: Array = conjuncts[k]
+                    remaining.push(ck)
+                }
+                k = k + 1
+            }
+            let r: Array = [remaining, hoisted]
+            return r
+        }
+    }
+
+    // Single range hoist (BETWEEN or one-sided).
+    if a_tag == "BETWEEN" {
+        // ["BETWEEN", col, low, high] — keep shape; db_select reads it.
+        hoisted = a
+    } else {
+        hoisted = a
+    }
+    let remaining2: Array = []
+    var k2: int = 0
+    while k2 < n {
+        if k2 != first_idx {
+            let ck2: Array = conjuncts[k2]
+            remaining2.push(ck2)
+        }
+        k2 = k2 + 1
+    }
+    let r2: Array = [remaining2, hoisted]
+    return r2
+}
+
+// ── Public entry point ──
+// plan_where rewrites a WHERE AST and returns [planned_where, hoisted_eq].
+//   planned_where : AST to pass back to eval_where per row.
+//   hoisted_eq    : ["=", col, val] when an indexed equality was lifted
+//                   out (so db_select can restrict scan_ids via
+//                   index_lookup), or ["NONE"] otherwise.
+//
+// Safe invariants:
+//   - No cross-boundary AND reordering through OR or NOT.
+//   - Result is semantically equivalent to input (AND is commutative
+//     and associative; hoisted_eq is also re-checked by eval_where
+//     implicitly through index_lookup correctness + no-op if hoisted=NONE).
+fn plan_where(where_ast: Array, table: String) -> Array {
+    let tag: String = where_ast[0]
+
+    // Fast path: no WHERE at all.
+    if tag == "NONE" {
+        let none: Array = ["NONE"]
+        let r: Array = [where_ast, none]
+        return r
+    }
+
+    // Flatten AND conjuncts.
+    let conjuncts: Array = flatten_and(where_ast)
+
+    // Score each leaf.
+    let scores: Array = []
+    var i: int = 0
+    while i < conjuncts.length() {
+        let c: Array = conjuncts[i]
+        let s: int = score_predicate(c, table)
+        scores.push(s)
+        i = i + 1
+    }
+
+    // Stable ascending sort.
+    let sorted: Array = sort_conjuncts_stable(conjuncts, scores)
+
+    // Hoist indexed = or BTREE range.
+    let ext: Array = extract_indexed_hoist(sorted, table)
+    let remaining: Array = ext[0]
+    let hoisted: Array = ext[1]
+
+    // Rebuild AND tree.
+    let planned: Array = rebuild_and(remaining)
+
+    // Optional debug trace.
+    if planner_explain_enabled() {
+        let nc: int = conjuncts.length()
+        let htag: String = hoisted[0]
+        var htxt: String = "none"
+        if htag == "=" {
+            let hcol: String = hoisted[1]
+            let hval: String = hoisted[2]
+            htxt = hcol + "=" + hval
+        }
+        if htag == ">" or htag == "<" or htag == ">=" or htag == "<=" {
+            let hcol: String = hoisted[1]
+            let hval: String = hoisted[2]
+            htxt = hcol + htag + hval
+        }
+        if htag == "BETWEEN" {
+            let hcol: String = hoisted[1]
+            let hlo: String = hoisted[2]
+            let hhi: String = hoisted[3]
+            htxt = hcol + " BETWEEN " + hlo + " AND " + hhi
+        }
+        if htag == "RANGE" {
+            let hcol: String = hoisted[1]
+            let hlo: String = hoisted[2]
+            let hhi: String = hoisted[3]
+            htxt = hcol + " RANGE [" + hlo + "," + hhi + "]"
+        }
+        println("[plan] table=" + table + " conjuncts=" + int_to_string(nc) + " hoisted=" + htxt)
+    }
+
+    let result: Array = [planned, hoisted]
+    return result
+}

@@ -1,0 +1,597 @@
+// sql_parser.nx — Recursive descent SQL parser for nyx-db
+//
+// Parses token arrays from sql_lexer into AST (tagged arrays).
+// AST node types:
+//   ["CREATE_TABLE", tablename, [[col, type, is_pk], ...]]
+//   ["DROP_TABLE", tablename]
+//   ["CREATE_INDEX", idxname, tablename, colname]
+//   ["INSERT", tablename, [cols], [[val1, val2], [val3, val4], ...]]
+//   ["SELECT", [cols], tablename, where_ast, order_ast, limit, offset, join_ast]
+//   ["UPDATE", tablename, [[col, val], ...], where_ast]
+//   ["DELETE", tablename, where_ast]
+//   ["BEGIN"] / ["COMMIT"] / ["ROLLBACK"]
+//   ["ERROR", message]
+
+// Parser state: tokens array and current position
+var p_tokens: Array = []
+var p_pos: int = 0
+
+fn p_peek_type() -> String {
+    if p_pos >= p_tokens.length() { return "" }
+    let tok: Array = p_tokens[p_pos]
+    return tok[0]
+}
+
+fn p_peek_val() -> String {
+    if p_pos >= p_tokens.length() { return "" }
+    let tok: Array = p_tokens[p_pos]
+    return tok[1]
+}
+
+fn p_advance() {
+    p_pos = p_pos + 1
+}
+
+fn p_expect_kw(kw: String) -> bool {
+    if p_peek_type() == "KW" and p_peek_val() == kw {
+        p_advance()
+        return true
+    }
+    return false
+}
+
+fn p_expect_op(op: String) -> bool {
+    if p_peek_type() == "OP" and p_peek_val() == op {
+        p_advance()
+        return true
+    }
+    return false
+}
+
+fn p_consume_id() -> String {
+    if p_peek_type() == "ID" {
+        let val: String = p_peek_val()
+        p_advance()
+        return val
+    }
+    // Allow keywords as identifiers in some contexts
+    if p_peek_type() == "KW" {
+        let val: String = p_peek_val()
+        p_advance()
+        return val
+    }
+    return ""
+}
+
+fn p_consume_value() -> String {
+    let t: String = p_peek_type()
+    if t == "STR" or t == "NUM" or t == "ID" {
+        let val: String = p_peek_val()
+        p_advance()
+        return val
+    }
+    if t == "KW" and p_peek_val() == "NULL" {
+        p_advance()
+        return "__NULL__"
+    }
+    return ""
+}
+
+// Parse WHERE expression with AND/OR precedence
+fn parse_where_or() -> Array {
+    var left: Array = parse_where_and()
+    if left[0] == "ERROR" { return left }
+
+    while p_peek_type() == "KW" and p_peek_val() == "OR" {
+        p_advance()
+        let right: Array = parse_where_and()
+        if right[0] == "ERROR" { return right }
+        let node: Array = ["OR", left, right]
+        left = node
+    }
+    return left
+}
+
+fn parse_where_and() -> Array {
+    var left: Array = parse_where_cond()
+    if left[0] == "ERROR" { return left }
+
+    while p_peek_type() == "KW" and p_peek_val() == "AND" {
+        p_advance()
+        let right: Array = parse_where_cond()
+        if right[0] == "ERROR" { return right }
+        let node: Array = ["AND", left, right]
+        left = node
+    }
+    return left
+}
+
+fn parse_where_cond() -> Array {
+    // NOT
+    if p_peek_type() == "KW" and p_peek_val() == "NOT" {
+        p_advance()
+        let inner: Array = parse_where_cond()
+        return ["NOT", inner]
+    }
+
+    // Parenthesized expression
+    if p_peek_type() == "OP" and p_peek_val() == "(" {
+        p_advance()
+        let inner: Array = parse_where_or()
+        p_expect_op(")")
+        return inner
+    }
+
+    // column name (or aggregate expression like COUNT(*), SUM(col) for HAVING)
+    let col: String = parse_one_col()
+    if col == "" { return ["ERROR", "expected column name in WHERE"] }
+
+    // IS NULL / IS NOT NULL
+    if p_peek_type() == "KW" and p_peek_val() == "IS" {
+        p_advance()
+        if p_peek_type() == "KW" and p_peek_val() == "NOT" {
+            p_advance()
+            p_expect_kw("NULL")
+            return ["IS_NOT_NULL", col]
+        }
+        p_expect_kw("NULL")
+        return ["IS_NULL", col]
+    }
+
+    // LIKE
+    if p_peek_type() == "KW" and p_peek_val() == "LIKE" {
+        p_advance()
+        let pattern: String = p_consume_value()
+        return ["LIKE", col, pattern]
+    }
+
+    // IN (val1, val2, ...)
+    if p_peek_type() == "KW" and p_peek_val() == "IN" {
+        p_advance()
+        p_expect_op("(")
+        let vals: Array = []
+        let first_val: String = p_consume_value()
+        vals.push(first_val)
+        while p_peek_type() == "OP" and p_peek_val() == "," {
+            p_advance()
+            let v: String = p_consume_value()
+            vals.push(v)
+        }
+        p_expect_op(")")
+        return ["IN", col, vals]
+    }
+
+    // BETWEEN low AND high
+    if p_peek_type() == "KW" and p_peek_val() == "BETWEEN" {
+        p_advance()
+        let low: String = p_consume_value()
+        p_expect_kw("AND")
+        let high: String = p_consume_value()
+        return ["BETWEEN", col, low, high]
+    }
+
+    // Comparison operators: =, <, >, <=, >=, !=, <>
+    let op: String = p_peek_val()
+    if p_peek_type() == "OP" {
+        if op == "=" or op == "<" or op == ">" or op == "<=" or op == ">=" or op == "!=" or op == "<>" {
+            p_advance()
+            let val: String = p_consume_value()
+            if op == "<>" { return ["!=", col, val] }
+            return [op, col, val]
+        }
+    }
+
+    return ["ERROR", "expected operator in WHERE clause"]
+}
+
+fn parse_where() -> Array {
+    if p_peek_type() == "KW" and p_peek_val() == "WHERE" {
+        p_advance()
+        return parse_where_or()
+    }
+    return ["NONE"]
+}
+
+// Parse ORDER BY col [ASC|DESC]
+fn parse_order_by() -> Array {
+    if p_peek_type() == "KW" and p_peek_val() == "ORDER" {
+        p_advance()
+        p_expect_kw("BY")
+        let col: String = p_consume_id()
+        var dir: String = "ASC"
+        if p_peek_type() == "KW" {
+            if p_peek_val() == "DESC" {
+                dir = "DESC"
+                p_advance()
+            } else if p_peek_val() == "ASC" {
+                p_advance()
+            }
+        }
+        return ["ORDER", col, dir]
+    }
+    return ["NONE"]
+}
+
+// Parse LIMIT n [OFFSET m]
+fn parse_limit() -> Array {
+    var lim: int = -1
+    var off: int = 0
+    if p_peek_type() == "KW" and p_peek_val() == "LIMIT" {
+        p_advance()
+        let lim_str: String = p_peek_val()
+        p_advance()
+        lim = string_to_int(lim_str)
+        if p_peek_type() == "KW" and p_peek_val() == "OFFSET" {
+            p_advance()
+            let off_str: String = p_peek_val()
+            p_advance()
+            off = string_to_int(off_str)
+        }
+    }
+    return [lim, off]
+}
+
+// Parse a single column or aggregate expression
+fn parse_one_col() -> String {
+    // Aggregate functions: COUNT(*), SUM(col), etc.
+    if p_peek_type() == "KW" {
+        let fn_name: String = p_peek_val()
+        if fn_name == "COUNT" or fn_name == "SUM" or fn_name == "AVG" or fn_name == "MIN" or fn_name == "MAX" {
+            p_advance()
+            p_expect_op("(")
+            var arg: String = "*"
+            if p_peek_type() == "OP" and p_peek_val() == "*" {
+                p_advance()
+            } else {
+                arg = p_consume_id()
+            }
+            p_expect_op(")")
+            return fn_name + "(" + arg + ")"
+        }
+    }
+    return p_consume_id()
+}
+
+// Parse column list for SELECT
+fn parse_select_cols() -> Array {
+    let cols: Array = []
+    // SELECT *
+    if p_peek_type() == "OP" and p_peek_val() == "*" {
+        p_advance()
+        cols.push("*")
+        return cols
+    }
+    let first: String = parse_one_col()
+    if first == "" {
+        return ["ERROR", "expected column name"]
+    }
+    cols.push(first)
+    while p_peek_type() == "OP" and p_peek_val() == "," {
+        p_advance()
+        let next_col: String = parse_one_col()
+        cols.push(next_col)
+    }
+    return cols
+}
+
+// Parse SELECT statement
+fn parse_select() -> Array {
+    // DISTINCT
+    var is_distinct: int = 0
+    if p_peek_type() == "KW" and p_peek_val() == "DISTINCT" {
+        p_advance()
+        is_distinct = 1
+    }
+
+    let cols: Array = parse_select_cols()
+    if cols.length() > 0 {
+        let first: String = cols[0]
+        if first == "ERROR" { return cols }
+    }
+
+    if p_expect_kw("FROM") == false {
+        return ["ERROR", "expected FROM"]
+    }
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    // Optional alias
+    if p_peek_type() == "KW" and p_peek_val() == "AS" {
+        p_advance()
+        p_consume_id()
+    }
+
+    // Optional JOIN
+    var join_ast: Array = ["NONE"]
+    if p_peek_type() == "KW" {
+        let jkw: String = p_peek_val()
+        if jkw == "JOIN" or jkw == "INNER" or jkw == "LEFT" {
+            if jkw == "INNER" or jkw == "LEFT" {
+                let join_type: String = p_peek_val()
+                p_advance()
+                p_expect_kw("JOIN")
+                let join_table: String = p_consume_id()
+                p_expect_kw("ON")
+                var left_col: String = p_consume_id()
+                // table.col format
+                if p_peek_type() == "OP" and p_peek_val() == "." {
+                    p_advance()
+                    let lcol: String = p_consume_id()
+                    left_col = lcol
+                }
+                p_expect_op("=")
+                let right_ref: String = p_consume_id()
+                if p_peek_type() == "OP" and p_peek_val() == "." {
+                    p_advance()
+                    let rcol: String = p_consume_id()
+                    join_ast = ["JOIN", join_type, join_table, left_col, rcol]
+                } else {
+                    join_ast = ["JOIN", join_type, join_table, left_col, right_ref]
+                }
+            } else {
+                p_advance()
+                let join_table: String = p_consume_id()
+                p_expect_kw("ON")
+                var left_col: String = p_consume_id()
+                if p_peek_type() == "OP" and p_peek_val() == "." {
+                    p_advance()
+                    let lcol: String = p_consume_id()
+                    left_col = lcol
+                }
+                p_expect_op("=")
+                let right_ref: String = p_consume_id()
+                if p_peek_type() == "OP" and p_peek_val() == "." {
+                    p_advance()
+                    let rcol: String = p_consume_id()
+                    join_ast = ["JOIN", "INNER", join_table, left_col, rcol]
+                } else {
+                    join_ast = ["JOIN", "INNER", join_table, left_col, right_ref]
+                }
+            }
+        }
+    }
+
+    let where_ast: Array = parse_where()
+
+    // GROUP BY col
+    var group_col: String = ""
+    if p_peek_type() == "KW" and p_peek_val() == "GROUP" {
+        p_advance()
+        p_expect_kw("BY")
+        group_col = p_consume_id()
+    }
+
+    // HAVING predicate — reuses parse_where_or for the expression; leaf
+    // columns may reference aggregate functions like COUNT(*) or SUM(col),
+    // which the executor resolves from the computed group row.
+    var having_ast: Array = ["NONE"]
+    if p_peek_type() == "KW" and p_peek_val() == "HAVING" {
+        p_advance()
+        having_ast = parse_where_or()
+    }
+
+    let order_ast: Array = parse_order_by()
+    let lim: Array = parse_limit()
+    let lim_val: int = lim[0]
+    let off_val: int = lim[1]
+
+    return ["SELECT", cols, table, where_ast, order_ast, lim_val, off_val, join_ast, group_col, is_distinct, having_ast]
+}
+
+// Parse INSERT INTO table (cols) VALUES (vals), (vals), ...
+fn parse_insert() -> Array {
+    p_expect_kw("INTO")
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    // Optional column list
+    let cols: Array = []
+    if p_peek_type() == "OP" and p_peek_val() == "(" {
+        p_advance()
+        let first: String = p_consume_id()
+        cols.push(first)
+        while p_peek_type() == "OP" and p_peek_val() == "," {
+            p_advance()
+            let col: String = p_consume_id()
+            cols.push(col)
+        }
+        p_expect_op(")")
+    }
+
+    if p_expect_kw("VALUES") == false {
+        return ["ERROR", "expected VALUES"]
+    }
+
+    // Multiple value rows: (v1, v2), (v3, v4), ...
+    let all_rows: Array = []
+    var more_rows: bool = true
+    while more_rows {
+        p_expect_op("(")
+        let row: Array = []
+        let first_val: String = p_consume_value()
+        row.push(first_val)
+        while p_peek_type() == "OP" and p_peek_val() == "," {
+            p_advance()
+            let v: String = p_consume_value()
+            row.push(v)
+        }
+        p_expect_op(")")
+        all_rows.push(row)
+
+        if p_peek_type() == "OP" and p_peek_val() == "," {
+            p_advance()
+        } else {
+            more_rows = false
+        }
+    }
+
+    return ["INSERT", table, cols, all_rows]
+}
+
+// Parse UPDATE table SET col=val, col=val WHERE ...
+fn parse_update() -> Array {
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    if p_expect_kw("SET") == false {
+        return ["ERROR", "expected SET"]
+    }
+
+    let sets: Array = []
+    let first_col: String = p_consume_id()
+    p_expect_op("=")
+    let first_val: String = p_consume_value()
+    let pair: Array = [first_col, first_val]
+    sets.push(pair)
+
+    while p_peek_type() == "OP" and p_peek_val() == "," {
+        p_advance()
+        let col: String = p_consume_id()
+        p_expect_op("=")
+        let val: String = p_consume_value()
+        let p2: Array = [col, val]
+        sets.push(p2)
+    }
+
+    let where_ast: Array = parse_where()
+    return ["UPDATE", table, sets, where_ast]
+}
+
+// Parse DELETE FROM table WHERE ...
+fn parse_delete() -> Array {
+    if p_expect_kw("FROM") == false {
+        return ["ERROR", "expected FROM"]
+    }
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    let where_ast: Array = parse_where()
+    return ["DELETE", table, where_ast]
+}
+
+// Parse CREATE TABLE table (col type, col type PRIMARY KEY, ...)
+fn parse_create_table() -> Array {
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    if p_expect_op("(") == false {
+        return ["ERROR", "expected ("]
+    }
+
+    let cols: Array = []
+    var more: bool = true
+    while more {
+        let col_name: String = p_consume_id()
+        let col_type: String = p_consume_id()
+        var col_pk: int = 0
+        if p_peek_type() == "KW" and p_peek_val() == "PRIMARY" {
+            p_advance()
+            p_expect_kw("KEY")
+            col_pk = 1
+        }
+        if p_peek_type() == "KW" and p_peek_val() == "AUTOINCREMENT" {
+            p_advance()
+        }
+        let col_def: Array = [col_name, col_type, col_pk]
+        cols.push(col_def)
+
+        if p_peek_type() == "OP" and p_peek_val() == "," {
+            p_advance()
+        } else {
+            more = false
+        }
+    }
+
+    p_expect_op(")")
+    return ["CREATE_TABLE", table, cols]
+}
+
+// Parse DROP TABLE table
+fn parse_drop_table() -> Array {
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+    return ["DROP_TABLE", table]
+}
+
+// Parse CREATE INDEX idxname ON table (col) [USING HASH|BTREE]
+// Kind defaults to HASH for backward compatibility.
+fn parse_create_index() -> Array {
+    let idx_name: String = p_consume_id()
+    if idx_name == "" { return ["ERROR", "expected index name"] }
+
+    p_expect_kw("ON")
+    let table: String = p_consume_id()
+    if table == "" { return ["ERROR", "expected table name"] }
+
+    p_expect_op("(")
+    let col: String = p_consume_id()
+    p_expect_op(")")
+
+    var kind: String = "HASH"
+    if p_peek_type() == "KW" and p_peek_val() == "USING" {
+        p_advance()
+        let k: String = p_peek_val()
+        if p_peek_type() == "KW" and (k == "HASH" or k == "BTREE") {
+            kind = k
+            p_advance()
+        } else {
+            return ["ERROR", "expected HASH or BTREE after USING"]
+        }
+    }
+    return ["CREATE_INDEX", idx_name, table, col, kind]
+}
+
+// Parse VACUUM [tablename]. Empty table = vacuum every table's BTREE
+// indices. PostgreSQL-compatible shorthand.
+fn parse_vacuum() -> Array {
+    if p_pos >= p_tokens.length() {
+        return ["VACUUM", ""]
+    }
+    let table: String = p_consume_id()
+    return ["VACUUM", table]
+}
+
+// Main parser entry point
+fn sql_parse(tokens: Array) -> Array {
+    p_tokens = tokens
+    p_pos = 0
+
+    if tokens.length() == 0 {
+        return ["ERROR", "empty query"]
+    }
+
+    let t: String = p_peek_type()
+    let v: String = p_peek_val()
+
+    if t != "KW" {
+        return ["ERROR", "expected SQL keyword, got '" + v + "'"]
+    }
+
+    p_advance()
+
+    if v == "SELECT" { return parse_select() }
+    if v == "INSERT" { return parse_insert() }
+    if v == "UPDATE" { return parse_update() }
+    if v == "DELETE" { return parse_delete() }
+    if v == "BEGIN" { return ["BEGIN"] }
+    if v == "COMMIT" { return ["COMMIT"] }
+    if v == "ROLLBACK" { return ["ROLLBACK"] }
+    if v == "VACUUM" { return parse_vacuum() }
+
+    if v == "CREATE" {
+        let next: String = p_peek_val()
+        p_advance()
+        if next == "TABLE" { return parse_create_table() }
+        if next == "INDEX" { return parse_create_index() }
+        return ["ERROR", "expected TABLE or INDEX after CREATE"]
+    }
+
+    if v == "DROP" {
+        let next: String = p_peek_val()
+        p_advance()
+        if next == "TABLE" { return parse_drop_table() }
+        return ["ERROR", "expected TABLE after DROP"]
+    }
+
+    return ["ERROR", "unknown statement: " + v]
+}

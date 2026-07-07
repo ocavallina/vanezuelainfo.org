@@ -1,0 +1,112 @@
+// src/sqldb.nx — Adaptador del proyecto sobre nyx-db (SQL relacional en Nyx, modo
+// EMBEBIDO). Este es el ÚNICO módulo que importa el motor de nyx-db; el resto del
+// proyecto usa los wrappers sql_exec/sql_rows/sql_esc (aísla la dependencia).
+//
+// nyx-db serializa internamente con su propio mutex global (g_db_mtx en store.nx),
+// así que los 16 workers pueden llamar db_query sin mutex propio. Toda celda que
+// devuelve el motor es String (castear con string_to_int/string_to_float).
+//
+// Persistencia: snapshot binario .ndb (db_load/db_save). WAL desactivado (off por
+// defecto en nyx-db); corremos solo con snapshots + guardado periódico y en SIGTERM.
+
+import "std/resp"
+import "nyx-db/src/sql_lexer"
+import "nyx-db/src/sql_parser"
+import "nyx-db/src/btree"
+import "nyx-db/src/wal"
+import "nyx-db/src/store"
+import "nyx-db/src/planner"
+import "nyx-db/src/executor"
+import "nyx-db/src/persist"
+import "nyx-db/src/query"
+
+const DB_PATH: String = "/home/admin/veninfo.ndb"
+
+// Índice de día civil de Venezuela (UTC-4). Compartido por rates y visits.
+pub fn db_day() -> int {
+    return (time() - 14400) / 86400
+}
+
+// Ejecuta una sentencia de escritura/DDL. Devuelve el count (filas afectadas) o
+// -1 si el motor respondió ["ERROR", ...] (p.ej. CREATE TABLE de tabla ya existente).
+pub fn sql_exec(sql: String) -> int {
+    let r: Array = db_query(sql)
+    let status: String = r[0]
+    if status == "OK" {
+        let n: int = r[1]
+        return n
+    }
+    return -1
+}
+
+// Ejecuta un SELECT y devuelve las filas (la fila [0] es el header). [] si error/vacío.
+pub fn sql_rows(sql: String) -> Array {
+    return db_query_rows(sql)
+}
+
+// Ejecuta un SELECT de un agregado escalar (p.ej. COUNT(*)) y devuelve el entero
+// de la celda [1][0]. 0 si no hay fila de datos o el valor es NULL/vacío.
+pub fn sql_count(sql: String) -> int {
+    let rows: Array = db_query_rows(sql)
+    if rows.length() < 2 {
+        return 0
+    }
+    let row: Array = rows[1]
+    let v: String = row[0]
+    if v.length() == 0 { return 0 }
+    if v == "__NULL__" { return 0 }
+    return string_to_int(v)
+}
+
+// Escapa un valor para interpolarlo entre comillas simples en SQL: duplica «'»,
+// quita caracteres de control y corta a `maxb` bytes. Anti-inyección (no hay binds).
+pub fn sql_esc(s: String) -> String {
+    var out: String = ""
+    let n: int = s.length()
+    var i: int = 0
+    let cap: int = 256
+    while i < n and out.length() < cap {
+        let c: String = s.substring(i, i + 1)
+        if c == "'" {
+            out = out + "''"
+        } else if c == "\n" or c == "\r" or c == "\t" {
+            out = out + " "
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// Guarda el snapshot; se llama periódicamente y en el apagado.
+fn db_save_now() -> int {
+    db_save(DB_PATH)
+    return 0
+}
+
+// Hilo de guardado periódico (durabilidad <= 60 s).
+fn db_saver() -> int {
+    var go: bool = true
+    while go {
+        sleep(60000)
+        db_save(DB_PATH)
+    }
+    return 0
+}
+
+// Inicializa la base embebida: carga el snapshot si existe, asegura el esquema,
+// y lanza el guardado periódico + el handler de apagado. Llamar desde main().
+pub fn sqldb_init() {
+    if file_exists(DB_PATH) {
+        db_load(DB_PATH)
+    }
+    // Esquema (idempotente: si ya existen, sql_exec devuelve -1 y se ignora).
+    sql_exec("CREATE TABLE rates (day INTEGER, kind TEXT, value REAL)")
+    sql_exec("CREATE TABLE visits (ts INTEGER, day INTEGER, path TEXT, ip TEXT, ua TEXT, uniq INTEGER)")
+    sql_exec("CREATE TABLE meta (k TEXT, v TEXT)")
+    sql_exec("CREATE INDEX rates_day USING BTREE ON rates (day)")
+    sql_exec("CREATE INDEX visits_day USING BTREE ON visits (day)")
+    setup_shutdown_handler(db_save_now)
+    thread_spawn(db_saver)
+}

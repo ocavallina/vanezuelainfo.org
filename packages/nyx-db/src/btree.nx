@@ -1,0 +1,581 @@
+// btree.nx — Real B-tree secondary index for nyx-db v0.4
+//
+// Order t=3: each node holds 2..5 keys (except root, 1..5). Insert uses
+// Cormen-style preemptive split on the way down. Duplicate keys append
+// rowids to the per-key CSV (secondary index). Delete removes the rowid
+// from the CSV and tombstones the key if the CSV drains — no merge or
+// rotation in v0.4 (documented trade-off; a future VACUUM compacts).
+//
+// Callers MUST hold g_db_mtx (store.nx). All state lives in flat Maps,
+// nodes are encoded as strings with three levels of separator:
+//   field-sep  (\x1D) between is_leaf / keys / vals / children
+//   item-sep   (\x1E) between individual keys, between individual vals
+//   csv-sep    (,)    within a val (rowid CSV) and within children list
+//
+// Comparisons are typed via compare_values(a, b, col_type) from store.nx.
+// NULLs (__NULL__) sort below everything. The sentinels __NEG_INF__ and
+// __POS_INF__ are accepted on range bounds for half-open ranges.
+
+var g_bti_nodes: Map = Map.new()      // "bt::<tree>::<node>" -> serialized
+var g_bti_roots: Map = Map.new()      // "<tree>" -> root_node_id string
+var g_bti_next_node: Map = Map.new()  // "<tree>" -> next_node_id int
+var g_bti_next_tree: Map = Map.new()  // "" -> next_tree_id int
+
+// ── Constants ──────────────────────────────────────────────────────────
+fn bti_t() -> int { return 3 }
+fn bti_max_keys() -> int { return 5 }  // 2t-1
+fn bti_field_sep() -> String { return char_to_string(29) }  // \x1D
+fn bti_item_sep() -> String { return char_to_string(30) }   // \x1E
+
+// ── Sentinels for infinite bounds ─────────────────────────────────────
+fn bti_is_neg_inf(s: String) -> bool { return s == "__NEG_INF__" }
+fn bti_is_pos_inf(s: String) -> bool { return s == "__POS_INF__" }
+
+// ── Typed comparison wrapping compare_values ──────────────────────────
+// Returns -1/0/1 where left < right, left == right, left > right.
+// NULL orders below everything (except NEG_INF). Sentinels handled first.
+fn bti_cmp(a: String, b: String, col_type: String) -> int {
+    if bti_is_neg_inf(a) {
+        if bti_is_neg_inf(b) { return 0 }
+        return -1
+    }
+    if bti_is_neg_inf(b) { return 1 }
+    if bti_is_pos_inf(a) {
+        if bti_is_pos_inf(b) { return 0 }
+        return 1
+    }
+    if bti_is_pos_inf(b) { return -1 }
+    if a == "__NULL__" {
+        if b == "__NULL__" { return 0 }
+        return -1
+    }
+    if b == "__NULL__" { return 1 }
+    return compare_values(a, b, col_type)
+}
+
+// ── String helpers ─────────────────────────────────────────────────────
+// Leading-separator encoding: each item is prefixed by `sep` so empty
+// items survive the round-trip. This matters for tombstoned keys whose
+// val CSV has been emptied to "".
+//   []         -> ""
+//   [""]       -> "\x1E"
+//   ["a","b"]  -> "\x1Ea\x1Eb"
+fn bti_split_items(s: String, sep: String) -> Array {
+    if s.length() == 0 { return [] }
+    let raw: Array = s.split(sep)
+    let out: Array = []
+    var i: int = 1  // skip the empty before the first sep
+    while i < raw.length() {
+        let p: String = raw[i]
+        out.push(p)
+        i = i + 1
+    }
+    return out
+}
+
+fn bti_join_items(items: Array, sep: String) -> String {
+    if items.length() == 0 { return "" }
+    var out: String = ""
+    var i: int = 0
+    while i < items.length() {
+        let it: String = items[i]
+        out = out + sep + it
+        i = i + 1
+    }
+    return out
+}
+
+fn bti_parse_children(s: String) -> Array {
+    // Returns Array of int node ids.
+    let result: Array = []
+    if s.length() == 0 { return result }
+    let parts: Array = s.split(",")
+    for p: String in parts {
+        if p.length() > 0 {
+            let id: int = string_to_int(p)
+            result.push(id)
+        }
+    }
+    return result
+}
+
+fn bti_join_children(children: Array) -> String {
+    var out: String = ""
+    var i: int = 0
+    while i < children.length() {
+        if i > 0 { out = out + "," }
+        let cid: int = children[i]
+        out = out + int_to_string(cid)
+        i = i + 1
+    }
+    return out
+}
+
+fn bti_append_rowid_csv(csv: String, rowid: int) -> String {
+    if csv.length() == 0 { return int_to_string(rowid) }
+    return csv + "," + int_to_string(rowid)
+}
+
+// ── Remove a rowid from a CSV. Returns new CSV (empty if that was last). ──
+fn bti_remove_rowid_csv(csv: String, rowid: int) -> String {
+    if csv.length() == 0 { return "" }
+    let target: String = int_to_string(rowid)
+    let parts: Array = csv.split(",")
+    var out_parts: Array = []
+    for p: String in parts {
+        if p.length() > 0 and p != target {
+            out_parts.push(p)
+        }
+    }
+    return bti_join_items(out_parts, ",")
+}
+
+// ── Node serialization: [is_leaf_bool, keys: Array<String>, vals: Array<String>, children: Array<int>] ──
+fn bti_serialize_node(is_leaf: bool, keys: Array, vals: Array, children: Array) -> String {
+    var leaf_str: String = "0"
+    if is_leaf { leaf_str = "1" }
+    let keys_str: String = bti_join_items(keys, bti_item_sep())
+    let vals_str: String = bti_join_items(vals, bti_item_sep())
+    let ch_str: String = bti_join_children(children)
+    return leaf_str + bti_field_sep() + keys_str + bti_field_sep() + vals_str + bti_field_sep() + ch_str
+}
+
+// Returns [is_leaf: bool, keys: Array, vals: Array, children: Array]
+fn bti_deserialize_node(s: String) -> Array {
+    let parts: Array = s.split(bti_field_sep())
+    let leaf_str: String = parts[0]
+    let keys_raw: String = parts[1]
+    let vals_raw: String = parts[2]
+    let ch_raw: String = parts[3]
+    var is_leaf: bool = false
+    if leaf_str == "1" { is_leaf = true }
+    let keys: Array = bti_split_items(keys_raw, bti_item_sep())
+    let vals: Array = bti_split_items(vals_raw, bti_item_sep())
+    let children: Array = bti_parse_children(ch_raw)
+    let node: Array = [is_leaf, keys, vals, children]
+    return node
+}
+
+// ── Node storage helpers ───────────────────────────────────────────────
+fn bti_node_key(tree_id: int, node_id: int) -> String {
+    return "bt::" + int_to_string(tree_id) + "::" + int_to_string(node_id)
+}
+
+fn bti_read(tree_id: int, node_id: int) -> Array {
+    let k: String = bti_node_key(tree_id, node_id)
+    let s: String = g_bti_nodes.get(k)
+    return bti_deserialize_node(s)
+}
+
+fn bti_write(tree_id: int, node_id: int, is_leaf: bool, keys: Array, vals: Array, children: Array) {
+    let k: String = bti_node_key(tree_id, node_id)
+    let s: String = bti_serialize_node(is_leaf, keys, vals, children)
+    g_bti_nodes.insert(k, s)
+}
+
+fn bti_fresh_node_id(tree_id: int) -> int {
+    let tk: String = int_to_string(tree_id)
+    var n: int = 1
+    if g_bti_next_node.contains(tk) {
+        n = g_bti_next_node.get(tk)
+    }
+    g_bti_next_node.insert(tk, n + 1)
+    return n
+}
+
+// ── Binary search: returns idx where keys[idx] >= key (or keys.length). ──
+fn bti_search_key(keys: Array, key: String, col_type: String) -> int {
+    var lo: int = 0
+    var hi: int = keys.length()
+    while lo < hi {
+        let mid: int = (lo + hi) / 2
+        let mk: String = keys[mid]
+        let cmp: int = bti_cmp(mk, key, col_type)
+        if cmp < 0 {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    return lo
+}
+
+// ── Insert into a non-full subtree rooted at node_id ──
+// Precondition: the node at node_id has at most 2t-2 = 4 keys.
+fn bti_insert_nonfull(tree_id: int, node_id: int, key: String, rowid: int, col_type: String) {
+    let node: Array = bti_read(tree_id, node_id)
+    let is_leaf: bool = node[0]
+    let keys: Array = node[1]
+    let vals: Array = node[2]
+    let children: Array = node[3]
+
+    let idx0: int = bti_search_key(keys, key, col_type)
+    if idx0 < keys.length() {
+        let ek: String = keys[idx0]
+        if bti_cmp(ek, key, col_type) == 0 {
+            let ev: String = vals[idx0]
+            let nv: String = bti_append_rowid_csv(ev, rowid)
+            vals[idx0] = nv
+            bti_write(tree_id, node_id, is_leaf, keys, vals, children)
+            return
+        }
+    }
+
+    if is_leaf {
+        keys.insert(idx0, key)
+        vals.insert(idx0, int_to_string(rowid))
+        bti_write(tree_id, node_id, is_leaf, keys, vals, children)
+        return
+    }
+
+    // Non-leaf: descend to child[idx0], splitting if full.
+    var target_idx: int = idx0
+    let child_id: int = children[target_idx]
+    let child: Array = bti_read(tree_id, child_id)
+    let ch_keys: Array = child[1]
+    if ch_keys.length() >= bti_max_keys() {
+        bti_split_child(tree_id, node_id, target_idx, col_type)
+        // Re-read parent after split.
+        let pnode: Array = bti_read(tree_id, node_id)
+        let pkeys: Array = pnode[1]
+        let pvals: Array = pnode[2]
+        let pchildren: Array = pnode[3]
+        let promoted: String = pkeys[target_idx]
+        let cmp: int = bti_cmp(key, promoted, col_type)
+        if cmp == 0 {
+            // Key equals the promoted median — append to its CSV at parent.
+            let ev: String = pvals[target_idx]
+            let nv: String = bti_append_rowid_csv(ev, rowid)
+            pvals[target_idx] = nv
+            bti_write(tree_id, node_id, pnode[0], pkeys, pvals, pchildren)
+            return
+        }
+        if cmp > 0 { target_idx = target_idx + 1 }
+        let new_child_id: int = pchildren[target_idx]
+        bti_insert_nonfull(tree_id, new_child_id, key, rowid, col_type)
+        return
+    }
+    bti_insert_nonfull(tree_id, child_id, key, rowid, col_type)
+}
+
+// ── Split a full child of a non-full parent ──
+// parent has <= 2t-2 keys, children[child_idx] has 2t-1 = 5 keys.
+// Median (index t-1 = 2) is promoted to parent.
+fn bti_split_child(tree_id: int, parent_id: int, child_idx: int, col_type: String) {
+    let parent: Array = bti_read(tree_id, parent_id)
+    let p_is_leaf: bool = parent[0]
+    let p_keys: Array = parent[1]
+    let p_vals: Array = parent[2]
+    let p_children: Array = parent[3]
+
+    let old_child_id: int = p_children[child_idx]
+    let old_child: Array = bti_read(tree_id, old_child_id)
+    let c_is_leaf: bool = old_child[0]
+    let c_keys: Array = old_child[1]
+    let c_vals: Array = old_child[2]
+    let c_children: Array = old_child[3]
+
+    let t: int = bti_t()
+
+    // Left half: keys[0..t-1] (2 items), vals[0..t-1], children[0..t] (3 if non-leaf).
+    let left_keys: Array = []
+    let left_vals: Array = []
+    let left_children: Array = []
+    var i: int = 0
+    while i < t - 1 {
+        left_keys.push(c_keys[i])
+        left_vals.push(c_vals[i])
+        i = i + 1
+    }
+    if c_is_leaf == false {
+        i = 0
+        while i < t {
+            left_children.push(c_children[i])
+            i = i + 1
+        }
+    }
+
+    let median_key: String = c_keys[t - 1]
+    let median_val: String = c_vals[t - 1]
+
+    // Right half: keys[t..2t-1] (2 items), vals[t..2t-1], children[t..2t] (3 if non-leaf).
+    let right_keys: Array = []
+    let right_vals: Array = []
+    let right_children: Array = []
+    i = t
+    while i < bti_max_keys() {
+        right_keys.push(c_keys[i])
+        right_vals.push(c_vals[i])
+        i = i + 1
+    }
+    if c_is_leaf == false {
+        i = t
+        while i <= bti_max_keys() {
+            right_children.push(c_children[i])
+            i = i + 1
+        }
+    }
+
+    // Persist left (reuse old_child_id) and right (fresh id).
+    let new_child_id: int = bti_fresh_node_id(tree_id)
+    bti_write(tree_id, old_child_id, c_is_leaf, left_keys, left_vals, left_children)
+    bti_write(tree_id, new_child_id, c_is_leaf, right_keys, right_vals, right_children)
+
+    // Insert median into parent at child_idx; insert new child id after old.
+    p_keys.insert(child_idx, median_key)
+    p_vals.insert(child_idx, median_val)
+    p_children.insert(child_idx + 1, new_child_id)
+    bti_write(tree_id, parent_id, p_is_leaf, p_keys, p_vals, p_children)
+}
+
+// ── Public API ─────────────────────────────────────────────────────────
+
+// Create a new empty tree; returns tree_id.
+fn bti_new_tree() -> int {
+    var tid: int = 1
+    if g_bti_next_tree.contains("") {
+        tid = g_bti_next_tree.get("")
+    }
+    g_bti_next_tree.insert("", tid + 1)
+    // Allocate root leaf.
+    let root_id: int = bti_fresh_node_id(tid)
+    let empty_keys: Array = []
+    let empty_vals: Array = []
+    let empty_ch: Array = []
+    bti_write(tid, root_id, true, empty_keys, empty_vals, empty_ch)
+    g_bti_roots.insert(int_to_string(tid), int_to_string(root_id))
+    return tid
+}
+
+// Insert a (key, rowid) pair. If key already exists, rowid is appended.
+fn bti_insert(tree_id: int, key: String, rowid: int, col_type: String) {
+    let tk: String = int_to_string(tree_id)
+    let root_id: int = string_to_int(g_bti_roots.get(tk))
+    let root: Array = bti_read(tree_id, root_id)
+    let root_keys: Array = root[1]
+    if root_keys.length() >= bti_max_keys() {
+        // Root full — create new root, old becomes child.
+        let new_root_id: int = bti_fresh_node_id(tree_id)
+        let empty_keys: Array = []
+        let empty_vals: Array = []
+        let one_child: Array = [root_id]
+        bti_write(tree_id, new_root_id, false, empty_keys, empty_vals, one_child)
+        g_bti_roots.insert(tk, int_to_string(new_root_id))
+        bti_split_child(tree_id, new_root_id, 0, col_type)
+        bti_insert_nonfull(tree_id, new_root_id, key, rowid, col_type)
+        return
+    }
+    bti_insert_nonfull(tree_id, root_id, key, rowid, col_type)
+}
+
+// Lookup exact key: returns Array<int> of rowids (or [] if absent/tombstoned).
+fn bti_lookup(tree_id: int, key: String, col_type: String) -> Array {
+    let tk: String = int_to_string(tree_id)
+    var node_id: int = string_to_int(g_bti_roots.get(tk))
+    while true {
+        let node: Array = bti_read(tree_id, node_id)
+        let is_leaf: bool = node[0]
+        let keys: Array = node[1]
+        let vals: Array = node[2]
+        let children: Array = node[3]
+        let idx: int = bti_search_key(keys, key, col_type)
+        if idx < keys.length() {
+            let ek: String = keys[idx]
+            if bti_cmp(ek, key, col_type) == 0 {
+                let v: String = vals[idx]
+                return parse_rowid_list(v)
+            }
+        }
+        if is_leaf {
+            let empty: Array = []
+            return empty
+        }
+        node_id = children[idx]
+    }
+    let empty2: Array = []
+    return empty2
+}
+
+// In-order traversal, appending matching rowids to acc.
+fn bti_range_into(tree_id: int, node_id: int, lo: String, hi: String, lo_incl: bool, hi_incl: bool, col_type: String, acc: Array) {
+    let node: Array = bti_read(tree_id, node_id)
+    let is_leaf: bool = node[0]
+    let keys: Array = node[1]
+    let vals: Array = node[2]
+    let children: Array = node[3]
+
+    var i: int = 0
+    let n: int = keys.length()
+    while i < n {
+        if is_leaf == false {
+            let child_id: int = children[i]
+            bti_range_into(tree_id, child_id, lo, hi, lo_incl, hi_incl, col_type, acc)
+        }
+        let k: String = keys[i]
+        let v: String = vals[i]
+        if v.length() > 0 {
+            let cmp_lo: int = bti_cmp(k, lo, col_type)
+            let cmp_hi: int = bti_cmp(k, hi, col_type)
+            var lo_ok: bool = false
+            if lo_incl {
+                if cmp_lo >= 0 { lo_ok = true }
+            } else {
+                if cmp_lo > 0 { lo_ok = true }
+            }
+            var hi_ok: bool = false
+            if hi_incl {
+                if cmp_hi <= 0 { hi_ok = true }
+            } else {
+                if cmp_hi < 0 { hi_ok = true }
+            }
+            if lo_ok and hi_ok {
+                let rids: Array = parse_rowid_list(v)
+                for rid: int in rids {
+                    acc.push(rid)
+                }
+            }
+        }
+        i = i + 1
+    }
+    if is_leaf == false {
+        let last_child: int = children[n]
+        bti_range_into(tree_id, last_child, lo, hi, lo_incl, hi_incl, col_type, acc)
+    }
+}
+
+// Range scan: returns Array<int> of rowids with key in [lo, hi] (inclusivity per flags).
+// lo may be "__NEG_INF__"; hi may be "__POS_INF__".
+fn bti_range(tree_id: int, lo: String, hi: String, col_type: String, lo_incl: bool, hi_incl: bool) -> Array {
+    let tk: String = int_to_string(tree_id)
+    let root_id: int = string_to_int(g_bti_roots.get(tk))
+    let acc: Array = []
+    bti_range_into(tree_id, root_id, lo, hi, lo_incl, hi_incl, col_type, acc)
+    return acc
+}
+
+// Remove a rowid from a key's CSV. If CSV goes empty, the key is tombstoned
+// (kept in the tree, val=""). No merge or rotation in v0.4.
+// Returns true if rowid was found and removed.
+fn bti_remove(tree_id: int, key: String, rowid: int, col_type: String) -> bool {
+    let tk: String = int_to_string(tree_id)
+    var node_id: int = string_to_int(g_bti_roots.get(tk))
+    while true {
+        let node: Array = bti_read(tree_id, node_id)
+        let is_leaf: bool = node[0]
+        let keys: Array = node[1]
+        let vals: Array = node[2]
+        let children: Array = node[3]
+        let idx: int = bti_search_key(keys, key, col_type)
+        if idx < keys.length() {
+            let ek: String = keys[idx]
+            if bti_cmp(ek, key, col_type) == 0 {
+                let v: String = vals[idx]
+                let nv: String = bti_remove_rowid_csv(v, rowid)
+                vals[idx] = nv
+                bti_write(tree_id, node_id, is_leaf, keys, vals, children)
+                return true
+            }
+        }
+        if is_leaf {
+            return false
+        }
+        node_id = children[idx]
+    }
+    return false
+}
+
+// ── VACUUM: compact tombstones by rebuilding the tree ─────────────────
+//
+// In v0.4 a delete that drains a key's rowid CSV leaves a tombstone
+// (key present, val=""). Tombstones are semantically harmless (lookups
+// return []) but waste node slots and slow range scans. bti_vacuum
+// walks the tree in-order, emits every live (key, rowid) pair, builds a
+// fresh tree, and releases the old nodes. The fresh tree is balanced by
+// construction because Cormen-style insert already maintains the B-tree
+// invariant. Returns [new_tree_id, tombstones_removed].
+//
+// Caller (store.nx::index_vacuum) MUST update g_index_btree_id with the
+// new tree id before releasing the mutex.
+
+fn bti_collect_live_into(tree_id: int, node_id: int, col_type: String, pairs: Array, stats: Array) {
+    let node: Array = bti_read(tree_id, node_id)
+    let is_leaf: bool = node[0]
+    let keys: Array = node[1]
+    let vals: Array = node[2]
+    let children: Array = node[3]
+
+    var i: int = 0
+    let n: int = keys.length()
+    while i < n {
+        if is_leaf == false {
+            let child_id: int = children[i]
+            bti_collect_live_into(tree_id, child_id, col_type, pairs, stats)
+        }
+        let k: String = keys[i]
+        let v: String = vals[i]
+        if v.length() == 0 {
+            stats[0] = stats[0] + 1
+        } else {
+            let rids: Array = parse_rowid_list(v)
+            for rid: int in rids {
+                let pair: Array = [k, rid]
+                pairs.push(pair)
+            }
+        }
+        i = i + 1
+    }
+    if is_leaf == false {
+        let last_child: int = children[n]
+        bti_collect_live_into(tree_id, last_child, col_type, pairs, stats)
+    }
+}
+
+// Release all nodes of a tree. Invariant: the tree_id must no longer be
+// referenced by any index definition.
+fn bti_delete_tree(tree_id: int) {
+    let tk: String = int_to_string(tree_id)
+    let prefix: String = "bt::" + tk + "::"
+    let all_keys: Array = g_bti_nodes.keys()
+    let victims: Array = []
+    for k: String in all_keys {
+        if k.startsWith(prefix) {
+            victims.push(k)
+        }
+    }
+    for vk: String in victims {
+        g_bti_nodes.remove(vk)
+    }
+    if g_bti_roots.contains(tk) {
+        g_bti_roots.remove(tk)
+    }
+    if g_bti_next_node.contains(tk) {
+        g_bti_next_node.remove(tk)
+    }
+}
+
+// Rebuild a BTREE index, eliminating tombstones. Returns
+// [new_tree_id, tombstones_removed]. The old tree is released.
+fn bti_vacuum(tree_id: int, col_type: String) -> Array {
+    let tk: String = int_to_string(tree_id)
+    if g_bti_roots.contains(tk) == false {
+        let empty_res: Array = [-1, 0]
+        return empty_res
+    }
+    let root_id: int = string_to_int(g_bti_roots.get(tk))
+    let pairs: Array = []
+    let stats: Array = [0]
+    bti_collect_live_into(tree_id, root_id, col_type, pairs, stats)
+    let removed: int = stats[0]
+
+    let new_tree_id: int = bti_new_tree()
+    for pair: Array in pairs {
+        let k: String = pair[0]
+        let rid: int = pair[1]
+        bti_insert(new_tree_id, k, rid, col_type)
+    }
+
+    bti_delete_tree(tree_id)
+
+    let result: Array = [new_tree_id, removed]
+    return result
+}

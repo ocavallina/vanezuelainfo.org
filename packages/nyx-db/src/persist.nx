@@ -1,0 +1,366 @@
+// persist.nx — Binary .ndb persistence for nyx-db
+//
+// Format (NYXSQ):
+//   [HEADER]   5 bytes "NYXSQ" + 1 byte version (0x01)
+//   [META]     8 bytes timestamp LE + 4 bytes num_tables LE
+//   [TABLES]   Per table:
+//                4 bytes name_len + name bytes
+//                4 bytes schema_len + schema bytes
+//                8 bytes next_rowid
+//                4 bytes num_rows
+//                Per row: 8 bytes rowid + 4 bytes data_len + data bytes
+//   [INDICES]  4 bytes num_index_defs
+//              Per index: 4 bytes table_col_len + table::col bytes
+//   [CRC32]    4 bytes CRC32 of everything before
+//   [EOF]      1 byte 0xFF
+
+var g_changes_since_save: int = 0
+var g_last_save_time: int = 0
+var g_save_path: String = "nyx.db"
+
+// ── Binary encoding helpers ──
+
+pub fn push_byte(arr: Array, val: int) {
+    arr.push(val & 255)
+}
+
+pub fn push_i32_le(arr: Array, val: int) {
+    arr.push(val & 255)
+    arr.push((val >> 8) & 255)
+    arr.push((val >> 16) & 255)
+    arr.push((val >> 24) & 255)
+}
+
+pub fn push_i64_le(arr: Array, val: int) {
+    arr.push(val & 255)
+    arr.push((val >> 8) & 255)
+    arr.push((val >> 16) & 255)
+    arr.push((val >> 24) & 255)
+    arr.push((val >> 32) & 255)
+    arr.push((val >> 40) & 255)
+    arr.push((val >> 48) & 255)
+    arr.push((val >> 56) & 255)
+}
+
+pub fn push_string_bin(arr: Array, s: String) {
+    let slen: int = str_byte_length(s)
+    push_i32_le(arr, slen)
+    var i: int = 0
+    while i < slen {
+        arr.push(s.charAt(i))
+        i = i + 1
+    }
+}
+
+// ── Binary decoding helpers ──
+
+pub fn read_byte(arr: Array, offset: int) -> int {
+    let b: int = arr[offset]
+    return b & 255
+}
+
+pub fn read_i32_le(arr: Array, offset: int) -> int {
+    let b0: int = arr[offset] & 255
+    let b1: int = arr[offset + 1] & 255
+    let b2: int = arr[offset + 2] & 255
+    let b3: int = arr[offset + 3] & 255
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+}
+
+pub fn read_i64_le(arr: Array, offset: int) -> int {
+    let b0: int = arr[offset] & 255
+    let b1: int = arr[offset + 1] & 255
+    let b2: int = arr[offset + 2] & 255
+    let b3: int = arr[offset + 3] & 255
+    let b4: int = arr[offset + 4] & 255
+    let b5: int = arr[offset + 5] & 255
+    let b6: int = arr[offset + 6] & 255
+    let b7: int = arr[offset + 7] & 255
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+}
+
+pub fn read_string_bin(arr: Array, offset: int) -> Array {
+    let slen: int = read_i32_le(arr, offset)
+    let s: String = string_from_bytes(arr, offset + 4, slen)
+    let new_offset: int = offset + 4 + slen
+    return [s, new_offset]
+}
+
+// ── Serialize ──
+
+pub fn db_save(path: String) -> int {
+    let buf: Array = []
+
+    // Header: "NYXSQ" + version 2 (v2 adds index kind HASH|BTREE after each key)
+    push_byte(buf, 78)   // N
+    push_byte(buf, 89)   // Y
+    push_byte(buf, 88)   // X
+    push_byte(buf, 83)   // S
+    push_byte(buf, 81)   // Q
+    push_byte(buf, 2)    // version
+
+    // Meta: timestamp + num_tables
+    let now: int = time_us()
+    push_i64_le(buf, now)
+    let table_names: Array = g_tables.keys()
+    let num_tables: int = table_names.length()
+    push_i32_le(buf, num_tables)
+
+    // Tables
+    for tname: String in table_names {
+        // Table name
+        push_string_bin(buf, tname)
+
+        // Schema string
+        let schema_str: String = g_schema.get(tname)
+        push_string_bin(buf, schema_str)
+
+        // Next rowid
+        let next_rid: int = g_next_rowid.get(tname)
+        push_i64_le(buf, next_rid)
+
+        // Rows
+        let ids_csv: String = g_row_ids.get(tname)
+        let ids: Array = parse_rowid_list(ids_csv)
+        push_i32_le(buf, ids.length())
+
+        for rid: int in ids {
+            push_i64_le(buf, rid)
+            let row_key: String = tname + "::" + int_to_string(rid)
+            if g_rows.contains(row_key) {
+                let data: String = g_rows.get(row_key)
+                push_string_bin(buf, data)
+            } else {
+                push_string_bin(buf, "")
+            }
+        }
+    }
+
+    // Index definitions (v2: each followed by its kind string).
+    let idx_keys: Array = g_index_def.keys()
+    push_i32_le(buf, idx_keys.length())
+    for idk: String in idx_keys {
+        push_string_bin(buf, idk)
+        var kind_str: String = "HASH"
+        if g_index_kind.contains(idk) {
+            kind_str = g_index_kind.get(idk)
+        }
+        push_string_bin(buf, kind_str)
+    }
+
+    // CRC32
+    let crc: int = crc32_bytes(buf)
+    push_i32_le(buf, crc)
+
+    // EOF marker
+    push_byte(buf, 255)
+
+    // Atomic write: .tmp -> rename
+    let tmp_path: String = path + ".tmp"
+    let f: Map = file_open(tmp_path, "wb")
+    file_write_bytes(f, buf)
+    file_flush(f)
+    file_close(f)
+    rename_file(tmp_path, path)
+
+    g_changes_since_save = 0
+    g_last_save_time = time_us()
+
+    return num_tables
+}
+
+// ── Deserialize ──
+
+pub fn db_load(path: String) -> int {
+    let f: Map = file_open(path, "rb")
+    file_seek(f, 0, 2)
+    let file_size: int = file_tell(f)
+    file_seek(f, 0, 0)
+    let buf: Array = file_read_bytes(f, file_size)
+    file_close(f)
+
+    if buf.length() < 20 {
+        print("[db-load] file too small")
+        return 0
+    }
+
+    // Verify magic: NYXSQ
+    if read_byte(buf, 0) != 78 or read_byte(buf, 1) != 89 or read_byte(buf, 2) != 88 or read_byte(buf, 3) != 83 or read_byte(buf, 4) != 81 {
+        print("[db-load] invalid magic")
+        return 0
+    }
+
+    let version: int = read_byte(buf, 5)
+    if version != 1 and version != 2 {
+        print("[db-load] unsupported version: " + int_to_string(version))
+        return 0
+    }
+
+    // Verify EOF marker
+    if read_byte(buf, buf.length() - 1) != 255 {
+        print("[db-load] missing EOF marker")
+        return 0
+    }
+
+    // Verify CRC32
+    let data_len: int = buf.length() - 5
+    let stored_crc: int = read_i32_le(buf, data_len)
+    let data_buf: Array = []
+    var di: int = 0
+    while di < data_len {
+        data_buf.push(buf[di])
+        di = di + 1
+    }
+    let computed_crc: int = crc32_bytes(data_buf)
+    if stored_crc != computed_crc {
+        print("[db-load] CRC32 mismatch")
+        return 0
+    }
+
+    // Parse meta
+    var offset: int = 6
+    // let timestamp: int = read_i64_le(buf, offset)
+    offset = offset + 8
+    let num_tables: int = read_i32_le(buf, offset)
+    offset = offset + 4
+
+    // Parse tables
+    var ti: int = 0
+    while ti < num_tables {
+        // Table name
+        let name_result: Array = read_string_bin(buf, offset)
+        let tname: String = name_result[0]
+        offset = name_result[1]
+
+        // Schema
+        let schema_result: Array = read_string_bin(buf, offset)
+        let schema_str: String = schema_result[0]
+        offset = schema_result[1]
+
+        // Next rowid
+        let next_rid: int = read_i64_le(buf, offset)
+        offset = offset + 8
+
+        // Register table
+        g_tables.insert(tname, 1)
+        g_schema.insert(tname, schema_str)
+        g_next_rowid.insert(tname, next_rid)
+
+        // Rows
+        let num_rows: int = read_i32_le(buf, offset)
+        offset = offset + 4
+
+        var ids_csv: String = ""
+        var ri: int = 0
+        while ri < num_rows {
+            let rid: int = read_i64_le(buf, offset)
+            offset = offset + 8
+
+            let data_result: Array = read_string_bin(buf, offset)
+            let data: String = data_result[0]
+            offset = data_result[1]
+
+            let row_key: String = tname + "::" + int_to_string(rid)
+            g_rows.insert(row_key, data)
+
+            if ri > 0 { ids_csv = ids_csv + "," }
+            ids_csv = ids_csv + int_to_string(rid)
+
+            ri = ri + 1
+        }
+
+        g_row_ids.insert(tname, ids_csv)
+        ti = ti + 1
+    }
+
+    // Parse index definitions (v2 adds a kind string after each key).
+    let num_idx: int = read_i32_le(buf, offset)
+    offset = offset + 4
+    var ii: int = 0
+    while ii < num_idx {
+        let idx_result: Array = read_string_bin(buf, offset)
+        let idx_key: String = idx_result[0]
+        offset = idx_result[1]
+        var kind: String = "HASH"
+        if version >= 2 {
+            let kind_result: Array = read_string_bin(buf, offset)
+            let kind_val: String = kind_result[0]
+            kind = kind_val
+            offset = kind_result[1]
+        }
+        g_index_def.insert(idx_key, 1)
+        g_index_kind.insert(idx_key, kind)
+        if kind == "BTREE" {
+            let tid: int = bti_new_tree()
+            g_index_btree_id.insert(idx_key, int_to_string(tid))
+        }
+
+        // Rebuild index data from rows — index_add dispatches by kind.
+        let idx_parts: Array = idx_key.split("::")
+        if idx_parts.length() >= 2 {
+            let idx_table: String = idx_parts[0]
+            let idx_col: String = idx_parts[1]
+            if g_tables.contains(idx_table) {
+                let s_str: String = g_schema.get(idx_table)
+                let s_arr: Array = schema_parse(s_str)
+                let col_i: int = schema_col_index(s_arr, idx_col)
+                if col_i >= 0 {
+                    let r_csv: String = g_row_ids.get(idx_table)
+                    let r_ids: Array = parse_rowid_list(r_csv)
+                    for rid: int in r_ids {
+                        let rk: String = idx_table + "::" + int_to_string(rid)
+                        if g_rows.contains(rk) {
+                            let rd: String = g_rows.get(rk)
+                            let rv: Array = row_parse(rd)
+                            let v: String = rv[col_i]
+                            index_add(idx_table, idx_col, v, rid)
+                        }
+                    }
+                }
+            }
+        }
+
+        ii = ii + 1
+    }
+
+    g_changes_since_save = 0
+    g_last_save_time = time_us()
+    return num_tables
+}
+
+// Replay the WAL on top of the loaded snapshot. Must be called AFTER
+// db_load and BEFORE the server accepts connections. Caller passes the
+// WAL path explicitly (avoids cross-module global access ambiguity).
+pub fn db_recover_from_wal(wal_path: String) -> Array {
+    let stats: Array = wal_replay(wal_path)
+    let applied: int = stats[1]
+    if applied > 0 {
+        // Snapshot now includes the replayed state; checkpoint + truncate
+        // so the WAL restarts fresh from this point.
+        db_save(g_save_path)
+        wal_checkpoint_and_truncate()
+    }
+    return stats
+}
+
+// Background saver: every 10s if 100+ changes or 60s elapsed
+pub fn db_bg_saver() -> int {
+    while 1 > 0 {
+        sleep(10000)
+        if g_changes > 0 {
+            let now: int = time_us()
+            let elapsed: int = now - g_last_save_time
+            let elapsed_sec: int = elapsed / 1000000
+            if g_changes >= 100 or elapsed_sec >= 60 {
+                let saved: int = db_save(g_save_path)
+                g_changes_since_save = 0
+                g_changes = 0
+                // After snapshotting, the preceding WAL records are
+                // redundant — truncate so the log stays bounded.
+                wal_checkpoint_and_truncate()
+                print("[bg-save] saved " + int_to_string(saved) + " tables")
+            }
+        }
+    }
+    return 0
+}

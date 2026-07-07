@@ -1,0 +1,1358 @@
+// store.nx — In-memory storage engine for nyx-db
+//
+// Tables, rows, and indices stored in flat Maps.
+// Row data: columns separated by \x1F (Unit Separator, ASCII 31)
+// Flat key encoding: "table::rowid" (avoids nested Maps which SEGV)
+
+var g_tables: Map = Map.new()         // "tablename" -> 1
+var g_schema: Map = Map.new()         // "tablename" -> "col1:TYPE,col2:TYPE"
+var g_next_rowid: Map = Map.new()     // "tablename" -> next id
+var g_rows: Map = Map.new()           // "tablename::rowid" -> "v1\x1Fv2\x1Fv3"
+var g_row_ids: Map = Map.new()        // "tablename" -> "1,2,3,..." (CSV of active rowids)
+var g_index_def: Map = Map.new()      // "tablename::colname" -> 1
+var g_index_data: Map = Map.new()     // "idx::tablename::colname::value" -> "1,5,23" (HASH kind)
+var g_index_kind: Map = Map.new()     // "tablename::colname" -> "HASH"|"BTREE"
+var g_index_btree_id: Map = Map.new() // "tablename::colname" -> tree_id string (BTREE kind)
+var g_changes: int = 0
+var g_db_mtx: Map = Map.new()
+
+fn db_ensure_mtx() {
+    if g_db_mtx.size() == 0 {
+        g_db_mtx = mutex_new()
+    }
+}
+
+// Unit separator for column values
+fn col_sep() -> String {
+    return char_to_string(31)
+}
+
+// ── Schema helpers ──
+
+// Parse schema string "col1:TYPE,col2:TYPE:PK" -> [[col, type], ...]
+fn schema_parse(schema_str: String) -> Array {
+    let result: Array = []
+    let parts: Array = schema_str.split(",")
+    for part: String in parts {
+        let kv: Array = part.split(":")
+        if kv.length() >= 2 {
+            let col_name: String = kv[0]
+            let col_type: String = kv[1]
+            let entry: Array = [col_name, col_type]
+            result.push(entry)
+        }
+    }
+    return result
+}
+
+// Find primary key column index (-1 if none)
+fn schema_pk_index(schema_str: String) -> int {
+    let parts: Array = schema_str.split(",")
+    var i: int = 0
+    for part: String in parts {
+        if part.endsWith(":PK") {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// Get column index by name from schema
+fn schema_col_index(schema: Array, col_name: String) -> int {
+    var i: int = 0
+    while i < schema.length() {
+        let entry: Array = schema[i]
+        let name: String = entry[0]
+        if name == col_name { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+// Get column type from schema
+fn schema_col_type(schema: Array, col_name: String) -> String {
+    var i: int = 0
+    while i < schema.length() {
+        let entry: Array = schema[i]
+        let name: String = entry[0]
+        if name == col_name { return entry[1] }
+        i = i + 1
+    }
+    return "TEXT"
+}
+
+// Parse row data by separator
+fn row_parse(data: String) -> Array {
+    return data.split(col_sep())
+}
+
+// Serialize row values to separator-delimited string
+fn row_serialize(values: Array) -> String {
+    let sep: String = col_sep()
+    var result: String = ""
+    var i: int = 0
+    while i < values.length() {
+        if i > 0 { result = result + sep }
+        let v: String = values[i]
+        result = result + v
+        i = i + 1
+    }
+    return result
+}
+
+// Parse rowid list from CSV string
+fn parse_rowid_list(csv: String) -> Array {
+    if csv.length() == 0 { return [] }
+    let parts: Array = csv.split(",")
+    let result: Array = []
+    for p: String in parts {
+        if p.length() > 0 {
+            let id: int = string_to_int(p)
+            result.push(id)
+        }
+    }
+    return result
+}
+
+// Serialize rowid list to CSV string
+fn rowid_list_to_csv(ids: Array) -> String {
+    var result: String = ""
+    var i: int = 0
+    while i < ids.length() {
+        if i > 0 { result = result + "," }
+        let id: int = ids[i]
+        result = result + int_to_string(id)
+        i = i + 1
+    }
+    return result
+}
+
+// ── Index helpers ──
+//
+// v0.4: dispatch by kind. HASH uses the flat Map g_index_data; BTREE
+// delegates to bti_* in btree.nx. Callers (update_indices_for_row,
+// db_select, etc) don't need to know the kind — they just pass table/
+// col/value and we route below. Col type for BTREE comparisons is
+// resolved here from g_schema, keeping the public helper signatures
+// backward-compatible.
+
+fn index_kind_of(table: String, col: String) -> String {
+    let def_key: String = table + "::" + col
+    if g_index_kind.contains(def_key) {
+        return g_index_kind.get(def_key)
+    }
+    return "HASH"  // legacy: any index created before kind tracking is HASH
+}
+
+fn index_btree_id_of(table: String, col: String) -> int {
+    let def_key: String = table + "::" + col
+    let s: String = g_index_btree_id.get(def_key)
+    return string_to_int(s)
+}
+
+fn index_col_type(table: String, col: String) -> String {
+    if g_schema.contains(table) == false { return "TEXT" }
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    return schema_col_type(schema, col)
+}
+
+fn index_add(table: String, col: String, value: String, rowid: int) {
+    let kind: String = index_kind_of(table, col)
+    if kind == "BTREE" {
+        let tree_id: int = index_btree_id_of(table, col)
+        let ctype: String = index_col_type(table, col)
+        bti_insert(tree_id, value, rowid, ctype)
+        return
+    }
+    let idx_key: String = "idx::" + table + "::" + col + "::" + value
+    let rid_str: String = int_to_string(rowid)
+    if g_index_data.contains(idx_key) {
+        let existing: String = g_index_data.get(idx_key)
+        g_index_data.insert(idx_key, existing + "," + rid_str)
+    } else {
+        g_index_data.insert(idx_key, rid_str)
+    }
+}
+
+fn index_remove(table: String, col: String, value: String, rowid: int) {
+    let kind: String = index_kind_of(table, col)
+    if kind == "BTREE" {
+        let tree_id: int = index_btree_id_of(table, col)
+        let ctype: String = index_col_type(table, col)
+        bti_remove(tree_id, value, rowid, ctype)
+        return 0
+    }
+    let idx_key: String = "idx::" + table + "::" + col + "::" + value
+    if g_index_data.contains(idx_key) == false { return 0 }
+    let existing: String = g_index_data.get(idx_key)
+    let ids: Array = parse_rowid_list(existing)
+    let new_ids: Array = []
+    let rid: int = rowid
+    for id: int in ids {
+        if id != rid { new_ids.push(id) }
+    }
+    if new_ids.length() == 0 {
+        g_index_data.remove(idx_key)
+    } else {
+        g_index_data.insert(idx_key, rowid_list_to_csv(new_ids))
+    }
+    return 0
+}
+
+fn index_lookup(table: String, col: String, value: String) -> Array {
+    let kind: String = index_kind_of(table, col)
+    if kind == "BTREE" {
+        let tree_id: int = index_btree_id_of(table, col)
+        let ctype: String = index_col_type(table, col)
+        return bti_lookup(tree_id, value, ctype)
+    }
+    let idx_key: String = "idx::" + table + "::" + col + "::" + value
+    if g_index_data.contains(idx_key) == false { return [] }
+    let csv: String = g_index_data.get(idx_key)
+    return parse_rowid_list(csv)
+}
+
+// Range lookup (BTREE only). Returns rowids with col value in the given
+// bounds. HASH indices return [] (caller/planner must filter by kind).
+fn index_range_lookup(table: String, col: String, lo: String, hi: String, lo_incl: bool, hi_incl: bool) -> Array {
+    let kind: String = index_kind_of(table, col)
+    if kind != "BTREE" { return [] }
+    let tree_id: int = index_btree_id_of(table, col)
+    let ctype: String = index_col_type(table, col)
+    return bti_range(tree_id, lo, hi, ctype, lo_incl, hi_incl)
+}
+
+// Convert a planner hoist back to a WHERE AST evaluable by eval_where.
+// Used by UPDATE/DELETE when we need to re-attach the hoisted predicate
+// to the residual for per-row evaluation. SELECT consumes the hoist
+// directly via idx_ids; this helper is not needed on that path.
+fn hoist_to_where(hoisted: Array) -> Array {
+    let tag: String = hoisted[0]
+    if tag == "RANGE" {
+        let col: String = hoisted[1]
+        let lo: String = hoisted[2]
+        let hi: String = hoisted[3]
+        let lo_incl: bool = hoisted[4]
+        let hi_incl: bool = hoisted[5]
+        var lo_op: String = ">"
+        if lo_incl { lo_op = ">=" }
+        var hi_op: String = "<"
+        if hi_incl { hi_op = "<=" }
+        let lo_node: Array = [lo_op, col, lo]
+        let hi_node: Array = [hi_op, col, hi]
+        let and_node: Array = ["AND", lo_node, hi_node]
+        return and_node
+    }
+    return hoisted
+}
+
+// Attach a hoisted predicate to the residual WHERE, preserving semantics.
+// If hoisted is NONE, returns residual unchanged.
+fn hoist_reattach(residual: Array, hoisted: Array) -> Array {
+    if hoisted[0] == "NONE" { return residual }
+    let hoist_ast: Array = hoist_to_where(hoisted)
+    if residual[0] == "NONE" { return hoist_ast }
+    let combined: Array = ["AND", hoist_ast, residual]
+    return combined
+}
+
+fn update_indices_for_row(table: String, schema: Array, values: Array, rowid: int) {
+    var ci: int = 0
+    while ci < schema.length() {
+        let entry: Array = schema[ci]
+        let col_name: String = entry[0]
+        let def_key: String = table + "::" + col_name
+        if g_index_def.contains(def_key) {
+            let val: String = values[ci]
+            index_add(table, col_name, val, rowid)
+        }
+        ci = ci + 1
+    }
+}
+
+fn remove_indices_for_row(table: String, schema: Array, values: Array, rowid: int) {
+    var ci: int = 0
+    while ci < schema.length() {
+        let entry: Array = schema[ci]
+        let col_name: String = entry[0]
+        let def_key: String = table + "::" + col_name
+        if g_index_def.contains(def_key) {
+            let val: String = values[ci]
+            index_remove(table, col_name, val, rowid)
+        }
+        ci = ci + 1
+    }
+}
+
+// ── Table operations ──
+
+fn db_create_table(name: String, col_defs: Array) -> String {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(name) {
+        mutex_unlock(g_db_mtx)
+        return "table already exists: " + name
+    }
+
+    // Build schema string: "col1:TYPE,col2:TYPE:PK"
+    var schema_str: String = ""
+    var pk_col: String = ""
+    var i: int = 0
+    while i < col_defs.length() {
+        let def: Array = col_defs[i]
+        let col_name: String = def[0]
+        let col_type: String = def[1]
+        let is_pk: int = def[2]
+        if i > 0 { schema_str = schema_str + "," }
+        schema_str = schema_str + col_name + ":" + col_type
+        if is_pk == 1 {
+            schema_str = schema_str + ":PK"
+            pk_col = col_name
+        }
+        i = i + 1
+    }
+
+    wal_append_create_table(name, schema_str)
+
+    g_tables.insert(name, 1)
+    g_schema.insert(name, schema_str)
+    g_next_rowid.insert(name, 1)
+    g_row_ids.insert(name, "")
+    g_changes = g_changes + 1
+    mutex_unlock(g_db_mtx)
+    return ""
+}
+
+fn db_drop_table(name: String) -> String {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(name) == false {
+        mutex_unlock(g_db_mtx)
+        return "table not found: " + name
+    }
+
+    wal_append_drop_table(name)
+
+    // Remove all rows
+    let ids_csv: String = g_row_ids.get(name)
+    let ids: Array = parse_rowid_list(ids_csv)
+    for rid: int in ids {
+        let row_key: String = name + "::" + int_to_string(rid)
+        g_rows.remove(row_key)
+    }
+
+    // Remove indices for this table
+    let all_idx_keys: Array = g_index_data.keys()
+    let prefix: String = "idx::" + name + "::"
+    for k: String in all_idx_keys {
+        if k.startsWith(prefix) {
+            g_index_data.remove(k)
+        }
+    }
+    let all_def_keys: Array = g_index_def.keys()
+    let def_prefix: String = name + "::"
+    for k: String in all_def_keys {
+        if k.startsWith(def_prefix) {
+            g_index_def.remove(k)
+        }
+    }
+
+    g_tables.remove(name)
+    g_schema.remove(name)
+    g_next_rowid.remove(name)
+    g_row_ids.remove(name)
+    g_changes = g_changes + 1
+    mutex_unlock(g_db_mtx)
+    return ""
+}
+
+fn db_insert(table: String, cols: Array, value_rows: Array) -> Array {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return ["ERROR", "table not found: " + table]
+    }
+
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let num_cols: int = schema.length()
+    var inserted: int = 0
+
+    for row_vals: Array in value_rows {
+        // Build ordered values matching schema
+        let ordered: Array = []
+        if cols.length() > 0 {
+            // Named columns: fill in order of schema
+            var si: int = 0
+            while si < num_cols {
+                let s_entry: Array = schema[si]
+                let s_name: String = s_entry[0]
+                var found: bool = false
+                var ci: int = 0
+                while ci < cols.length() {
+                    let c: String = cols[ci]
+                    if c == s_name {
+                        let v: String = row_vals[ci]
+                        ordered.push(v)
+                        found = true
+                        break
+                    }
+                    ci = ci + 1
+                }
+                if found == false {
+                    ordered.push("__NULL__")
+                }
+                si = si + 1
+            }
+        } else {
+            // Positional: values in schema order
+            var vi: int = 0
+            while vi < num_cols {
+                if vi < row_vals.length() {
+                    let v: String = row_vals[vi]
+                    ordered.push(v)
+                } else {
+                    ordered.push("__NULL__")
+                }
+                vi = vi + 1
+            }
+        }
+
+        // PRIMARY KEY uniqueness check
+        let pk_idx: int = schema_pk_index(schema_str)
+        if pk_idx >= 0 and pk_idx < ordered.length() {
+            let pk_val: String = ordered[pk_idx]
+            let existing_ids_csv: String = g_row_ids.get(table)
+            let existing_ids: Array = parse_rowid_list(existing_ids_csv)
+            for eid: int in existing_ids {
+                let ekey: String = table + "::" + int_to_string(eid)
+                if g_rows.contains(ekey) {
+                    let edata: String = g_rows.get(ekey)
+                    let evalues: Array = row_parse(edata)
+                    if pk_idx < evalues.length() {
+                        let existing_pk: String = evalues[pk_idx]
+                        if existing_pk == pk_val {
+                            let pk_entry: Array = schema[pk_idx]
+                            let pk_name: String = pk_entry[0]
+                            mutex_unlock(g_db_mtx)
+                            return ["ERROR", "UNIQUE constraint failed: " + table + "." + pk_name]
+                        }
+                    }
+                }
+            }
+        }
+
+        let rowid: int = g_next_rowid.get(table)
+        g_next_rowid.insert(table, rowid + 1)
+
+        let data: String = row_serialize(ordered)
+        wal_append_insert(table, data, rowid)
+
+        let row_key: String = table + "::" + int_to_string(rowid)
+        g_rows.insert(row_key, data)
+
+        // Update rowid list
+        let ids_csv: String = g_row_ids.get(table)
+        if ids_csv.length() == 0 {
+            g_row_ids.insert(table, int_to_string(rowid))
+        } else {
+            g_row_ids.insert(table, ids_csv + "," + int_to_string(rowid))
+        }
+
+        // Update indices
+        update_indices_for_row(table, schema, ordered, rowid)
+
+        inserted = inserted + 1
+        g_changes = g_changes + 1
+    }
+
+    mutex_unlock(g_db_mtx)
+    return ["OK", inserted]
+}
+
+// ── WHERE evaluation ──
+
+fn compare_values(a: String, b: String, col_type: String) -> int {
+    // Returns: -1 if a<b, 0 if a==b, 1 if a>b
+    if col_type == "INT" or col_type == "INTEGER" {
+        let ai: int = string_to_int(a)
+        let bi: int = string_to_int(b)
+        if ai < bi { return -1 }
+        if ai > bi { return 1 }
+        return 0
+    }
+    if col_type == "REAL" {
+        let af: float = string_to_float(a)
+        let bf: float = string_to_float(b)
+        if af < bf { return -1 }
+        if af > bf { return 1 }
+        return 0
+    }
+    // TEXT comparison (lexicographic via charAt)
+    if a == b { return 0 }
+    let alen: int = a.length()
+    let blen: int = b.length()
+    var min_len: int = alen
+    if blen < min_len { min_len = blen }
+    var ci: int = 0
+    while ci < min_len {
+        let ac: int = a.charAt(ci)
+        let bc: int = b.charAt(ci)
+        if ac < bc { return -1 }
+        if ac > bc { return 1 }
+        ci = ci + 1
+    }
+    if alen < blen { return -1 }
+    if alen > blen { return 1 }
+    return 0
+}
+
+fn like_match(text: String, pattern: String) -> bool {
+    // Simple LIKE: % matches any sequence, _ matches single char
+    let tlen: int = text.length()
+    let plen: int = pattern.length()
+    var ti: int = 0
+    var pi: int = 0
+
+    while pi < plen {
+        let pc: int = pattern.charAt(pi)
+        if pc == 37 {
+            // % — match any sequence
+            pi = pi + 1
+            if pi >= plen { return true }
+            while ti <= tlen {
+                let rest_text: String = text.substring(ti, tlen)
+                let rest_pat: String = pattern.substring(pi, plen)
+                if like_match(rest_text, rest_pat) { return true }
+                ti = ti + 1
+            }
+            return false
+        }
+        if pc == 95 {
+            // _ — match single char
+            if ti >= tlen { return false }
+            ti = ti + 1
+            pi = pi + 1
+            continue
+        }
+        // Literal match (case-insensitive)
+        if ti >= tlen { return false }
+        let tc: int = text.charAt(ti)
+        var pc_lower: int = pc
+        var tc_lower: int = tc
+        if pc >= 65 and pc <= 90 { pc_lower = pc + 32 }
+        if tc >= 65 and tc <= 90 { tc_lower = tc + 32 }
+        if pc_lower != tc_lower { return false }
+        ti = ti + 1
+        pi = pi + 1
+    }
+    return ti >= tlen
+}
+
+fn eval_where(schema: Array, values: Array, expr: Array) -> bool {
+    let tag: String = expr[0]
+
+    if tag == "NONE" { return true }
+
+    if tag == "AND" {
+        let left: Array = expr[1]
+        let right: Array = expr[2]
+        if eval_where(schema, values, left) == false { return false }
+        return eval_where(schema, values, right)
+    }
+
+    if tag == "OR" {
+        let left: Array = expr[1]
+        let right: Array = expr[2]
+        if eval_where(schema, values, left) { return true }
+        return eval_where(schema, values, right)
+    }
+
+    if tag == "NOT" {
+        let inner: Array = expr[1]
+        return eval_where(schema, values, inner) == false
+    }
+
+    if tag == "IS_NULL" {
+        let col: String = expr[1]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        return val == "__NULL__"
+    }
+
+    if tag == "IS_NOT_NULL" {
+        let col: String = expr[1]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        return val != "__NULL__"
+    }
+
+    if tag == "LIKE" {
+        let col: String = expr[1]
+        let pattern: String = expr[2]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        return like_match(val, pattern)
+    }
+
+    if tag == "IN" {
+        let col: String = expr[1]
+        let in_vals: Array = expr[2]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        for iv: String in in_vals {
+            if val == iv { return true }
+        }
+        return false
+    }
+
+    if tag == "BETWEEN" {
+        let col: String = expr[1]
+        let low: String = expr[2]
+        let high: String = expr[3]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        let ctype: String = schema_col_type(schema, col)
+        let cmp_low: int = compare_values(val, low, ctype)
+        let cmp_high: int = compare_values(val, high, ctype)
+        return cmp_low >= 0 and cmp_high <= 0
+    }
+
+    // Comparison: =, <, >, <=, >=, !=
+    if tag == "=" or tag == "<" or tag == ">" or tag == "<=" or tag == ">=" or tag == "!=" {
+        let col: String = expr[1]
+        let cmp_val: String = expr[2]
+        let idx: int = schema_col_index(schema, col)
+        if idx < 0 { return false }
+        let val: String = values[idx]
+        let ctype: String = schema_col_type(schema, col)
+        let cmp: int = compare_values(val, cmp_val, ctype)
+
+        if tag == "=" { return cmp == 0 }
+        if tag == "<" { return cmp < 0 }
+        if tag == ">" { return cmp > 0 }
+        if tag == "<=" { return cmp <= 0 }
+        if tag == ">=" { return cmp >= 0 }
+        if tag == "!=" { return cmp != 0 }
+    }
+
+    return false
+}
+
+// ── Merge sort for ORDER BY (O(n log n)) ──
+
+fn merge_sort_rows(arr: Array, col_idx: int, col_type: String, dir: String) -> Array {
+    let n: int = arr.length()
+    if n <= 1 {
+        return arr
+    }
+    let mid: int = n / 2
+    let left_half: Array = []
+    let right_half: Array = []
+    var i: int = 0
+    while i < mid {
+        left_half.push(arr[i])
+        i = i + 1
+    }
+    while i < n {
+        right_half.push(arr[i])
+        i = i + 1
+    }
+    let left_sorted: Array = merge_sort_rows(left_half, col_idx, col_type, dir)
+    let right_sorted: Array = merge_sort_rows(right_half, col_idx, col_type, dir)
+    return merge_rows(left_sorted, right_sorted, col_idx, col_type, dir)
+}
+
+fn merge_rows(left: Array, right: Array, col_idx: int, col_type: String, dir: String) -> Array {
+    let result: Array = []
+    var li: int = 0
+    var ri: int = 0
+    while li < left.length() and ri < right.length() {
+        let la: Array = left[li]
+        let ra: Array = right[ri]
+        let lv: Array = la[1]
+        let rv: Array = ra[1]
+        let lval: String = lv[col_idx]
+        let rval: String = rv[col_idx]
+        let cmp: int = compare_values(lval, rval, col_type)
+        var take_left: bool = false
+        if dir == "ASC" and cmp <= 0 {
+            take_left = true
+        }
+        if dir == "DESC" and cmp >= 0 {
+            take_left = true
+        }
+        if take_left {
+            result.push(la)
+            li = li + 1
+        } else {
+            result.push(ra)
+            ri = ri + 1
+        }
+    }
+    while li < left.length() {
+        result.push(left[li])
+        li = li + 1
+    }
+    while ri < right.length() {
+        result.push(right[ri])
+        ri = ri + 1
+    }
+    return result
+}
+
+// ── SELECT ──
+
+fn db_select(table: String, cols: Array, where_ast: Array, order_ast: Array, limit: int, offset: int, join_ast: Array) -> Array {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return ["ERROR", "table not found: " + table]
+    }
+
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    var use_schema: Array = schema
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+
+    // v0.3 query planner: reorder WHERE by selectivity + hoist indexed eq.
+    // v0.4: also dispatch BTREE-backed range hoists via index_range_lookup.
+    let plan_result: Array = plan_where(where_ast, table)
+    let planned_where: Array = plan_result[0]
+    let hoisted: Array = plan_result[1]
+    var use_index: bool = false
+    var idx_ids: Array = []
+    let htag: String = hoisted[0]
+    if htag == "=" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        idx_ids = index_lookup(table, hcol, hval)
+        use_index = true
+    }
+    if htag == ">" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        idx_ids = index_range_lookup(table, hcol, hval, "__POS_INF__", false, true)
+        use_index = true
+    }
+    if htag == ">=" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        idx_ids = index_range_lookup(table, hcol, hval, "__POS_INF__", true, true)
+        use_index = true
+    }
+    if htag == "<" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        idx_ids = index_range_lookup(table, hcol, "__NEG_INF__", hval, true, false)
+        use_index = true
+    }
+    if htag == "<=" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        idx_ids = index_range_lookup(table, hcol, "__NEG_INF__", hval, true, true)
+        use_index = true
+    }
+    if htag == "BETWEEN" {
+        let hcol: String = hoisted[1]
+        let hlo: String = hoisted[2]
+        let hhi: String = hoisted[3]
+        idx_ids = index_range_lookup(table, hcol, hlo, hhi, true, true)
+        use_index = true
+    }
+    if htag == "RANGE" {
+        let hcol: String = hoisted[1]
+        let hlo: String = hoisted[2]
+        let hhi: String = hoisted[3]
+        let lo_incl: bool = hoisted[4]
+        let hi_incl: bool = hoisted[5]
+        idx_ids = index_range_lookup(table, hcol, hlo, hhi, lo_incl, hi_incl)
+        use_index = true
+    }
+
+    var scan_ids: Array = ids
+    if use_index { scan_ids = idx_ids }
+
+    // Collect matching rows
+    var result_rows: Array = []
+    for rid: int in scan_ids {
+        let row_key: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(row_key) == false { continue }
+        let data: String = g_rows.get(row_key)
+        let values: Array = row_parse(data)
+
+        // Handle JOIN
+        let join_tag: String = join_ast[0]
+        if join_tag == "JOIN" {
+            let join_type: String = join_ast[1]
+            let join_table: String = join_ast[2]
+            let left_col: String = join_ast[3]
+            let right_col: String = join_ast[4]
+
+            if g_tables.contains(join_table) == false { continue }
+            let j_schema_str: String = g_schema.get(join_table)
+            let j_schema: Array = schema_parse(j_schema_str)
+            let j_ids_csv: String = g_row_ids.get(join_table)
+            let j_ids: Array = parse_rowid_list(j_ids_csv)
+
+            let left_idx: int = schema_col_index(schema, left_col)
+            let right_idx: int = schema_col_index(j_schema, right_col)
+            if left_idx < 0 or right_idx < 0 { continue }
+            let left_val: String = values[left_idx]
+
+            var joined: bool = false
+            for jid: int in j_ids {
+                let j_row_key: String = join_table + "::" + int_to_string(jid)
+                if g_rows.contains(j_row_key) == false { continue }
+                let j_data: String = g_rows.get(j_row_key)
+                let j_values: Array = row_parse(j_data)
+                let right_val: String = j_values[right_idx]
+                if left_val == right_val {
+                    let combined: Array = []
+                    for v: String in values { combined.push(v) }
+                    for jv: String in j_values { combined.push(jv) }
+                    let combined_schema: Array = []
+                    for se: Array in schema { combined_schema.push(se) }
+                    for je: Array in j_schema { combined_schema.push(je) }
+                    if eval_where(combined_schema, combined, planned_where) {
+                        let row_result: Array = [rid, combined, combined_schema]
+                        result_rows.push(row_result)
+                    }
+                    joined = true
+                }
+            }
+            if joined == false and join_type == "LEFT" {
+                let combined: Array = []
+                for v: String in values { combined.push(v) }
+                let j_schema_2: Array = schema_parse(j_schema_str)
+                var ji: int = 0
+                while ji < j_schema_2.length() {
+                    combined.push("__NULL__")
+                    ji = ji + 1
+                }
+                let combined_schema: Array = []
+                for se: Array in schema { combined_schema.push(se) }
+                for je: Array in j_schema_2 { combined_schema.push(je) }
+                if eval_where(combined_schema, combined, planned_where) {
+                    let row_result: Array = [rid, combined, combined_schema]
+                    result_rows.push(row_result)
+                }
+            }
+            continue
+        }
+
+        // No JOIN — simple filter
+        if eval_where(schema, values, planned_where) {
+            let row_result: Array = [rid, values, schema]
+            result_rows.push(row_result)
+        }
+    }
+
+    // ORDER BY (merge sort O(n log n))
+    let order_tag: String = order_ast[0]
+    if order_tag == "ORDER" {
+        let order_col: String = order_ast[1]
+        let order_dir: String = order_ast[2]
+        var order_schema: Array = schema
+        if result_rows.length() > 0 {
+            let first_row: Array = result_rows[0]
+            let first_schema: Array = first_row[2]
+            order_schema = first_schema
+        }
+        let oci: int = schema_col_index(order_schema, order_col)
+        if oci >= 0 {
+            let octype: String = schema_col_type(order_schema, order_col)
+            result_rows = merge_sort_rows(result_rows, oci, octype, order_dir)
+        }
+    }
+
+    // Apply OFFSET and LIMIT
+    var final_rows: Array = result_rows
+    if offset > 0 or limit >= 0 {
+        final_rows = []
+        var fi: int = 0
+        var added: int = 0
+        while fi < result_rows.length() {
+            if fi >= offset {
+                if limit < 0 or added < limit {
+                    let r: Array = result_rows[fi]
+                    final_rows.push(r)
+                    added = added + 1
+                }
+            }
+            fi = fi + 1
+        }
+    }
+
+    // Project columns
+    if final_rows.length() > 0 {
+        let fr: Array = final_rows[0]
+        let fr_schema: Array = fr[2]
+        use_schema = fr_schema
+    }
+    let projected: Array = []
+    var select_all: bool = false
+    if cols.length() == 1 {
+        let c0: String = cols[0]
+        if c0 == "*" { select_all = true }
+    }
+
+    var pi: int = 0
+    while pi < final_rows.length() {
+        let row: Array = final_rows[pi]
+        let vals: Array = row[1]
+        if select_all {
+            projected.push(vals)
+        } else {
+            let proj_row: Array = []
+            var coli: int = 0
+            while coli < cols.length() {
+                let col: String = cols[coli]
+                let ci: int = schema_col_index(use_schema, col)
+                if ci >= 0 {
+                    let v: String = vals[ci]
+                    proj_row.push(v)
+                } else {
+                    proj_row.push("__NULL__")
+                }
+                coli = coli + 1
+            }
+            projected.push(proj_row)
+        }
+        pi = pi + 1
+    }
+
+    mutex_unlock(g_db_mtx)
+    return ["OK", projected, use_schema]
+}
+
+// ── UPDATE ──
+
+fn db_update(table: String, sets: Array, where_ast: Array) -> Array {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return ["ERROR", "table not found: " + table]
+    }
+
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    var updated: int = 0
+
+    // v0.3/v0.4 planner: reorder + hoist indexed predicate (=, range, BETWEEN).
+    // When hoist narrows scan_ids via index_lookup or index_range_lookup, the
+    // hoisted predicate is already satisfied, so use planned_where.
+    // Otherwise, re-attach the hoist to the residual for correct semantics.
+    let plan_result: Array = plan_where(where_ast, table)
+    let planned_where: Array = plan_result[0]
+    let hoisted: Array = plan_result[1]
+    var scan_ids: Array = ids
+    var narrowed: bool = false
+    let ht: String = hoisted[0]
+    if ht == "=" {
+        let hcol: String = hoisted[1]
+        let hval: String = hoisted[2]
+        scan_ids = index_lookup(table, hcol, hval)
+        narrowed = true
+    }
+    if ht == ">" { scan_ids = index_range_lookup(table, hoisted[1], hoisted[2], "__POS_INF__", false, true) narrowed = true }
+    if ht == ">=" { scan_ids = index_range_lookup(table, hoisted[1], hoisted[2], "__POS_INF__", true, true) narrowed = true }
+    if ht == "<" { scan_ids = index_range_lookup(table, hoisted[1], "__NEG_INF__", hoisted[2], true, false) narrowed = true }
+    if ht == "<=" { scan_ids = index_range_lookup(table, hoisted[1], "__NEG_INF__", hoisted[2], true, true) narrowed = true }
+    if ht == "BETWEEN" { scan_ids = index_range_lookup(table, hoisted[1], hoisted[2], hoisted[3], true, true) narrowed = true }
+    if ht == "RANGE" { scan_ids = index_range_lookup(table, hoisted[1], hoisted[2], hoisted[3], hoisted[4], hoisted[5]) narrowed = true }
+
+    var effective_where: Array = planned_where
+    if narrowed == false {
+        effective_where = hoist_reattach(planned_where, hoisted)
+    }
+
+    for rid: int in scan_ids {
+        let row_key: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(row_key) == false { continue }
+        let data: String = g_rows.get(row_key)
+        let values: Array = row_parse(data)
+
+        if eval_where(schema, values, effective_where) {
+            // Remove old index entries
+            remove_indices_for_row(table, schema, values, rid)
+
+            // Apply updates
+            for set_pair: Array in sets {
+                let set_col: String = set_pair[0]
+                let set_val: String = set_pair[1]
+                let ci: int = schema_col_index(schema, set_col)
+                if ci >= 0 {
+                    values[ci] = set_val
+                }
+            }
+
+            let new_data: String = row_serialize(values)
+            wal_append_update(table, rid, new_data)
+            g_rows.insert(row_key, new_data)
+
+            // Add new index entries
+            update_indices_for_row(table, schema, values, rid)
+
+            updated = updated + 1
+            g_changes = g_changes + 1
+        }
+    }
+
+    mutex_unlock(g_db_mtx)
+    return ["OK", updated]
+}
+
+// ── DELETE ──
+
+fn db_delete(table: String, where_ast: Array) -> Array {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return ["ERROR", "table not found: " + table]
+    }
+
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    var deleted: int = 0
+
+    // v0.3/v0.4 planner: reorder + hoist. We scan all rowids (can't narrow
+    // without losing the non-matching survivors), so the hoisted predicate
+    // is re-attached to the residual via hoist_reattach for correctness.
+    let plan_result: Array = plan_where(where_ast, table)
+    let residual: Array = plan_result[0]
+    let hoisted: Array = plan_result[1]
+    let effective_where: Array = hoist_reattach(residual, hoisted)
+
+    let remaining_ids: Array = []
+    for rid: int in ids {
+        let row_key: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(row_key) == false { continue }
+        let data: String = g_rows.get(row_key)
+        let values: Array = row_parse(data)
+
+        if eval_where(schema, values, effective_where) {
+            wal_append_delete(table, rid)
+            remove_indices_for_row(table, schema, values, rid)
+            g_rows.remove(row_key)
+            deleted = deleted + 1
+            g_changes = g_changes + 1
+        } else {
+            remaining_ids.push(rid)
+        }
+    }
+
+    g_row_ids.insert(table, rowid_list_to_csv(remaining_ids))
+    mutex_unlock(g_db_mtx)
+    return ["OK", deleted]
+}
+
+// ── CREATE INDEX ──
+
+fn db_create_index(idx_name: String, table: String, col: String, kind: String) -> String {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return "table not found: " + table
+    }
+
+    // Normalize kind: default HASH for unknown values (back-compat).
+    var eff_kind: String = "HASH"
+    if kind == "BTREE" { eff_kind = "BTREE" }
+
+    wal_append_create_index(table, col, eff_kind)
+
+    let def_key: String = table + "::" + col
+    g_index_def.insert(def_key, 1)
+    g_index_kind.insert(def_key, eff_kind)
+
+    if eff_kind == "BTREE" {
+        // Allocate an empty tree; backfill below will populate it.
+        let tid: int = bti_new_tree()
+        g_index_btree_id.insert(def_key, int_to_string(tid))
+    }
+
+    // Build index from existing rows (dispatches to HASH or BTREE via index_add).
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let ci: int = schema_col_index(schema, col)
+    if ci < 0 {
+        mutex_unlock(g_db_mtx)
+        return "column not found: " + col
+    }
+
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    for rid: int in ids {
+        let row_key: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(row_key) == false { continue }
+        let data: String = g_rows.get(row_key)
+        let values: Array = row_parse(data)
+        let val: String = values[ci]
+        index_add(table, col, val, rid)
+    }
+
+    g_changes = g_changes + 1
+    mutex_unlock(g_db_mtx)
+    return ""
+}
+
+// ── VACUUM: compact BTREE tombstones ──
+//
+// index_vacuum rebuilds one BTREE index in place, eliminating tombstones
+// accumulated by delete operations. HASH indices are a no-op (flat Map
+// entries are removed on delete; no compaction needed). Caller MUST
+// already hold g_db_mtx.
+
+fn index_vacuum(table: String, col: String) -> int {
+    let def_key: String = table + "::" + col
+    if g_index_kind.contains(def_key) == false { return 0 }
+    let kind: String = g_index_kind.get(def_key)
+    if kind != "BTREE" { return 0 }
+    let old_tree_id: int = index_btree_id_of(table, col)
+    let ctype: String = index_col_type(table, col)
+    let result: Array = bti_vacuum(old_tree_id, ctype)
+    let new_tree_id: int = result[0]
+    let removed: int = result[1]
+    if new_tree_id >= 0 {
+        g_index_btree_id.insert(def_key, int_to_string(new_tree_id))
+    }
+    return removed
+}
+
+// VACUUM all BTREE indices on a table. Returns total tombstones removed,
+// or -1 if the table does not exist.
+pub fn db_vacuum_table(table: String) -> int {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    if g_tables.contains(table) == false {
+        mutex_unlock(g_db_mtx)
+        return -1
+    }
+    var total: int = 0
+    let def_keys: Array = g_index_def.keys()
+    let prefix: String = table + "::"
+    for dk: String in def_keys {
+        if dk.startsWith(prefix) {
+            let parts: Array = dk.split("::")
+            if parts.length() >= 2 {
+                let col: String = parts[1]
+                total = total + index_vacuum(table, col)
+            }
+        }
+    }
+    g_changes = g_changes + 1
+    mutex_unlock(g_db_mtx)
+    return total
+}
+
+// ── WAL apply callbacks ──
+//
+// Invoked from wal.nx::wal_replay during recovery. Callers must already
+// hold g_db_mtx. These mirror the in-memory side-effects of the normal
+// mutators but intentionally bypass wal_append_* (we're replaying an
+// existing WAL, not producing new records).
+
+pub fn wal_apply_insert(table: String, row_serialized: String, rowid: int) {
+    if g_tables.contains(table) == false { return }
+    let row_key: String = table + "::" + int_to_string(rowid)
+    g_rows.insert(row_key, row_serialized)
+    var ids_csv: String = ""
+    if g_row_ids.contains(table) {
+        ids_csv = g_row_ids.get(table)
+    }
+    if ids_csv.length() == 0 {
+        ids_csv = int_to_string(rowid)
+    } else {
+        ids_csv = ids_csv + "," + int_to_string(rowid)
+    }
+    g_row_ids.insert(table, ids_csv)
+    var next_rid: int = 1
+    if g_next_rowid.contains(table) {
+        next_rid = g_next_rowid.get(table)
+    }
+    if rowid >= next_rid {
+        g_next_rowid.insert(table, rowid + 1)
+    }
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let values: Array = row_parse(row_serialized)
+    var i: int = 0
+    while i < schema.length() {
+        let entry: Array = schema[i]
+        let col_name: String = entry[0]
+        let def_key: String = table + "::" + col_name
+        if g_index_def.contains(def_key) {
+            let val: String = values[i]
+            index_add(table, col_name, val, rowid)
+        }
+        i = i + 1
+    }
+}
+
+pub fn wal_apply_update(table: String, rowid: int, row_serialized: String) {
+    if g_tables.contains(table) == false { return }
+    let row_key: String = table + "::" + int_to_string(rowid)
+    if g_rows.contains(row_key) == false { return }
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let old_data: String = g_rows.get(row_key)
+    let old_values: Array = row_parse(old_data)
+    let new_values: Array = row_parse(row_serialized)
+    var i: int = 0
+    while i < schema.length() {
+        let entry: Array = schema[i]
+        let col_name: String = entry[0]
+        let def_key: String = table + "::" + col_name
+        if g_index_def.contains(def_key) {
+            let old_v: String = old_values[i]
+            let new_v: String = new_values[i]
+            index_remove(table, col_name, old_v, rowid)
+            index_add(table, col_name, new_v, rowid)
+        }
+        i = i + 1
+    }
+    g_rows.insert(row_key, row_serialized)
+}
+
+pub fn wal_apply_delete(table: String, rowid: int) {
+    if g_tables.contains(table) == false { return }
+    let row_key: String = table + "::" + int_to_string(rowid)
+    if g_rows.contains(row_key) == false { return }
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let data: String = g_rows.get(row_key)
+    let values: Array = row_parse(data)
+    var i: int = 0
+    while i < schema.length() {
+        let entry: Array = schema[i]
+        let col_name: String = entry[0]
+        let def_key: String = table + "::" + col_name
+        if g_index_def.contains(def_key) {
+            let val: String = values[i]
+            index_remove(table, col_name, val, rowid)
+        }
+        i = i + 1
+    }
+    g_rows.remove(row_key)
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    let kept: Array = []
+    for id: int in ids {
+        if id != rowid { kept.push(id) }
+    }
+    g_row_ids.insert(table, rowid_list_to_csv(kept))
+}
+
+pub fn wal_apply_create_table(table: String, schema_str: String) {
+    if g_tables.contains(table) { return }
+    g_tables.insert(table, 1)
+    g_schema.insert(table, schema_str)
+    g_next_rowid.insert(table, 1)
+    g_row_ids.insert(table, "")
+}
+
+pub fn wal_apply_drop_table(table: String) {
+    if g_tables.contains(table) == false { return }
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    for rid: int in ids {
+        let rk: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(rk) {
+            g_rows.remove(rk)
+        }
+    }
+    g_tables.remove(table)
+    g_schema.remove(table)
+    g_next_rowid.remove(table)
+    g_row_ids.remove(table)
+    let def_keys: Array = g_index_def.keys()
+    let prefix: String = table + "::"
+    let to_remove: Array = []
+    for dk: String in def_keys {
+        if dk.startsWith(prefix) {
+            to_remove.push(dk)
+        }
+    }
+    for dk: String in to_remove {
+        g_index_def.remove(dk)
+        if g_index_kind.contains(dk) { g_index_kind.remove(dk) }
+        if g_index_btree_id.contains(dk) { g_index_btree_id.remove(dk) }
+    }
+    let idx_prefix: String = "idx::" + table + "::"
+    let data_keys: Array = g_index_data.keys()
+    let data_victims: Array = []
+    for k: String in data_keys {
+        if k.startsWith(idx_prefix) {
+            data_victims.push(k)
+        }
+    }
+    for k: String in data_victims {
+        g_index_data.remove(k)
+    }
+}
+
+pub fn wal_apply_create_index(table: String, col: String, kind: String) {
+    if g_tables.contains(table) == false { return }
+    let def_key: String = table + "::" + col
+    if g_index_def.contains(def_key) { return }
+    g_index_def.insert(def_key, 1)
+    var eff_kind: String = "HASH"
+    if kind == "BTREE" { eff_kind = "BTREE" }
+    g_index_kind.insert(def_key, eff_kind)
+    if eff_kind == "BTREE" {
+        let tid: int = bti_new_tree()
+        g_index_btree_id.insert(def_key, int_to_string(tid))
+    }
+    let schema_str: String = g_schema.get(table)
+    let schema: Array = schema_parse(schema_str)
+    let ci: int = schema_col_index(schema, col)
+    if ci < 0 { return }
+    let ids_csv: String = g_row_ids.get(table)
+    let ids: Array = parse_rowid_list(ids_csv)
+    for rid: int in ids {
+        let rk: String = table + "::" + int_to_string(rid)
+        if g_rows.contains(rk) {
+            let data: String = g_rows.get(rk)
+            let values: Array = row_parse(data)
+            let v: String = values[ci]
+            index_add(table, col, v, rid)
+        }
+    }
+}
+
+// VACUUM every BTREE index in the database.
+pub fn db_vacuum_all() -> int {
+    db_ensure_mtx()
+    mutex_lock(g_db_mtx)
+    var total: int = 0
+    let def_keys: Array = g_index_def.keys()
+    for dk: String in def_keys {
+        let parts: Array = dk.split("::")
+        if parts.length() >= 2 {
+            let tbl: String = parts[0]
+            let col: String = parts[1]
+            total = total + index_vacuum(tbl, col)
+        }
+    }
+    g_changes = g_changes + 1
+    mutex_unlock(g_db_mtx)
+    return total
+}

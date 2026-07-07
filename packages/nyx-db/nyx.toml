@@ -1,0 +1,14 @@
+[package]
+name = "nyx-db"
+version = "0.5.0"
+main = "examples/standalone.nx"
+description = "Embedded SQL database library: recursive-descent parser, indices, JOIN, GROUP BY, HAVING, WAL crash recovery, VACUUM, RESP2 server interface"
+
+# nyx-db is a library — it supports both a server mode (RESP2 daemon)
+# and an embedded mode (direct API via db_query / db_query_rows). Both
+# are driven by the same engine under src/. examples/standalone.nx is
+# the reference daemon with --port / --data / --rate-limit flags, used
+# by the product test runner. For embedded use, import "nyx-db/src/query"
+# from your own project.
+
+[dependencies]

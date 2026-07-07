@@ -6,3 +6,4 @@ main = "src/main.nx"
 
 [dependencies]
 nyx-serve = "*"
+nyx-db = "*"

@@ -1,0 +1,51 @@
+// query.nx — Embedded query API for nyx-db
+//
+// Use this to run SQL from within a Nyx program without going through RESP/TCP.
+//
+// Usage:
+//   import "products/db/src/query"
+//
+//   db_query("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, age INT)")
+//   db_query("INSERT INTO users VALUES (1, 'Alice', 30)")
+//   let result: Array = db_query("SELECT * FROM users WHERE age > 20")
+//   // result = ["ROWS", [["id", "name", "age"], ["1", "Alice", "30"]]]
+//
+//   let rows: Array = db_query_rows("SELECT * FROM users")
+//   // rows = [["id", "name", "age"], ["1", "Alice", "30"]]
+
+// Execute a SQL statement and return structured result.
+// Returns:
+//   ["OK", count]                    — for CREATE/DROP/INSERT/UPDATE/DELETE
+//   ["ROWS", [[header], [row], ...]] — for SELECT
+//   ["ERROR", message]               — on error
+pub fn db_query(sql: String) -> Array {
+    db_ensure_mtx()
+
+    // Tokenize + parse under lock (parser uses global state)
+    mutex_lock(g_db_mtx)
+    let tokens: Array = sql_tokenize(sql)
+    if tokens.length() == 0 {
+        mutex_unlock(g_db_mtx)
+        return ["ERROR", "empty SQL statement"]
+    }
+    let ast: Array = sql_parse(tokens)
+    mutex_unlock(g_db_mtx)
+
+    let tag: String = ast[0]
+    if tag == "ERROR" {
+        return ["ERROR", ast[1]]
+    }
+
+    return db_execute_embedded(ast)
+}
+
+// Convenience: execute SELECT and return just the rows (including header).
+// Returns empty array on error or non-SELECT.
+pub fn db_query_rows(sql: String) -> Array {
+    let result: Array = db_query(sql)
+    let status: String = result[0]
+    if status == "ROWS" {
+        return result[1]
+    }
+    return []
+}

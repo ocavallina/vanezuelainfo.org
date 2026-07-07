@@ -1,0 +1,388 @@
+// wal.nx — Write-Ahead Log for nyx-db v0.5 durability.
+//
+// Append-only log of mutations. Writes hit the WAL (flushed to disk)
+// BEFORE the in-memory state is modified, so a crash leaves either the
+// pre-write state or a replayable WAL. The log is truncated at each
+// checkpoint (`db_save` snapshot) because at that point the snapshot
+// captures all preceding state and the WAL can start fresh.
+//
+// Format (binary, little-endian):
+//   [HEADER]   "NYXW" + 1 byte version (0x01)
+//   [RECORD]*  repeated until EOF
+//
+// Record:
+//   MAGIC          2B   0xCA 0xFE (resynchronization marker)
+//   LSN            8B   monotonic, starts at 1 after each truncate
+//   TYPE           1B   1=INSERT 2=UPDATE 3=DELETE 4=CREATE_TABLE
+//                       5=DROP_TABLE 6=CREATE_INDEX 10=CHECKPOINT
+//   PAYLOAD_LEN    4B
+//   PAYLOAD        N bytes (type-specific, see below)
+//   CRC32          4B   computed over MAGIC..PAYLOAD
+//
+// Payload layouts (strings = i32_le length + bytes; ints = i64_le):
+//   INSERT         table, serialized_row, rowid
+//   UPDATE         table, rowid, serialized_row
+//   DELETE         table, rowid
+//   CREATE_TABLE   table, schema_str
+//   DROP_TABLE     table
+//   CREATE_INDEX   table, col, kind
+//   CHECKPOINT     snapshot_lsn
+//
+// Concurrency: all append paths run under store.nx::g_db_mtx. Replay
+// runs single-threaded during db_load.
+
+// ── Constants ──────────────────────────────────────────────────────
+
+fn wal_magic_hi() -> int { return 202 }  // 0xCA
+fn wal_magic_lo() -> int { return 254 }  // 0xFE
+fn wal_version() -> int { return 1 }
+
+// ── Binary decoders (delegate to persist.nx) ───────────────────────
+//
+// Historical note: these were inlined copies to work around what was
+// documented as a "cross-module return-type inference bug" — calls to
+// persist.read_byte returned 0 instead of the real value. The actual
+// root cause was a codegen name collision: `read_byte` matched a
+// zero-arg terminal builtin (@nyx_read_byte, reads stdin) before the
+// user function. Fixed upstream in the compiler (guard requires zero
+// args + no user definition). The cross-module calls now work, so we
+// delegate to the canonical decoders in persist.nx instead of
+// duplicating them.
+
+fn wal_rbyte(arr: Array, offset: int) -> int {
+    return read_byte(arr, offset)
+}
+
+fn wal_ri32(arr: Array, offset: int) -> int {
+    return read_i32_le(arr, offset)
+}
+
+fn wal_ri64(arr: Array, offset: int) -> int {
+    return read_i64_le(arr, offset)
+}
+
+fn wal_rstring(arr: Array, offset: int) -> Array {
+    return read_string_bin(arr, offset)
+}
+
+fn wal_type_insert() -> int { return 1 }
+fn wal_type_update() -> int { return 2 }
+fn wal_type_delete() -> int { return 3 }
+fn wal_type_create_table() -> int { return 4 }
+fn wal_type_drop_table() -> int { return 5 }
+fn wal_type_create_index() -> int { return 6 }
+fn wal_type_checkpoint() -> int { return 10 }
+
+// ── State ─────────────────────────────────────────────────────────
+
+var g_wal_enabled: bool = false
+var g_wal_path: String = ""
+var g_wal_lsn: int = 0
+var g_wal_opened: bool = false
+var g_wal_handle: Map = Map.new()
+
+// ── Low-level append: build record bytes, append to file, fsync ───
+//
+// Callers hold g_db_mtx so no extra serialization is needed here.
+
+fn wal_ensure_header() {
+    if g_wal_opened { return }
+    // Check if file exists; if not, create with header.
+    let exists: bool = file_exists(g_wal_path)
+    if exists == false {
+        let buf: Array = []
+        push_byte(buf, 78)   // N
+        push_byte(buf, 89)   // Y
+        push_byte(buf, 88)   // X
+        push_byte(buf, 87)   // W
+        push_byte(buf, wal_version())
+        let f: Map = file_open(g_wal_path, "wb")
+        file_write_bytes(f, buf)
+        file_flush(f)
+        file_close(f)
+    }
+    g_wal_opened = true
+}
+
+fn wal_write_record(type_code: int, payload: Array) {
+    if g_wal_enabled == false { return }
+    wal_ensure_header()
+
+    g_wal_lsn = g_wal_lsn + 1
+
+    // Build the bytes that will be CRC'd (MAGIC..PAYLOAD).
+    let framed: Array = []
+    push_byte(framed, wal_magic_hi())
+    push_byte(framed, wal_magic_lo())
+    push_i64_le(framed, g_wal_lsn)
+    push_byte(framed, type_code)
+    push_i32_le(framed, payload.length())
+    var i: int = 0
+    let plen: int = payload.length()
+    while i < plen {
+        framed.push(payload[i])
+        i = i + 1
+    }
+
+    let crc: int = crc32_bytes(framed)
+
+    // Final record = framed + crc.
+    push_i32_le(framed, crc)
+
+    // Append to file. Open-append-close to ensure fsync on close.
+    let f: Map = file_open(g_wal_path, "ab")
+    file_write_bytes(f, framed)
+    file_flush(f)
+    file_close(f)
+}
+
+// ── Public append API (one fn per record type) ────────────────────
+
+pub fn wal_init(path: String) {
+    g_wal_path = path
+    g_wal_enabled = true
+    g_wal_opened = false
+    // LSN will be set by the replay pass; if no replay, seed at 0.
+    if g_wal_lsn == 0 { g_wal_lsn = 0 }
+}
+
+pub fn wal_disable() {
+    g_wal_enabled = false
+}
+
+pub fn wal_append_insert(table: String, row_serialized: String, rowid: int) {
+    let p: Array = []
+    push_string_bin(p, table)
+    push_string_bin(p, row_serialized)
+    push_i64_le(p, rowid)
+    wal_write_record(wal_type_insert(), p)
+}
+
+pub fn wal_append_update(table: String, rowid: int, row_serialized: String) {
+    let p: Array = []
+    push_string_bin(p, table)
+    push_i64_le(p, rowid)
+    push_string_bin(p, row_serialized)
+    wal_write_record(wal_type_update(), p)
+}
+
+pub fn wal_append_delete(table: String, rowid: int) {
+    let p: Array = []
+    push_string_bin(p, table)
+    push_i64_le(p, rowid)
+    wal_write_record(wal_type_delete(), p)
+}
+
+pub fn wal_append_create_table(table: String, schema_str: String) {
+    let p: Array = []
+    push_string_bin(p, table)
+    push_string_bin(p, schema_str)
+    wal_write_record(wal_type_create_table(), p)
+}
+
+pub fn wal_append_drop_table(table: String) {
+    let p: Array = []
+    push_string_bin(p, table)
+    wal_write_record(wal_type_drop_table(), p)
+}
+
+pub fn wal_append_create_index(table: String, col: String, kind: String) {
+    let p: Array = []
+    push_string_bin(p, table)
+    push_string_bin(p, col)
+    push_string_bin(p, kind)
+    wal_write_record(wal_type_create_index(), p)
+}
+
+pub fn wal_append_checkpoint() {
+    let p: Array = []
+    push_i64_le(p, g_wal_lsn)
+    wal_write_record(wal_type_checkpoint(), p)
+}
+
+// ── Replay: scan WAL records, apply via callbacks ─────────────────
+//
+// Returns [last_lsn, records_applied, records_skipped]. Applies
+// callbacks directly to store.nx state (caller holds g_db_mtx).
+
+pub fn wal_replay(path: String) -> Array {
+    let result: Array = [0, 0, 0]
+    if file_exists(path) == false { return result }
+
+    let f: Map = file_open(path, "rb")
+    file_seek(f, 0, 2)
+    let file_size: int = file_tell(f)
+    file_seek(f, 0, 0)
+    if file_size < 5 {
+        file_close(f)
+        return result
+    }
+    let buf: Array = file_read_bytes(f, file_size)
+    file_close(f)
+
+    // Verify header.
+    let h0: int = buf[0] & 255
+    let h1: int = buf[1] & 255
+    let h2: int = buf[2] & 255
+    let h3: int = buf[3] & 255
+    if h0 != 78 or h1 != 89 or h2 != 88 or h3 != 87 {
+        print("[wal-replay] invalid header")
+        return result
+    }
+    let version: int = buf[4] & 255
+    if version != 1 {
+        print("[wal-replay] unsupported WAL version: " + int_to_string(version))
+        return result
+    }
+
+    var offset: int = 5
+    var applied: int = 0
+    var skipped: int = 0
+    var max_lsn: int = 0
+    var checkpoint_lsn: int = 0
+
+    while offset < buf.length() {
+        // Need at least MAGIC(2) + LSN(8) + TYPE(1) + LEN(4) + CRC(4) = 19 bytes
+        if offset + 19 > buf.length() {
+            // Torn write at end — truncate silently.
+            skipped = skipped + 1
+            break
+        }
+
+        let m_hi: int = wal_rbyte(buf, offset)
+        let m_lo: int = wal_rbyte(buf, offset + 1)
+        if m_hi != wal_magic_hi() or m_lo != wal_magic_lo() {
+            print("[wal-replay] corrupt magic at offset " + int_to_string(offset) + " — stopping")
+            skipped = skipped + 1
+            break
+        }
+
+        let lsn: int = wal_ri64(buf, offset + 2)
+        let type_code: int = wal_rbyte(buf, offset + 10)
+        let plen: int = wal_ri32(buf, offset + 11)
+
+        let framed_len: int = 15 + plen
+        if offset + framed_len + 4 > buf.length() {
+            skipped = skipped + 1
+            break
+        }
+
+        // Verify CRC over MAGIC..PAYLOAD (framed_len bytes).
+        let framed: Array = []
+        var fi: int = 0
+        while fi < framed_len {
+            framed.push(buf[offset + fi])
+            fi = fi + 1
+        }
+        let stored_crc: int = wal_ri32(buf, offset + framed_len)
+        let computed_crc: int = crc32_bytes(framed)
+        if stored_crc != computed_crc {
+            print("[wal-replay] CRC mismatch at LSN " + int_to_string(lsn) + " — truncating")
+            skipped = skipped + 1
+            break
+        }
+
+        // Apply based on type.
+        let payload_off: int = offset + 15
+        if type_code == wal_type_insert() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            let po: int = tr[1]
+            let rr: Array = wal_rstring(buf, po)
+            let row_str: String = rr[0]
+            let po2: int = rr[1]
+            let rowid: int = wal_ri64(buf, po2)
+            wal_apply_insert(table, row_str, rowid)
+            applied = applied + 1
+        }
+        if type_code == wal_type_update() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            let po: int = tr[1]
+            let rowid: int = wal_ri64(buf, po)
+            let po2: int = po + 8
+            let rr: Array = wal_rstring(buf, po2)
+            let row_str: String = rr[0]
+            wal_apply_update(table, rowid, row_str)
+            applied = applied + 1
+        }
+        if type_code == wal_type_delete() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            let po: int = tr[1]
+            let rowid: int = wal_ri64(buf, po)
+            wal_apply_delete(table, rowid)
+            applied = applied + 1
+        }
+        if type_code == wal_type_create_table() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            let po: int = tr[1]
+            let sr: Array = wal_rstring(buf, po)
+            let schema_str: String = sr[0]
+            wal_apply_create_table(table, schema_str)
+            applied = applied + 1
+        }
+        if type_code == wal_type_drop_table() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            wal_apply_drop_table(table)
+            applied = applied + 1
+        }
+        if type_code == wal_type_create_index() {
+            let tr: Array = wal_rstring(buf, payload_off)
+            let table: String = tr[0]
+            let po: int = tr[1]
+            let cr: Array = wal_rstring(buf, po)
+            let col: String = cr[0]
+            let po2: int = cr[1]
+            let kr: Array = wal_rstring(buf, po2)
+            let kind: String = kr[0]
+            wal_apply_create_index(table, col, kind)
+            applied = applied + 1
+        }
+        if type_code == wal_type_checkpoint() {
+            let snap_lsn: int = wal_ri64(buf, payload_off)
+            checkpoint_lsn = snap_lsn
+            applied = applied + 1
+        }
+
+        if lsn > max_lsn { max_lsn = lsn }
+        offset = offset + framed_len + 4
+    }
+
+    g_wal_lsn = max_lsn
+    result[0] = max_lsn
+    result[1] = applied
+    result[2] = skipped
+    return result
+}
+
+// ── Truncate the WAL after a successful checkpoint ─────────────────
+//
+// After db_save writes a snapshot, the records preceding the checkpoint
+// are redundant and we reset the file to just the header. A CHECKPOINT
+// record is written first to mark the boundary (useful for diagnostics).
+
+pub fn wal_checkpoint_and_truncate() {
+    if g_wal_enabled == false { return }
+    wal_append_checkpoint()
+    // Reset the file to just the header; LSN counter keeps going up in
+    // case another process inspects the live log.
+    let buf: Array = []
+    push_byte(buf, 78)
+    push_byte(buf, 89)
+    push_byte(buf, 88)
+    push_byte(buf, 87)
+    push_byte(buf, wal_version())
+    let f: Map = file_open(g_wal_path, "wb")
+    file_write_bytes(f, buf)
+    file_flush(f)
+    file_close(f)
+    g_wal_opened = true
+}
+
+// Apply callbacks live in store.nx (they mutate globals declared there).
+// wal_replay above calls into those functions by name; Nyx's forward-ref
+// resolution handles the cross-module wiring as long as store.nx is
+// imported in the same compilation unit.

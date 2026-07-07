@@ -1,0 +1,270 @@
+// sql_lexer.nx — SQL tokenizer for nyx-db
+//
+// Token format: [type, value]
+//   type = "KW" (keyword), "ID" (identifier), "STR" (string literal),
+//          "NUM" (number), "OP" (operator/punctuation)
+
+fn is_alpha(c: int) -> bool {
+    if c >= 65 and c <= 90 { return true }
+    if c >= 97 and c <= 122 { return true }
+    if c == 95 { return true }
+    return false
+}
+
+fn is_digit(c: int) -> bool {
+    if c >= 48 and c <= 57 { return true }
+    return false
+}
+
+fn is_alnum(c: int) -> bool {
+    if is_alpha(c) { return true }
+    if is_digit(c) { return true }
+    return false
+}
+
+fn is_whitespace(c: int) -> bool {
+    if c == 32 { return true }
+    if c == 9 { return true }
+    if c == 10 { return true }
+    if c == 13 { return true }
+    return false
+}
+
+fn is_keyword(word: String) -> bool {
+    let w: String = word.toUpper()
+    if w == "SELECT" { return true }
+    if w == "FROM" { return true }
+    if w == "WHERE" { return true }
+    if w == "INSERT" { return true }
+    if w == "INTO" { return true }
+    if w == "VALUES" { return true }
+    if w == "UPDATE" { return true }
+    if w == "SET" { return true }
+    if w == "DELETE" { return true }
+    if w == "CREATE" { return true }
+    if w == "DROP" { return true }
+    if w == "TABLE" { return true }
+    if w == "INDEX" { return true }
+    if w == "ON" { return true }
+    if w == "ORDER" { return true }
+    if w == "BY" { return true }
+    if w == "ASC" { return true }
+    if w == "DESC" { return true }
+    if w == "AND" { return true }
+    if w == "OR" { return true }
+    if w == "NOT" { return true }
+    if w == "NULL" { return true }
+    if w == "JOIN" { return true }
+    if w == "INNER" { return true }
+    if w == "LEFT" { return true }
+    if w == "AS" { return true }
+    if w == "LIMIT" { return true }
+    if w == "OFFSET" { return true }
+    if w == "BEGIN" { return true }
+    if w == "COMMIT" { return true }
+    if w == "ROLLBACK" { return true }
+    if w == "COUNT" { return true }
+    if w == "SUM" { return true }
+    if w == "AVG" { return true }
+    if w == "MIN" { return true }
+    if w == "MAX" { return true }
+    if w == "DISTINCT" { return true }
+    if w == "INT" { return true }
+    if w == "INTEGER" { return true }
+    if w == "TEXT" { return true }
+    if w == "REAL" { return true }
+    if w == "BLOB" { return true }
+    if w == "PRIMARY" { return true }
+    if w == "KEY" { return true }
+    if w == "LIKE" { return true }
+    if w == "IN" { return true }
+    if w == "BETWEEN" { return true }
+    if w == "IS" { return true }
+    if w == "GROUP" { return true }
+    if w == "HAVING" { return true }
+    if w == "AUTOINCREMENT" { return true }
+    if w == "USING" { return true }
+    if w == "HASH" { return true }
+    if w == "BTREE" { return true }
+    if w == "VACUUM" { return true }
+    return false
+}
+
+fn sql_tokenize(input: String) -> Array {
+    let tokens: Array = []
+    let len: int = input.length()
+    var pos: int = 0
+
+    while pos < len {
+        let c: int = input.charAt(pos)
+
+        // Skip whitespace
+        if is_whitespace(c) {
+            pos = pos + 1
+            continue
+        }
+
+        // Skip comments (-- to end of line)
+        if c == 45 and pos + 1 < len {
+            let c2: int = input.charAt(pos + 1)
+            if c2 == 45 {
+                while pos < len {
+                    let cc: int = input.charAt(pos)
+                    if cc == 10 { break }
+                    pos = pos + 1
+                }
+                continue
+            }
+        }
+
+        // String literal (single quotes)
+        if c == 39 {
+            pos = pos + 1
+            var str_val: String = ""
+            while pos < len {
+                let sc: int = input.charAt(pos)
+                if sc == 39 {
+                    // Check for escaped quote ''
+                    if pos + 1 < len {
+                        let next: int = input.charAt(pos + 1)
+                        if next == 39 {
+                            str_val = str_val + "'"
+                            pos = pos + 2
+                            continue
+                        }
+                    }
+                    pos = pos + 1
+                    break
+                }
+                str_val = str_val + char_to_string(sc)
+                pos = pos + 1
+            }
+            let tok: Array = ["STR", str_val]
+            tokens.push(tok)
+            continue
+        }
+
+        // Number (integer or float)
+        var is_neg_num: bool = false
+        if c == 45 {
+            if pos + 1 < len {
+                let peek_c: int = input.charAt(pos + 1)
+                if is_digit(peek_c) { is_neg_num = true }
+            }
+        }
+        if is_digit(c) or is_neg_num {
+            var num_str: String = ""
+            if c == 45 {
+                num_str = "-"
+                pos = pos + 1
+            }
+            var still_digit: bool = true
+            while pos < len and still_digit {
+                let dc: int = input.charAt(pos)
+                if is_digit(dc) {
+                    num_str = num_str + char_to_string(dc)
+                    pos = pos + 1
+                } else {
+                    still_digit = false
+                }
+            }
+            // Check for decimal point
+            if pos < len {
+                let dot_c: int = input.charAt(pos)
+                if dot_c == 46 {
+                    num_str = num_str + "."
+                    pos = pos + 1
+                    var still_dec: bool = true
+                    while pos < len and still_dec {
+                        let dd: int = input.charAt(pos)
+                        if is_digit(dd) {
+                            num_str = num_str + char_to_string(dd)
+                            pos = pos + 1
+                        } else {
+                            still_dec = false
+                        }
+                    }
+                }
+            }
+            let tok: Array = ["NUM", num_str]
+            tokens.push(tok)
+            continue
+        }
+
+        // Identifier or keyword
+        if is_alpha(c) {
+            var word: String = ""
+            var still_alnum: bool = true
+            while pos < len and still_alnum {
+                let ac: int = input.charAt(pos)
+                if is_alnum(ac) {
+                    word = word + char_to_string(ac)
+                    pos = pos + 1
+                } else {
+                    still_alnum = false
+                }
+            }
+            if is_keyword(word) {
+                let tok: Array = ["KW", word.toUpper()]
+                tokens.push(tok)
+            } else {
+                let tok: Array = ["ID", word]
+                tokens.push(tok)
+            }
+            continue
+        }
+
+        // Two-character operators
+        if c == 60 and pos + 1 < len {
+            let c2: int = input.charAt(pos + 1)
+            if c2 == 61 {
+                let tok: Array = ["OP", "<="]
+                tokens.push(tok)
+                pos = pos + 2
+                continue
+            }
+            if c2 == 62 {
+                let tok: Array = ["OP", "<>"]
+                tokens.push(tok)
+                pos = pos + 2
+                continue
+            }
+        }
+        if c == 62 and pos + 1 < len {
+            let c2: int = input.charAt(pos + 1)
+            if c2 == 61 {
+                let tok: Array = ["OP", ">="]
+                tokens.push(tok)
+                pos = pos + 2
+                continue
+            }
+        }
+        if c == 33 and pos + 1 < len {
+            let c2: int = input.charAt(pos + 1)
+            if c2 == 61 {
+                let tok: Array = ["OP", "!="]
+                tokens.push(tok)
+                pos = pos + 2
+                continue
+            }
+        }
+
+        // Single-character operators
+        if c == 42 { let tok: Array = ["OP", "*"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 40 { let tok: Array = ["OP", "("] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 41 { let tok: Array = ["OP", ")"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 44 { let tok: Array = ["OP", ","] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 59 { let tok: Array = ["OP", ";"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 61 { let tok: Array = ["OP", "="] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 60 { let tok: Array = ["OP", "<"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 62 { let tok: Array = ["OP", ">"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 43 { let tok: Array = ["OP", "+"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 45 { let tok: Array = ["OP", "-"] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+        if c == 46 { let tok: Array = ["OP", "."] ; tokens.push(tok) ; pos = pos + 1 ; continue }
+
+        // Unknown character — skip
+        pos = pos + 1
+    }
+
+    return tokens
+}

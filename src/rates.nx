@@ -1,36 +1,15 @@
-// src/rates.nx — Histórico de tasas de cambio en nyx-kv.
+// src/rates.nx — Histórico de tasas de cambio en nyx-db (SQL en Nyx, embebido).
 //
 // El servidor toma un snapshot de las 3 tasas del calculador (Dólar BCV, Euro BCV,
 // Dólar Binance P2P) desde el refresher_worker (cada 30 min) y guarda el valor de
-// "cierre" del día en nyx-kv (una clave por tasa y día, espejo de visits:day). La
-// sección "Histórico" de /finanzas se pinta 100% server-side (sin wasm) leyendo esos
-// valores: 3 mini-gráficos de 14 días con escala min→max.
+// "cierre" del día en la tabla `rates` (day, kind, value). La sección "Histórico"
+// de /finanzas se pinta server-side leyendo con SELECT + agregados (MIN/MAX/AVG).
 //
 // Gotcha respetado: NO se usa std/json (histórico de truncado de floats); las tasas
-// se extraen con scanners de string mínimos y se guardan como String.
+// se extraen con scanners de string mínimos. Toda celda que devuelve nyx-db es String.
 
-import "src/kv"
-import "src/md"
+import "src/sqldb"
 import "src/news"
-
-// Token dedicado (mismo que chat/baquiano/admin): env o fichero 0600.
-fn rates_token() -> String {
-    let e: String = getenv("NYXKV_CHAT_TOKEN")
-    if e.length() > 0 {
-        return md_trim(e)
-    }
-    let f: String = read_file("/home/admin/.veninfo-chat-token")
-    return md_trim(f)
-}
-
-fn rates_conn() -> int {
-    return kv_connect_auth("127.0.0.1", 6380, rates_token())
-}
-
-// Índice de día civil de Venezuela (UTC-4), igual que el contador de visitas.
-fn rday() -> int {
-    return (time() - 14400) / 86400
-}
 
 // Float -> "entero,frac" (2 decimales, coma) para MOSTRAR. Redondea.
 fn fmt2(v: float) -> String {
@@ -46,8 +25,7 @@ fn fmt2(v: float) -> String {
     return out
 }
 
-// Float -> "entero.frac" (2 decimales, PUNTO) para GUARDAR (compatible con
-// string_to_float al releer; el formato coma es solo para mostrar).
+// Float -> "entero.frac" (2 decimales, PUNTO) para GUARDAR en SQL (numérico).
 fn dec2(v: float) -> String {
     var x: float = v
     if x < 0.0 { x = 0.0 - x }
@@ -60,7 +38,6 @@ fn dec2(v: float) -> String {
 }
 
 // Lee el número que sigue a "key": dentro de `s` (desde la primera aparición).
-// Devuelve el token crudo (p.ej. "667.05") o "" si no hay número (null/ausente).
 fn rt_num(s: String, key: String) -> String {
     let kq: String = "\"" + key + "\""
     let ki: int = s.indexOf(kq)
@@ -94,26 +71,30 @@ fn dolarapi_oficial(body: String) -> String {
     return rt_num(body.substring(p, body.length()), "promedio")
 }
 
-// Snapshot de las 3 tasas -> nyx-kv (valor de cierre del día). Se llama desde el
-// refresher_worker. Si una fuente falla, se salta ESA tasa (no borra días previos).
-pub fn rates_snapshot() {
-    let d: String = int_to_string(rday())
-    let h: int = rates_conn()
-    if h < 0 { return 0 }
+// Upsert del valor de una tasa para el día `ds` (borra + inserta; escritura del
+// refresher, single-thread). `val` es un token numérico (dígitos/./-): sin comillas
+// ni riesgo de inyección; `kind` es un literal fijo del código.
+fn rate_put(ds: String, kind: String, val: String) {
+    sql_exec("DELETE FROM rates WHERE day = " + ds + " AND kind = '" + kind + "'")
+    sql_exec("INSERT INTO rates VALUES (" + ds + ", '" + kind + "', " + val + ")")
+}
 
-    // Dólar BCV
+// Snapshot de las 3 tasas -> tabla rates. Llamado desde el refresher_worker.
+// Si una fuente falla, se salta ESA tasa (no borra días previos).
+pub fn rates_snapshot() {
+    let d: int = db_day()
+    let ds: String = int_to_string(d)
+
     let bd: String = https_get("https://ve.dolarapi.com/v1/dolares")
     if bd.length() > 0 {
         let bcv: String = dolarapi_oficial(bd)
-        if bcv.length() > 0 { kv_set(h, "rates:bcv:day:" + d, bcv) }
+        if bcv.length() > 0 { rate_put(ds, "bcv", bcv) }
     }
-    // Euro BCV
     let ed: String = https_get("https://ve.dolarapi.com/v1/euros")
     if ed.length() > 0 {
         let eur: String = dolarapi_oficial(ed)
-        if eur.length() > 0 { kv_set(h, "rates:eur:day:" + d, eur) }
+        if eur.length() > 0 { rate_put(ds, "eur", eur) }
     }
-    // Dólar Binance (promedio ask/bid de binancep2p)
     let cd: String = https_get("https://criptoya.com/api/USDT/VES/1")
     if cd.length() > 0 {
         let seg0: int = cd.indexOf("\"binancep2p\"")
@@ -123,34 +104,38 @@ pub fn rates_snapshot() {
             let bid: String = rt_num(seg, "bid")
             if ask.length() > 0 and bid.length() > 0 {
                 let avg: float = (string_to_float(ask) + string_to_float(bid)) / 2.0
-                kv_set(h, "rates:bin:day:" + d, dec2(avg))
+                rate_put(ds, "bin", dec2(avg))
             }
         }
     }
 
-    kv_set(h, "rates:updated", int_to_string(time()))
-    // Poda: borra el día que sale de la ventana de retención (~30 días).
-    let old: String = int_to_string(rday() - 30)
-    kv_del(h, "rates:bcv:day:" + old)
-    kv_del(h, "rates:eur:day:" + old)
-    kv_del(h, "rates:bin:day:" + old)
-    kv_close(h)
-    return 0
+    // Marca de "última actualización" (tabla meta).
+    sql_exec("DELETE FROM meta WHERE k = 'rates_upd'")
+    sql_exec("INSERT INTO meta VALUES ('rates_upd', '" + int_to_string(time()) + "')")
+    // Retención: ~30 días.
+    sql_exec("DELETE FROM rates WHERE day < " + int_to_string(d - 30))
 }
 
-// Un mini-gráfico (14 días) para una tasa. `h` es una conexión abierta.
-// `raw` guarda STRINGS (patrón seguro para Array); los floats se derivan en locales.
-fn rate_chart(h: int, prefix: String, name: String) -> String {
-    let d0: int = rday()
-    var raw: Array = []
-    var cnt: int = 0
-    var i: int = 0
-    while i < 14 {
-        let s: String = kv_get(h, prefix + ":day:" + int_to_string(d0 - i))
-        raw.push(s)
-        if s.length() > 0 { cnt = cnt + 1 }
-        i = i + 1
-    }
+// Celda [j] de la fila de datos [i] (i>=1 salta el header) como String.
+fn cell(rows: Array, i: int, j: int) -> String {
+    let row: Array = rows[i]
+    let s: String = row[j]
+    return s
+}
+
+// Parseo seguro: nyx-db devuelve "__NULL__" para NULL (p.ej. agregado vacío).
+fn sf(s: String) -> float {
+    if s.length() == 0 { return 0.0 }
+    if s == "__NULL__" { return 0.0 }
+    return string_to_float(s)
+}
+
+// Un mini-gráfico (hasta 14 días) para una tasa (`kind` = literal fijo).
+fn rate_chart(kind: String, name: String) -> String {
+    let d0: int = db_day()
+    let lo: String = int_to_string(d0 - 14)
+    let rows: Array = sql_rows("SELECT value FROM rates WHERE kind = '" + kind + "' AND day > " + lo + " ORDER BY day ASC")
+    let cnt: int = rows.length() - 1  // menos el header
 
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<div class=\"rate-chart\">")
@@ -160,41 +145,25 @@ fn rate_chart(h: int, prefix: String, name: String) -> String {
         return sb.to_string()
     }
 
-    // min/max sobre los días con dato
-    var mn: float = 0.0
-    var mx: float = 0.0
-    var first: bool = true
-    var j: int = 0
-    while j < 14 {
-        let sj: String = raw[j]
-        if sj.length() > 0 {
-            let v: float = string_to_float(sj)
-            if first { mn = v; mx = v; first = false }
-            else {
-                if v < mn { mn = v }
-                if v > mx { mx = v }
-            }
-        }
-        j = j + 1
-    }
-    // actual = día con dato más reciente (i menor); antiguo = el más viejo (i mayor)
-    var cur: float = 0.0
-    var kk: int = 0
-    var gc: bool = true
-    while kk < 14 and gc {
-        let sk: String = raw[kk]
-        if sk.length() > 0 { cur = string_to_float(sk); gc = false }
-        kk = kk + 1
-    }
-    var old: float = 0.0
-    var mm: int = 13
-    var go2: bool = true
-    while mm >= 0 and go2 {
-        let sm: String = raw[mm]
-        if sm.length() > 0 { old = string_to_float(sm); go2 = false }
-        mm = mm - 1
-    }
+    let last: int = rows.length() - 1
+    let cur: float = sf(cell(rows, last, 0))
+    let old: float = sf(cell(rows, 1, 0))
     let delta: float = cur - old
+
+    // min/max/promedio sobre los días con dato (en código: los agregados SQL con
+    // WHERE de nyx-db v0.5.0 devuelven NULL; el SELECT de rango sí funciona).
+    var mn: float = cur
+    var mx: float = cur
+    var sum: float = 0.0
+    var i: int = 1
+    while i <= last {
+        let v: float = sf(cell(rows, i, 0))
+        if v < mn { mn = v }
+        if v > mx { mx = v }
+        sum = sum + v
+        i = i + 1
+    }
+    let avg: float = sum / int_to_float(last)
 
     var dcls: String = "flat"
     var darrow: String = "&rarr;"
@@ -206,43 +175,39 @@ fn rate_chart(h: int, prefix: String, name: String) -> String {
     sb.append("<span class=\"rate-delta " + dcls + "\">" + darrow + " " + fmt2(delta) + " <small>14d</small></span>")
     sb.append("</div>")
 
-    // Barras oldest->newest (escala min→max)
+    // Barras (oldest->newest, escala min→max)
     sb.append("<div class=\"rate-bars\">")
     let span: float = mx - mn
-    var b: int = 13
-    while b >= 0 {
-        let sb2: String = raw[b]
-        if sb2.length() > 0 {
-            let v: float = string_to_float(sb2)
-            var pct: int = 50
-            if span > 0.0 {
-                pct = float_to_int((v - mn) / span * 94.0) + 6
-            }
-            sb.append("<div class=\"rate-bar\" title=\"Bs " + fmt2(v) + "\"><div class=\"rate-fill\" style=\"height:" + int_to_string(pct) + "%\"></div></div>")
-        } else {
-            sb.append("<div class=\"rate-bar rate-gap\"></div>")
+    var b: int = 1
+    while b <= last {
+        let v: float = sf(cell(rows, b, 0))
+        var pct: int = 50
+        if span > 0.0 {
+            pct = float_to_int((v - mn) / span * 94.0) + 6
         }
-        b = b - 1
+        sb.append("<div class=\"rate-bar\" title=\"Bs " + fmt2(v) + "\"><div class=\"rate-fill\" style=\"height:" + int_to_string(pct) + "%\"></div></div>")
+        b = b + 1
     }
-    sb.append("</div></div>")
+    sb.append("</div>")
+
+    // Resumen mín/máx/promedio de la ventana.
+    sb.append("<p class=\"rate-agg\">14 d&iacute;as &middot; m&iacute;n Bs " + fmt2(mn) + " &middot; m&aacute;x Bs " + fmt2(mx) + " &middot; prom Bs " + fmt2(avg) + "</p>")
+
+    sb.append("</div>")
     return sb.to_string()
 }
 
-// Sección "Histórico" completa para /finanzas (server-side).
+// Sección "Histórico" completa para /finanzas (server-side, desde nyx-db SQL).
 pub fn rates_history_html() -> String {
-    let h: int = rates_conn()
-    if h < 0 {
-        return "<p class=\"rate-wait\">Hist&oacute;rico no disponible.</p>"
-    }
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<div class=\"rate-hist\">")
-    sb.append(rate_chart(h, "rates:bcv", "D&oacute;lar BCV"))
-    sb.append(rate_chart(h, "rates:eur", "Euro BCV"))
-    sb.append(rate_chart(h, "rates:bin", "D&oacute;lar Binance"))
-    let upd: String = kv_get(h, "rates:updated")
-    kv_close(h)
-    if upd.length() > 0 {
-        sb.append("<p class=\"rate-upd\">Actualizado " + rel_txt(time() - string_to_int(upd)) + "</p>")
+    sb.append(rate_chart("bcv", "D&oacute;lar BCV"))
+    sb.append(rate_chart("eur", "Euro BCV"))
+    sb.append(rate_chart("bin", "D&oacute;lar Binance"))
+    let upd: Array = sql_rows("SELECT v FROM meta WHERE k = 'rates_upd'")
+    if upd.length() > 1 {
+        let us: String = cell(upd, 1, 0)
+        sb.append("<p class=\"rate-upd\">Actualizado " + rel_txt(time() - string_to_int(us)) + "</p>")
     }
     sb.append("</div>")
     return sb.to_string()

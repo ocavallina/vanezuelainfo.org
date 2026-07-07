@@ -83,6 +83,14 @@ src/md.nx        Renderizador Markdown→HTML propio + html_escape.
 src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, caché, tabla HTML con data-*.
 src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexión corta por request.
                  Helpers kv_get/set/setex/del/exists/incr/expire/rpush/ltrim/lrange sobre kv_cmd.
+                 nyx-kv guarda: admin (pass/sesiones), chat (salas/mensajes/rate-limit), baquiano.
+src/sqldb.nx     Adaptador sobre nyx-db (SQL en Nyx, EMBEBIDO). ÚNICO módulo que importa el motor
+                 (import "nyx-db/src/*"); expone sql_exec/sql_rows/sql_count/sql_esc/db_day y
+                 sqldb_init() (db_load del .ndb + CREATE TABLE + hilo saver + shutdown handler).
+                 Guarda: visitas (analítica) y rates (histórico de tasas). Ver gotchas de nyx-db.
+src/rates.nx     Histórico de tasas en nyx-db: rates_snapshot() (fetch server-side DolarAPI/CriptoYa
+                 + upsert en tabla rates) desde el refresher; rates_history_html() (sección de
+                 /finanzas, 3 mini-gráficos 14 días con mín/máx/prom calculados en código).
 src/chat.nx      Chat colectivo CON SALAS: valida/sanea/filtra, guarda/lee por sala en nyx-kv.
                  Parseo de body a mano. Solo el admin crea/borra salas. form_field es pub.
                  chat_ws_handler = handler del upgrade WS (valida sala, delega en src/ws).
@@ -93,6 +101,8 @@ src/baquiano.nx  "Baquiano": guía de sitios por zona (estado/región). Contenid
                  editable desde el panel admin. render_baquiano_index/zone() + baquiano_card().
 src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cookie + CSRF. CRUD de
                  baquiano y salas + moderación. Handlers propios de Response (no usa los de main).
+                 También: visit_middleware (INSERT por hit en nyx-db) + /admin/visitas
+                 (contadores/serie/registro/"Lo más visto" por SQL sobre la tabla visits).
 wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques de externs
                  (pasarela) + main() router por #pg. PARTIDO en módulos (make wasm ya resuelve
                  imports project-relative vía NYX_PROJECT_DIR=$PROJ/wasm; scope global plano →
@@ -112,7 +122,8 @@ static/          assets/style.css, sw.js, manifest.webmanifest, icon.svg/png,
                  assets/home.js (drag&drop), assets/quake.js (Leaflet), assets/chat.js (WS).
 deploy/          nyx-venezuelainfo.service + admin.conf.example (drop-in del secreto admin)
                  + build-wasm.sh (compila wasm/veninfo.nx y copia artefactos).
-packages/        nyx-serve vendoreado.
+packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo embebido:
+                 sql_lexer/sql_parser/btree/wal/store/planner/executor/persist/query).
 ```
 
 ## Reglas críticas / gotchas (NO romper)
@@ -243,6 +254,41 @@ packages/        nyx-serve vendoreado.
   render con dom_set_html. Ciudad elegida en localStorage (`w_lat`/`w_lon`/
   `w_name`), compartida entre tarjeta y página.
 
+## Bases de datos: nyx-kv (KV) + nyx-db (SQL embebido)
+
+El proyecto usa **dos bases de datos, ambas escritas en Nyx** (modelo híbrido):
+
+- **nyx-kv** (`:6380`, RESP2+**TLS**+AUTH por token, `src/kv.nx`, conexión corta por
+  request) para lo **crítico / KV-shaped**: `admin:*` (pass + sesiones), `chat:*`
+  (salas/mensajes/rate-limit), `baq:*` (baquiano). Persiste (token enterprise, sin TTL).
+- **nyx-db** (SQL relacional, **modo EMBEBIDO** = librería in-process, `src/sqldb.nx`)
+  para lo **analítico / regenerable**: tablas `visits` (analítica) y `rates` (histórico
+  de tasas) + `meta`. Snapshot binario en **`/home/admin/veninfo.ndb`** (fuera del repo;
+  `db_load` al arrancar, `db_save` cada 60 s por un hilo y en SIGTERM vía shutdown handler).
+
+**Por qué embebido y no el daemon**: el server RESP2 de nyx-db **no tiene TLS ni AUTH**
+(sería un retroceso vs nyx-kv) y su servicio fue retirado. Embebido = "SQLite-en-Nyx"
+dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
+
+**Gotchas de nyx-db (v0.5.0) — NO romper:**
+- **Concurrencia OK sin mutex propio**: nyx-db serializa todo con su `g_db_mtx` interno;
+  los 16 workers llaman `sql_exec`/`sql_rows` directo (probado con ráfagas paralelas).
+- **Toda celda vuelve como String** (incluso números y NULL). NULL llega como el literal
+  **`"__NULL__"`**. Castear con `string_to_int/float`; guardar contra `""`/`"__NULL__"`
+  (ver `sql_count` y `sf()`). La fila `[0]` de un SELECT es el **header**.
+- **Múltiples agregados en un SELECT SIN GROUP BY → NULL** (bug: `SELECT MIN(x),MAX(x),
+  AVG(x) FROM t` cae al path de columnas). Funcionan: **un** agregado (`SELECT COUNT(*)
+  FROM t WHERE …`) y **GROUP BY**. Para mín/máx/prom de tasas se calcula **en código**.
+- **ORDER BY sobre un agregado/alias no es fiable** → "Lo más visto" hace `GROUP BY path`
+  y **ordena en Nyx** (top 10).
+- **Sin binds / parámetros**: TODO valor de request (path/ip/ua) va por **`sql_esc`**
+  (`'`→`''` + strip control + cap). Numéricos y `kind` son literales del código.
+- **Sin transacciones reales** (BEGIN/COMMIT son stubs) ni `ALTER TABLE`: si cambia el
+  esquema, recrear la tabla (dato regenerable). Solo datos regenerables viven aquí.
+- **Al re-vendorear nyx-db**: copiar los 9 módulos embebidos a `packages/nyx-db/src/`
+  (NO `commands.nx`/`limits.nx`, que son del daemon). Cero colisiones de nombres con
+  el resto (nyx-db prefija globals con `g_`/`p_`).
+
 ## Chat colectivo (src/chat.nx + src/kv.nx)
 
 - Chat público en `/chat` **con salas**; tarjeta reordenable en la portada
@@ -317,7 +363,8 @@ packages/        nyx-serve vendoreado.
 · `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rooms`
 · `/api/chat` · `/api/chat/{room}` · `POST /api/chat/send` · `/admin` ·
 `POST /admin/login` · `POST /admin/logout` · `/admin/baquiano` (+POST) ·
-`/admin/salas` (+POST) · `/manifest.webmanifest` · `/sw.js` · `/icon*.png|svg` · `/assets/*`
+`/admin/salas` (+POST) · `/admin/visitas` (+POST) · `/calculadora` ·
+`/manifest.webmanifest` · `/manifest-calc.webmanifest` · `/sw.js` · `/icon*.png|svg` · `/assets/*`
 
 ## Pendientes / ideas (backlog)
 
@@ -328,10 +375,12 @@ Sin prioridad estricta; tomar lo que aporte.
 - [ ] **`Cache-Control: no-cache` también para `style.css`** (dejar cacheados solo
       iconos/imágenes) para que los cambios de CSS se vean al instante por el dominio.
 - [ ] **Círculo de precisión "tú estás aquí"** en los mapas (accuracy de geo).
-- [ ] **nyxkv (opcional, dogfooding)**: caché compartido del feed EMSC
-      (`SETEX sismos:emsc:body 300 …`) y/o contadores de vistas (`INCR`). Patrón de
-      cliente en `nyx-kv-stack/dashboard/src/kv_client.nx`. Decisión actual: NO
-      (las prefs de UI van en localStorage; nyxkv solo para estado de servidor).
+- [x] **Contador/analítica de visitas** — HECHO: `visits` en **nyx-db (SQL)** vía el
+      middleware global + `/admin/visitas` (total/únicos/hoy/7 días/"Lo más visto"/registro).
+- [x] **Histórico de tasas** — HECHO: `rates` en **nyx-db (SQL)**, snapshot server-side
+      cada 30 min (refresher) + sección "Histórico" en `/finanzas`.
+- [ ] **Caché compartido del feed EMSC en nyx-kv** (`SETEX sismos:emsc:body 300 …`):
+      hoy la caché de sismos vive solo en RAM del proceso (se pierde al reiniciar).
 - [ ] **Fase F: chat en Nyx** — BLOQUEADA hasta que el monorepo entregue GC/arenas
       en el target wasm (tarea 2 de `NyxLang/HANDOFF-veninfo-front.md`; sin GC una
       pestaña de chat de horas filtra memoria sin tope). Diseño listo: externs
@@ -378,6 +427,13 @@ clima.js y sismos.js; quedan solo loader, home.js (drag&drop), quake.js
 (wasm/tests/imports.mjs). Handoff de 7 tareas del lenguaje al monorepo
 (`NyxLang/HANDOFF-veninfo-front.md` + puntero en TASKS.md).
 Bugs del lenguaje hallados → anotados en `NyxLang/TASKS.md`.
+**Calculadora simplificada** (3 tasas: Dólar BCV / Euro BCV / Dólar Binance, con
+conversión bidireccional Bs↔divisa; PWA propia en `/calculadora`).
+**Segunda base de datos: nyx-db (SQL en Nyx, embebido)** — modelo híbrido con nyx-kv.
+`visits` (analítica: contador + "Lo más visto" + registro) y `rates` (histórico de
+tasas graficado en `/finanzas`) viven en SQL (`packages/nyx-db` vendoreado + `src/sqldb.nx`);
+sesiones/chat/baquiano siguen en nyx-kv. Persistencia por snapshot `.ndb`. Bugs de
+nyx-db v0.5.0 sorteados (agregados múltiples sin GROUP BY, `__NULL__`, sin binds → `sql_esc`).
 
 ## Verificación rápida
 ```bash

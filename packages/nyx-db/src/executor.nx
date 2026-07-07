@@ -1,0 +1,872 @@
+// executor.nx — Execute SQL AST and return RESP-formatted results
+//
+// Takes AST from sql_parser, calls store operations, formats output.
+
+// ── Helper: deduplicate rows by comparing all column values ──
+fn dedup_rows(rows: Array) -> Array {
+    let seen: Map = Map.new()
+    let result: Array = []
+    for row: Array in rows {
+        // Build key from all values
+        var key: String = ""
+        var i: int = 0
+        while i < row.length() {
+            if i > 0 {
+                key = key + "\x1F"
+            }
+            let v: String = row[i]
+            key = key + v
+            i = i + 1
+        }
+        if seen.contains(key) == false {
+            seen.insert(key, 1)
+            result.push(row)
+        }
+    }
+    return result
+}
+
+// ── Helper: build a schema for HAVING evaluation over a group row ──
+// For each column in `cols`, infer a type: COUNT -> INT, SUM -> INT,
+// AVG -> FLOAT (we format as float_to_string), MIN/MAX/regular follow
+// the underlying column type. Aggregates keep their textual form
+// ("COUNT(*)", "SUM(score)") as the "column name" — exactly matching
+// how the group row was built in exec_group_by.
+fn build_group_schema(cols: Array, base_schema: Array) -> Array {
+    let out: Array = []
+    for c: String in cols {
+        var col_type: String = "TEXT"
+        if c.startsWith("COUNT(") { col_type = "INT" }
+        if c.startsWith("SUM(") { col_type = "INT" }
+        if c.startsWith("AVG(") { col_type = "FLOAT" }
+        if c.startsWith("MIN(") or c.startsWith("MAX(") {
+            let paren: int = c.indexOf("(")
+            let arg: String = c.substring(paren + 1, c.length() - 1)
+            let ai: int = schema_col_index(base_schema, arg)
+            if ai >= 0 { col_type = schema_col_type(base_schema, arg) }
+        }
+        if c.startsWith("COUNT(") == false and c.startsWith("SUM(") == false and c.startsWith("AVG(") == false and c.startsWith("MIN(") == false and c.startsWith("MAX(") == false {
+            let ai: int = schema_col_index(base_schema, c)
+            if ai >= 0 { col_type = schema_col_type(base_schema, c) }
+        }
+        let entry: Array = [c, col_type]
+        out.push(entry)
+    }
+    return out
+}
+
+// ── Helper: GROUP BY execution ──
+// Returns ["ROWS", [[header], [group_row], ...]] or ["ERROR", msg]
+fn exec_group_by(cols: Array, table: String, where_ast: Array, join_ast: Array, group_col: String, having_ast: Array) -> Array {
+    // Fetch all rows
+    let all_cols: Array = ["*"]
+    let no_order: Array = ["NONE"]
+    let result: Array = db_select(table, all_cols, where_ast, no_order, -1, 0, join_ast)
+    let status: String = result[0]
+    if status == "ERROR" {
+        return ["ERROR", result[1]]
+    }
+
+    let rows: Array = result[1]
+    let schema: Array = result[2]
+
+    let gc_idx: int = schema_col_index(schema, group_col)
+    if gc_idx < 0 {
+        return ["ERROR", "GROUP BY column not found: " + group_col]
+    }
+
+    // Group rows by the group column value
+    let group_keys: Array = []
+    let group_map: Map = Map.new()
+    for row: Array in rows {
+        let gval: String = row[gc_idx]
+        let map_key: String = "g::" + gval
+        if group_map.contains(map_key) == false {
+            group_keys.push(gval)
+            group_map.insert(map_key, 0)
+        }
+        // Count per group
+        let count_key: String = "c::" + gval
+        if group_map.contains(count_key) {
+            let prev: int = group_map.get(count_key)
+            group_map.insert(count_key, prev + 1)
+        } else {
+            group_map.insert(count_key, 1)
+        }
+    }
+
+    // For each aggregate column, compute per-group values
+    // Build header
+    let header: Array = []
+    for c: String in cols {
+        header.push(c)
+    }
+    let all_rows: Array = [header]
+
+    // Virtual schema for HAVING evaluation over the synthesized group row.
+    let group_schema: Array = build_group_schema(cols, schema)
+
+    for gval: String in group_keys {
+        let out_row: Array = []
+        // Collect group's rows
+        let group_rows: Array = []
+        for row: Array in rows {
+            let rv: String = row[gc_idx]
+            if rv == gval {
+                group_rows.push(row)
+            }
+        }
+
+        for c: String in cols {
+            if c == group_col {
+                out_row.push(gval)
+            } else if c.startsWith("COUNT(") {
+                out_row.push(int_to_string(group_rows.length()))
+            } else if c.startsWith("SUM(") {
+                let paren: int = c.indexOf("(")
+                let arg: String = c.substring(paren + 1, c.length() - 1)
+                let ai: int = schema_col_index(schema, arg)
+                var total: int = 0
+                if ai >= 0 {
+                    for gr: Array in group_rows {
+                        let v: String = gr[ai]
+                        if v != "__NULL__" {
+                            total = total + string_to_int(v)
+                        }
+                    }
+                }
+                out_row.push(int_to_string(total))
+            } else if c.startsWith("AVG(") {
+                let paren: int = c.indexOf("(")
+                let arg: String = c.substring(paren + 1, c.length() - 1)
+                let ai: int = schema_col_index(schema, arg)
+                var total: int = 0
+                var cnt: int = 0
+                if ai >= 0 {
+                    for gr: Array in group_rows {
+                        let v: String = gr[ai]
+                        if v != "__NULL__" {
+                            total = total + string_to_int(v)
+                            cnt = cnt + 1
+                        }
+                    }
+                }
+                if cnt > 0 {
+                    let avg_f: float = int_to_float(total) / int_to_float(cnt)
+                    out_row.push(float_to_string(avg_f))
+                } else {
+                    out_row.push("0")
+                }
+            } else if c.startsWith("MIN(") {
+                let paren: int = c.indexOf("(")
+                let arg: String = c.substring(paren + 1, c.length() - 1)
+                let ai: int = schema_col_index(schema, arg)
+                var best: String = ""
+                var first: bool = true
+                if ai >= 0 {
+                    let ctype: String = schema_col_type(schema, arg)
+                    for gr: Array in group_rows {
+                        let v: String = gr[ai]
+                        if v != "__NULL__" {
+                            if first {
+                                best = v
+                                first = false
+                            } else {
+                                if compare_values(v, best, ctype) < 0 {
+                                    best = v
+                                }
+                            }
+                        }
+                    }
+                }
+                out_row.push(best)
+            } else if c.startsWith("MAX(") {
+                let paren: int = c.indexOf("(")
+                let arg: String = c.substring(paren + 1, c.length() - 1)
+                let ai: int = schema_col_index(schema, arg)
+                var best: String = ""
+                var first: bool = true
+                if ai >= 0 {
+                    let ctype: String = schema_col_type(schema, arg)
+                    for gr: Array in group_rows {
+                        let v: String = gr[ai]
+                        if v != "__NULL__" {
+                            if first {
+                                best = v
+                                first = false
+                            } else {
+                                if compare_values(v, best, ctype) > 0 {
+                                    best = v
+                                }
+                            }
+                        }
+                    }
+                }
+                out_row.push(best)
+            } else {
+                // Regular column — take first row's value
+                let ci: int = schema_col_index(schema, c)
+                if ci >= 0 and group_rows.length() > 0 {
+                    let first_row: Array = group_rows[0]
+                    out_row.push(first_row[ci])
+                } else {
+                    out_row.push("__NULL__")
+                }
+            }
+        }
+        // HAVING filter: eval the predicate against the synthesized group row.
+        var keep: bool = true
+        if having_ast[0] != "NONE" {
+            keep = eval_where(group_schema, out_row, having_ast)
+        }
+        if keep {
+            all_rows.push(out_row)
+        }
+    }
+
+    return ["ROWS", all_rows]
+}
+
+// ── Helper: format [[header], [row], ...] as RESP ──
+fn format_rows_resp(all_rows: Array) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("*")
+    sb.append(int_to_string(all_rows.length()))
+    sb.append("\r\n")
+    for row: Array in all_rows {
+        sb.append("*")
+        sb.append(int_to_string(row.length()))
+        sb.append("\r\n")
+        for val: String in row {
+            if val == "__NULL__" {
+                sb.append("$-1\r\n")
+            } else {
+                sb.append("$")
+                sb.append(int_to_string(val.length()))
+                sb.append("\r\n")
+                sb.append(val)
+                sb.append("\r\n")
+            }
+        }
+    }
+    return sb.to_string()
+}
+
+fn db_execute(ast: Array, fd: int) -> String {
+    let tag: String = ast[0]
+
+    if tag == "ERROR" {
+        let msg: String = ast[1]
+        return resp_error(msg)
+    }
+
+    if tag == "CREATE_TABLE" {
+        let table: String = ast[1]
+        let col_defs: Array = ast[2]
+        let err: String = db_create_table(table, col_defs)
+        if err.length() > 0 {
+            return resp_error(err)
+        }
+        return resp_simple_string("OK")
+    }
+
+    if tag == "DROP_TABLE" {
+        let table: String = ast[1]
+        let err: String = db_drop_table(table)
+        if err.length() > 0 {
+            return resp_error(err)
+        }
+        return resp_simple_string("OK")
+    }
+
+    if tag == "CREATE_INDEX" {
+        let idx_name: String = ast[1]
+        let table: String = ast[2]
+        let col: String = ast[3]
+        var kind: String = "HASH"
+        if ast.length() > 4 {
+            let k: String = ast[4]
+            kind = k
+        }
+        let err: String = db_create_index(idx_name, table, col, kind)
+        if err.length() > 0 {
+            return resp_error(err)
+        }
+        return resp_simple_string("OK")
+    }
+
+    if tag == "INSERT" {
+        let table: String = ast[1]
+        let cols: Array = ast[2]
+        let value_rows: Array = ast[3]
+        let result: Array = db_insert(table, cols, value_rows)
+        let status: String = result[0]
+        if status == "ERROR" {
+            let msg: String = result[1]
+            return resp_error(msg)
+        }
+        let count: int = result[1]
+        return resp_integer(count)
+    }
+
+    if tag == "SELECT" {
+        let cols: Array = ast[1]
+        let table: String = ast[2]
+        let where_ast: Array = ast[3]
+        let order_ast: Array = ast[4]
+        let limit: int = ast[5]
+        let offset: int = ast[6]
+        let join_ast: Array = ast[7]
+        var group_col: String = ""
+        var is_distinct: int = 0
+        if ast.length() > 8 {
+            let gc_tmp: String = ast[8]
+            group_col = gc_tmp
+        }
+        if ast.length() > 9 {
+            let dt_tmp: int = ast[9]
+            is_distinct = dt_tmp
+        }
+        var having_ast: Array = ["NONE"]
+        if ast.length() > 10 {
+            let h_tmp: Array = ast[10]
+            having_ast = h_tmp
+        }
+
+        // Non-grouped single aggregate (backwards compat)
+        if group_col == "" and cols.length() == 1 {
+            let c0: String = cols[0]
+            if c0.startsWith("COUNT(") or c0.startsWith("SUM(") or c0.startsWith("AVG(") or c0.startsWith("MIN(") or c0.startsWith("MAX(") {
+                return exec_aggregate(c0, table, where_ast, join_ast)
+            }
+        }
+
+        // GROUP BY: fetch all rows, group, compute aggregates
+        if group_col != "" {
+            let gr: Array = exec_group_by(cols, table, where_ast, join_ast, group_col, having_ast)
+            if gr[0] == "ERROR" {
+                return resp_error(gr[1])
+            }
+            let gr_rows: Array = gr[1]
+            return format_rows_resp(gr_rows)
+        }
+
+        let result: Array = db_select(table, cols, where_ast, order_ast, limit, offset, join_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            let msg: String = result[1]
+            return resp_error(msg)
+        }
+
+        var rows: Array = result[1]
+        let schema: Array = result[2]
+
+        // DISTINCT: deduplicate rows
+        if is_distinct == 1 {
+            rows = dedup_rows(rows)
+        }
+
+        // Build header row
+        let header: Array = []
+        if cols.length() == 1 {
+            let c0: String = cols[0]
+            if c0 == "*" {
+                for entry: Array in schema {
+                    let col_name: String = entry[0]
+                    header.push(col_name)
+                }
+            } else {
+                header.push(c0)
+            }
+        } else {
+            for c: String in cols {
+                header.push(c)
+            }
+        }
+
+        // Format as RESP: array of arrays
+        // First element is header, rest are data rows
+        let total_rows: int = rows.length() + 1
+        var sb: StringBuilder = StringBuilder.new()
+        sb.append("*")
+        sb.append(int_to_string(total_rows))
+        sb.append("\r\n")
+
+        // Header row as bulk array
+        sb.append("*")
+        sb.append(int_to_string(header.length()))
+        sb.append("\r\n")
+        for h: String in header {
+            sb.append("$")
+            sb.append(int_to_string(h.length()))
+            sb.append("\r\n")
+            sb.append(h)
+            sb.append("\r\n")
+        }
+
+        // Data rows
+        for row: Array in rows {
+            sb.append("*")
+            sb.append(int_to_string(row.length()))
+            sb.append("\r\n")
+            for val: String in row {
+                if val == "__NULL__" {
+                    sb.append("$-1\r\n")
+                } else {
+                    sb.append("$")
+                    sb.append(int_to_string(val.length()))
+                    sb.append("\r\n")
+                    sb.append(val)
+                    sb.append("\r\n")
+                }
+            }
+        }
+
+        return sb.to_string()
+    }
+
+    if tag == "UPDATE" {
+        let table: String = ast[1]
+        let sets: Array = ast[2]
+        let where_ast: Array = ast[3]
+        let result: Array = db_update(table, sets, where_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            let msg: String = result[1]
+            return resp_error(msg)
+        }
+        let count: int = result[1]
+        return resp_integer(count)
+    }
+
+    if tag == "DELETE" {
+        let table: String = ast[1]
+        let where_ast: Array = ast[2]
+        let result: Array = db_delete(table, where_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            let msg: String = result[1]
+            return resp_error(msg)
+        }
+        let count: int = result[1]
+        return resp_integer(count)
+    }
+
+    if tag == "BEGIN" {
+        // Transaction begin (basic — single-connection serialized)
+        return resp_simple_string("OK")
+    }
+
+    if tag == "COMMIT" {
+        return resp_simple_string("OK")
+    }
+
+    if tag == "ROLLBACK" {
+        return resp_simple_string("OK")
+    }
+
+    if tag == "VACUUM" {
+        let target: String = ast[1]
+        var removed: int = 0
+        if target.length() == 0 {
+            removed = db_vacuum_all()
+        } else {
+            removed = db_vacuum_table(target)
+            if removed < 0 {
+                return resp_error("table not found: " + target)
+            }
+        }
+        return resp_simple_string("OK VACUUM removed=" + int_to_string(removed))
+    }
+
+    return resp_error("unknown statement")
+}
+
+// ── Embedded API (returns native Arrays, no RESP) ──
+
+pub fn db_execute_embedded(ast: Array) -> Array {
+    let tag: String = ast[0]
+
+    if tag == "ERROR" {
+        return ["ERROR", ast[1]]
+    }
+
+    if tag == "CREATE_TABLE" {
+        let table: String = ast[1]
+        let col_defs: Array = ast[2]
+        let err: String = db_create_table(table, col_defs)
+        if err.length() > 0 {
+            return ["ERROR", err]
+        }
+        return ["OK", 0]
+    }
+
+    if tag == "DROP_TABLE" {
+        let table: String = ast[1]
+        let err: String = db_drop_table(table)
+        if err.length() > 0 {
+            return ["ERROR", err]
+        }
+        return ["OK", 0]
+    }
+
+    if tag == "CREATE_INDEX" {
+        let idx_name: String = ast[1]
+        let table: String = ast[2]
+        let col: String = ast[3]
+        var kind: String = "HASH"
+        if ast.length() > 4 {
+            let k: String = ast[4]
+            kind = k
+        }
+        let err: String = db_create_index(idx_name, table, col, kind)
+        if err.length() > 0 {
+            return ["ERROR", err]
+        }
+        return ["OK", 0]
+    }
+
+    if tag == "INSERT" {
+        let table: String = ast[1]
+        let cols: Array = ast[2]
+        let value_rows: Array = ast[3]
+        let result: Array = db_insert(table, cols, value_rows)
+        let status: String = result[0]
+        if status == "ERROR" {
+            return ["ERROR", result[1]]
+        }
+        let count: int = result[1]
+        return ["OK", count]
+    }
+
+    if tag == "SELECT" {
+        let cols: Array = ast[1]
+        let table: String = ast[2]
+        let where_ast: Array = ast[3]
+        let order_ast: Array = ast[4]
+        let limit: int = ast[5]
+        let offset: int = ast[6]
+        let join_ast: Array = ast[7]
+        var group_col: String = ""
+        var is_distinct: int = 0
+        if ast.length() > 8 {
+            let gc_tmp: String = ast[8]
+            group_col = gc_tmp
+        }
+        if ast.length() > 9 {
+            let dt_tmp: int = ast[9]
+            is_distinct = dt_tmp
+        }
+        var having_ast: Array = ["NONE"]
+        if ast.length() > 10 {
+            let h_tmp: Array = ast[10]
+            having_ast = h_tmp
+        }
+
+        // Non-grouped single aggregate
+        if group_col == "" and cols.length() == 1 {
+            let c0: String = cols[0]
+            if c0.startsWith("COUNT(") or c0.startsWith("SUM(") or c0.startsWith("AVG(") or c0.startsWith("MIN(") or c0.startsWith("MAX(") {
+                return exec_aggregate_embedded(c0, table, where_ast, join_ast)
+            }
+        }
+
+        // GROUP BY
+        if group_col != "" {
+            return exec_group_by(cols, table, where_ast, join_ast, group_col, having_ast)
+        }
+
+        let result: Array = db_select(table, cols, where_ast, order_ast, limit, offset, join_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            return ["ERROR", result[1]]
+        }
+
+        var rows: Array = result[1]
+        let schema: Array = result[2]
+
+        // DISTINCT
+        if is_distinct == 1 {
+            rows = dedup_rows(rows)
+        }
+
+        // Build header
+        let header: Array = []
+        if cols.length() == 1 {
+            let c0: String = cols[0]
+            if c0 == "*" {
+                for entry: Array in schema {
+                    let col_name: String = entry[0]
+                    header.push(col_name)
+                }
+            } else {
+                header.push(c0)
+            }
+        } else {
+            for c: String in cols {
+                header.push(c)
+            }
+        }
+
+        let all_rows: Array = [header]
+        for row: Array in rows {
+            all_rows.push(row)
+        }
+        return ["ROWS", all_rows]
+    }
+
+    if tag == "UPDATE" {
+        let table: String = ast[1]
+        let sets: Array = ast[2]
+        let where_ast: Array = ast[3]
+        let result: Array = db_update(table, sets, where_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            return ["ERROR", result[1]]
+        }
+        let count: int = result[1]
+        return ["OK", count]
+    }
+
+    if tag == "DELETE" {
+        let table: String = ast[1]
+        let where_ast: Array = ast[2]
+        let result: Array = db_delete(table, where_ast)
+        let status: String = result[0]
+        if status == "ERROR" {
+            return ["ERROR", result[1]]
+        }
+        let count: int = result[1]
+        return ["OK", count]
+    }
+
+    if tag == "BEGIN" or tag == "COMMIT" or tag == "ROLLBACK" {
+        return ["OK", 0]
+    }
+
+    if tag == "VACUUM" {
+        let target: String = ast[1]
+        var removed: int = 0
+        if target.length() == 0 {
+            removed = db_vacuum_all()
+        } else {
+            removed = db_vacuum_table(target)
+            if removed < 0 {
+                return ["ERROR", "table not found: " + target]
+            }
+        }
+        return ["OK", removed]
+    }
+
+    return ["ERROR", "unknown statement"]
+}
+
+fn exec_aggregate_embedded(agg: String, table: String, where_ast: Array, join_ast: Array) -> Array {
+    let paren_pos: int = agg.indexOf("(")
+    let fn_name: String = agg.substring(0, paren_pos)
+    let arg: String = agg.substring(paren_pos + 1, agg.length() - 1)
+
+    let all_cols: Array = ["*"]
+    let no_order: Array = ["NONE"]
+    let result: Array = db_select(table, all_cols, where_ast, no_order, -1, 0, join_ast)
+    let status: String = result[0]
+    if status == "ERROR" {
+        return ["ERROR", result[1]]
+    }
+
+    let rows: Array = result[1]
+    let schema: Array = result[2]
+
+    if fn_name == "COUNT" {
+        let count: int = rows.length()
+        return ["ROWS", [["COUNT(*)"], [int_to_string(count)]]]
+    }
+
+    let col_idx: int = schema_col_index(schema, arg)
+    if col_idx < 0 {
+        return ["ERROR", "column not found: " + arg]
+    }
+
+    if fn_name == "SUM" {
+        var total: int = 0
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v != "__NULL__" {
+                total = total + string_to_int(v)
+            }
+        }
+        let header_str: String = "SUM(" + arg + ")"
+        return ["ROWS", [[header_str], [int_to_string(total)]]]
+    }
+
+    if fn_name == "AVG" {
+        var total: int = 0
+        var count: int = 0
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v != "__NULL__" {
+                total = total + string_to_int(v)
+                count = count + 1
+            }
+        }
+        var avg_str: String = "0"
+        if count > 0 {
+            let avg_f: float = int_to_float(total) / int_to_float(count)
+            avg_str = float_to_string(avg_f)
+        }
+        let header_str: String = "AVG(" + arg + ")"
+        return ["ROWS", [[header_str], [avg_str]]]
+    }
+
+    if fn_name == "MIN" or fn_name == "MAX" {
+        let ctype: String = schema_col_type(schema, arg)
+        var best: String = ""
+        var first: bool = true
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v == "__NULL__" {
+                continue
+            }
+            if first {
+                best = v
+                first = false
+            } else {
+                let cmp: int = compare_values(v, best, ctype)
+                if fn_name == "MIN" and cmp < 0 {
+                    best = v
+                }
+                if fn_name == "MAX" and cmp > 0 {
+                    best = v
+                }
+            }
+        }
+        let header_str: String = fn_name + "(" + arg + ")"
+        return ["ROWS", [[header_str], [best]]]
+    }
+
+    return ["ERROR", "unknown aggregate: " + fn_name]
+}
+
+// Execute aggregate function (RESP format)
+fn exec_aggregate(agg: String, table: String, where_ast: Array, join_ast: Array) -> String {
+    // Parse function name and argument
+    let paren_pos: int = agg.indexOf("(")
+    let fn_name: String = agg.substring(0, paren_pos)
+    let arg: String = agg.substring(paren_pos + 1, agg.length() - 1)
+
+    // Get all matching rows (no ORDER BY, no LIMIT for aggregates)
+    let all_cols: Array = ["*"]
+    let no_order: Array = ["NONE"]
+    let result: Array = db_select(table, all_cols, where_ast, no_order, -1, 0, join_ast)
+    let status: String = result[0]
+    if status == "ERROR" {
+        let msg: String = result[1]
+        return resp_error(msg)
+    }
+
+    let rows: Array = result[1]
+    let schema: Array = result[2]
+
+    if fn_name == "COUNT" {
+        let count: int = rows.length()
+        // Return as single-row, single-column result
+        var sb: StringBuilder = StringBuilder.new()
+        sb.append("*2\r\n")
+        sb.append("*1\r\n$8\r\nCOUNT(*)\r\n")
+        let count_str: String = int_to_string(count)
+        sb.append("*1\r\n$")
+        sb.append(int_to_string(count_str.length()))
+        sb.append("\r\n")
+        sb.append(count_str)
+        sb.append("\r\n")
+        return sb.to_string()
+    }
+
+    // For SUM, AVG, MIN, MAX — need column index
+    let col_idx: int = schema_col_index(schema, arg)
+    if col_idx < 0 {
+        return resp_error("column not found: " + arg)
+    }
+
+    if fn_name == "SUM" {
+        var total: int = 0
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v != "__NULL__" { total = total + string_to_int(v) }
+        }
+        let total_str: String = int_to_string(total)
+        var sb: StringBuilder = StringBuilder.new()
+        let header_str: String = "SUM(" + arg + ")"
+        sb.append("*2\r\n*1\r\n$")
+        sb.append(int_to_string(header_str.length()))
+        sb.append("\r\n")
+        sb.append(header_str)
+        sb.append("\r\n*1\r\n$")
+        sb.append(int_to_string(total_str.length()))
+        sb.append("\r\n")
+        sb.append(total_str)
+        sb.append("\r\n")
+        return sb.to_string()
+    }
+
+    if fn_name == "AVG" {
+        var total: int = 0
+        var count: int = 0
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v != "__NULL__" {
+                total = total + string_to_int(v)
+                count = count + 1
+            }
+        }
+        var avg_str: String = "0"
+        if count > 0 {
+            let avg_f: float = int_to_float(total) / int_to_float(count)
+            avg_str = float_to_string(avg_f)
+        }
+        var sb: StringBuilder = StringBuilder.new()
+        let header_str: String = "AVG(" + arg + ")"
+        sb.append("*2\r\n*1\r\n$")
+        sb.append(int_to_string(header_str.length()))
+        sb.append("\r\n")
+        sb.append(header_str)
+        sb.append("\r\n*1\r\n$")
+        sb.append(int_to_string(avg_str.length()))
+        sb.append("\r\n")
+        sb.append(avg_str)
+        sb.append("\r\n")
+        return sb.to_string()
+    }
+
+    if fn_name == "MIN" or fn_name == "MAX" {
+        let ctype: String = schema_col_type(schema, arg)
+        var best: String = ""
+        var first: bool = true
+        for row: Array in rows {
+            let v: String = row[col_idx]
+            if v == "__NULL__" { continue }
+            if first {
+                best = v
+                first = false
+            } else {
+                let cmp: int = compare_values(v, best, ctype)
+                if fn_name == "MIN" and cmp < 0 { best = v }
+                if fn_name == "MAX" and cmp > 0 { best = v }
+            }
+        }
+        let header_str: String = fn_name + "(" + arg + ")"
+        var sb: StringBuilder = StringBuilder.new()
+        sb.append("*2\r\n*1\r\n$")
+        sb.append(int_to_string(header_str.length()))
+        sb.append("\r\n")
+        sb.append(header_str)
+        sb.append("\r\n*1\r\n$")
+        sb.append(int_to_string(best.length()))
+        sb.append("\r\n")
+        sb.append(best)
+        sb.append("\r\n")
+        return sb.to_string()
+    }
+
+    return resp_error("unknown aggregate: " + fn_name)
+}

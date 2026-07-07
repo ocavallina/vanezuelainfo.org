@@ -16,6 +16,7 @@ import "src/ws"
 import "src/baquiano"
 import "src/admin"
 import "src/rates"
+import "src/sqldb"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -498,6 +499,8 @@ fn refresher_worker() -> int {
         news_warm()
         sismos_warm()
         rates_snapshot()
+        // Retención de visitas (~30 días) en nyx-db.
+        sql_exec("DELETE FROM visits WHERE day < " + int_to_string(db_day() - 30))
     }
     return 0
 }
@@ -513,6 +516,7 @@ fn main() {
     news_init()
     admin_init()
     ws_init()
+    sqldb_init()
     thread_spawn(refresher_worker)
 
     let app: App = app_new()
