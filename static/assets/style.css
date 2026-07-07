@@ -219,6 +219,18 @@ a { color: var(--enlace); }
 .calc-result { flex: 1 1 auto; min-width: 0; font-size: 1.5rem; font-weight: 800; color: var(--enlace); padding: 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .calc-rate-sel { display: block; width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; font-weight: 600; background: var(--tarjeta); color: var(--tinta); cursor: pointer; }
 .calc-unit { flex: 0 0 auto; min-width: 2.2em; text-align: right; font-weight: 700; color: var(--gris); }
+/* Mini-calculadora de expresión */
+.mc-toggle { flex: 0 0 auto; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); font-size: 1.1rem; line-height: 1; padding: 7px 9px; cursor: pointer; }
+.mc-toggle:hover { border-color: var(--azul); }
+.mc-panel { display: none; margin: 8px 0 2px; padding: 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--tarjeta); }
+.mc-panel.open { display: block; }
+.mc-row { display: flex; gap: 8px; }
+.mc-expr { flex: 1 1 auto; min-width: 0; padding: 9px 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; font-size: 1.1rem; background: var(--fondo); color: var(--tinta); }
+.mc-eq { flex: 0 0 auto; border: 1px solid var(--azul); border-radius: 8px; background: var(--azul); color: #fff; font-weight: 800; padding: 0 16px; cursor: pointer; }
+.mc-ops { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mc-ops button { flex: 1 1 auto; min-width: 40px; border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo); color: var(--tinta); font: inherit; font-size: 1rem; padding: 8px 0; cursor: pointer; }
+.mc-ops button:hover { border-color: var(--azul); }
+.mc-out { margin-top: 8px; color: var(--enlace); font-weight: 700; min-height: 1.1em; }
 .calc-swap-wrap { display: flex; justify-content: center; margin: 6px 0; }
 .calc-swap { width: 40px; height: 40px; border: 1px solid var(--azul); border-radius: 50%; background: var(--tarjeta); color: var(--enlace); font-size: 1.2rem; line-height: 1; cursor: pointer; }
 .calc-swap:hover { background: var(--azul); color: #fff; }

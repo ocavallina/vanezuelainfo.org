@@ -211,6 +211,33 @@ export async function afterStart({ exports, nyx }) {
   if (cp !== "63.970,29 Bs") throw new Error("FALLO calc_copy: " + cp);
   console.log("ok calc_copy");
 
+  // ── Mini-calculadora de expresión (evalúa y pasa el resultado a #calc-amt) ──
+  values["#calc-dir"] = "d2b"; values["#calc-rate-sel"] = "bcv";
+  values["#mc-expr"] = "12*3+5"; exports.mcalc_eval();
+  if (values["#calc-amt"] !== "41") throw new Error("FALLO mc 12*3+5: " + values["#calc-amt"]);
+  values["#mc-expr"] = "(2+3)*4"; exports.mcalc_eval();
+  if (values["#calc-amt"] !== "20") throw new Error("FALLO mc (2+3)*4: " + values["#calc-amt"]);
+  values["#mc-expr"] = "10/4"; exports.mcalc_eval();
+  if (values["#calc-amt"] !== "2.5") throw new Error("FALLO mc 10/4: " + values["#calc-amt"]);
+  values["#mc-expr"] = "12,5+1,5"; exports.mcalc_eval();      // coma decimal → punto
+  if (values["#calc-amt"] !== "14") throw new Error("FALLO mc coma: " + values["#calc-amt"]);
+  values["#mc-expr"] = "6×7"; exports.mcalc_eval();           // × normaliza a *
+  if (values["#calc-amt"] !== "42") throw new Error("FALLO mc ×: " + values["#calc-amt"]);
+  // Inválida: NO cambia #calc-amt y avisa
+  values["#calc-amt"] = "99"; values["#mc-expr"] = "2++"; exports.mcalc_eval();
+  if (values["#calc-amt"] !== "99") throw new Error("FALLO mc inválida cambió monto: " + values["#calc-amt"]);
+  if (!texts["#mc-out"].includes("no v")) throw new Error("FALLO mc aviso inválida: " + texts["#mc-out"]);
+  values["#calc-amt"] = "99"; values["#mc-expr"] = "5/0"; exports.mcalc_eval();  // /0
+  if (values["#calc-amt"] !== "99") throw new Error("FALLO mc /0 cambió monto: " + values["#calc-amt"]);
+  // Chips de operador: insertan ASCII (* / etc.), borrar / limpiar en #mc-expr
+  values["#mc-expr"] = "5"; values["#mc-opkey"] = "*"; exports.mcalc_ins();
+  if (values["#mc-expr"] !== "5*") throw new Error("FALLO mc_ins append: " + values["#mc-expr"]);
+  values["#mc-opkey"] = "del"; exports.mcalc_ins();
+  if (values["#mc-expr"] !== "5") throw new Error("FALLO mc_ins del: " + values["#mc-expr"]);
+  values["#mc-opkey"] = "clr"; exports.mcalc_ins();
+  if (values["#mc-expr"] !== "") throw new Error("FALLO mc_ins clr: " + values["#mc-expr"]);
+  console.log("ok mini-calc (precedencia, paréntesis, coma, ×, inválida, /0, chips)");
+
   // ── Chat (Fase F): fila escapada, parseo de lista y de mensaje WS ──────────
   values["#chat-room"] = "general";
   chatAdds.length = 0;

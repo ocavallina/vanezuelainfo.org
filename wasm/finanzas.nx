@@ -303,12 +303,179 @@ fn fx_tick_binance() {
 
 // Arranque de la calculadora (página propia /calculadora). Reusa las tasas que
 // deja fx_boot(0); cablea los controles, pinta y refresca Binance cada hora.
+// ── Mini-calculadora de expresión (junto al monto) ─────────────────────────
+// Evaluador recursivo-descendente sobre la cadena. Estado en holders de 1 elem
+// (patrón del módulo). Al calcular, el resultado se escribe en #calc-amt y se
+// dispara la conversión. Todo en Nyx→WASM sobre la pasarela (js_delegate/…).
+
+var me_src: Array = [""]   // expresión normalizada
+var me_pos: Array = [0]    // cursor
+var me_ok: Array = [1]     // 1 = válida
+var mc_open: Array = [0]   // panel abierto?
+
+fn me_isdig(c: String) -> bool {
+    if c == "0" or c == "1" or c == "2" or c == "3" or c == "4" { return true }
+    if c == "5" or c == "6" or c == "7" or c == "8" or c == "9" { return true }
+    return false
+}
+
+fn me_cur() -> String {
+    let s: String = me_src[0]
+    let p: int = me_pos[0]
+    if p >= s.length() { return "" }
+    return s.substring(p, p + 1)
+}
+
+fn me_adv() {
+    me_pos[0] = me_pos[0] + 1
+}
+
+fn me_number() -> float {
+    let s: String = me_src[0]
+    let n: int = s.length()
+    let start: int = me_pos[0]
+    var i: int = start
+    var go: bool = true
+    while i < n and go {
+        let ch: String = s.substring(i, i + 1)
+        if me_isdig(ch) or ch == "." { i = i + 1 } else { go = false }
+    }
+    if i == start { me_ok[0] = 0; return 0.0 }
+    let tok: String = s.substring(start, i)
+    me_pos[0] = i
+    return string_to_float(tok)
+}
+
+fn me_factor() -> float {
+    let c: String = me_cur()
+    if c == "-" { me_adv(); return 0.0 - me_factor() }
+    if c == "+" { me_adv(); return me_factor() }
+    if c == "(" {
+        me_adv()
+        let v: float = me_expr()
+        if me_cur() == ")" { me_adv() } else { me_ok[0] = 0 }
+        return v
+    }
+    return me_number()
+}
+
+fn me_term() -> float {
+    var v: float = me_factor()
+    var go: bool = true
+    while go {
+        let c: String = me_cur()
+        if c == "*" {
+            me_adv()
+            let r: float = me_factor()
+            v = v * r
+        } else if c == "/" {
+            me_adv()
+            let r: float = me_factor()
+            if r == 0.0 { me_ok[0] = 0; return 0.0 }
+            v = v / r
+        } else {
+            go = false
+        }
+    }
+    return v
+}
+
+fn me_expr() -> float {
+    var v: float = me_term()
+    var go: bool = true
+    while go {
+        let c: String = me_cur()
+        if c == "+" { me_adv(); v = v + me_term() }
+        else if c == "-" { me_adv(); v = v - me_term() }
+        else { go = false }
+    }
+    return v
+}
+
+// Evalúa la expresión cruda. me_ok[0]=0 si hay error de sintaxis o /0.
+fn me_eval(raw: String) -> float {
+    var s: String = raw.replace("×", "*")
+    s = s.replace("÷", "/")
+    s = s.replace(",", ".")
+    s = s.replace(" ", "")
+    me_src[0] = s
+    me_pos[0] = 0
+    me_ok[0] = 1
+    if s.length() == 0 { me_ok[0] = 0; return 0.0 }
+    let v: float = me_expr()
+    if me_pos[0] < s.length() { me_ok[0] = 0 }  // sobró basura → inválida
+    return v
+}
+
+// float -> número plano con PUNTO (para el input[type=number]); hasta 4 decimales,
+// recortando ceros/punto finales.
+fn me_fmt(v: float) -> String {
+    var neg: bool = false
+    var x: float = v
+    if x < 0.0 { neg = true; x = 0.0 - x }
+    let scaled: int = float_to_int(x * 10000.0 + 0.5)
+    let whole: int = scaled / 10000
+    let frac: int = scaled % 10000
+    var out: String = int_to_string(whole)
+    if frac > 0 {
+        var fs: String = int_to_string(frac)
+        while fs.length() < 4 { fs = "0" + fs }
+        var end: int = fs.length()
+        while end > 0 and fs.substring(end - 1, end) == "0" { end = end - 1 }
+        out = out + "." + fs.substring(0, end)
+    }
+    if neg { out = "-" + out }
+    return out
+}
+
+#[export_name = "mcalc_toggle"]
+fn mcalc_toggle() {
+    mc_open[0] = 1 - mc_open[0]
+    js_toggle_class("#mc-panel", "open", mc_open[0])
+}
+
+#[export_name = "mcalc_eval"]
+fn mcalc_eval() {
+    let expr: String = dom_get_value("#mc-expr")
+    if expr.length() == 0 {
+        dom_set_html("#mc-out", "")
+        return
+    }
+    let r: float = me_eval(expr)
+    if me_ok[0] == 0 {
+        dom_set_html("#mc-out", "Expresi&oacute;n no v&aacute;lida")
+        return
+    }
+    js_set_value("#calc-amt", me_fmt(r))
+    calc_render()
+    dom_set_html("#mc-out", "= " + fmt_f(r, 0, 4))
+}
+
+#[export_name = "mcalc_ins"]
+fn mcalc_ins() {
+    let k: String = dom_get_value("#mc-opkey")
+    let cur: String = dom_get_value("#mc-expr")
+    if k == "del" {
+        if cur.length() > 0 { js_set_value("#mc-expr", cur.substring(0, cur.length() - 1)) }
+    } else if k == "clr" {
+        js_set_value("#mc-expr", "")
+        dom_set_html("#mc-out", "")
+    } else {
+        js_set_value("#mc-expr", cur + k)
+    }
+}
+
 fn calc_boot() {
     dom_on("#calc-amt", "input", "calc_render")
     dom_on("#calc-rate-sel", "change", "calc_render")
     dom_on("#calc-swap", "click", "calc_swap")
     dom_on("#calc-share", "click", "calc_share")
     dom_on("#calc-copy", "click", "calc_copy")
+    mc_open[0] = 0
+    dom_on("#mc-toggle", "click", "mcalc_toggle")
+    dom_on("#mc-eq", "click", "mcalc_eval")
+    js_on_enter("#mc-expr", "mcalc_eval")
+    js_delegate("#mc-ops", "button", "data-op", "#mc-opkey", "mcalc_ins")
     browser_interval(3600000, "fx_tick_binance") // 1 h: refresca la tasa Binance
     calc_render()
 }

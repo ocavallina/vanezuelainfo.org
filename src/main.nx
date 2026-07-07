@@ -92,7 +92,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -119,8 +119,24 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("</select>\n")
     sb.append("<div class=\"calc-panel\">")
     sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\">")
+    sb.append("<button id=\"mc-toggle\" class=\"mc-toggle\" type=\"button\" aria-label=\"Mini calculadora\" title=\"Calculadora\">&#129518;</button>")
     sb.append("<span id=\"calc-from-unit\" class=\"calc-unit\">$</span>")
     sb.append("</div>\n")
+    sb.append("<div id=\"mc-panel\" class=\"mc-panel\">")
+    sb.append("<div class=\"mc-row\"><input id=\"mc-expr\" class=\"mc-expr\" type=\"text\" inputmode=\"decimal\" autocomplete=\"off\" placeholder=\"ej. 12*3+5\" aria-label=\"Operaci&oacute;n\"><button id=\"mc-eq\" class=\"mc-eq\" type=\"button\">=</button></div>")
+    sb.append("<div id=\"mc-ops\" class=\"mc-ops\">")
+    sb.append("<button type=\"button\" data-op=\"+\">+</button>")
+    sb.append("<button type=\"button\" data-op=\"-\">&minus;</button>")
+    sb.append("<button type=\"button\" data-op=\"*\">&times;</button>")
+    sb.append("<button type=\"button\" data-op=\"/\">&divide;</button>")
+    sb.append("<button type=\"button\" data-op=\"(\">(</button>")
+    sb.append("<button type=\"button\" data-op=\")\">)</button>")
+    sb.append("<button type=\"button\" data-op=\"del\" aria-label=\"Borrar\">&#9003;</button>")
+    sb.append("<button type=\"button\" data-op=\"clr\">C</button>")
+    sb.append("</div>")
+    sb.append("<div id=\"mc-out\" class=\"mc-out\"></div>")
+    sb.append("</div>\n")
+    sb.append("<input type=\"hidden\" id=\"mc-opkey\">\n")
     sb.append("<div class=\"calc-swap-wrap\"><button id=\"calc-swap\" class=\"calc-swap\" type=\"button\" aria-label=\"Invertir el sentido\" title=\"Invertir (Bs &harr; divisa)\">&#8645;</button></div>\n")
     sb.append("<div class=\"calc-panel\">")
     sb.append("<div id=\"calc-result\" class=\"calc-result\"><span class=\"calc-wait\">Esperando tasas&hellip;</span></div>")
@@ -130,7 +146,7 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"calc-dir\" value=\"d2b\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"calculadora\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     return html_nocache(200, page_calc("Calculadora de cambio", sb.to_string()))
 }
 
@@ -180,7 +196,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -198,7 +214,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -236,7 +252,7 @@ fn handle_chat(req: Request) -> Response {
     sb.append("</form>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"chat\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
@@ -306,7 +322,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -361,7 +377,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -430,7 +446,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=15\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))
