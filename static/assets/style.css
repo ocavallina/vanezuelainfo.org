@@ -641,6 +641,23 @@ a { color: var(--enlace); }
 .vb-track { width: 100%; height: 100px; display: flex; align-items: flex-end; justify-content: center; }
 .vb-fill { width: 70%; max-width: 34px; background: var(--azul); border-radius: 4px 4px 0 0; min-height: 2px; }
 .vb-lab { font-size: .72rem; color: var(--gris); margin-top: 4px; text-align: center; }
+/* Histórico de tasas (/finanzas) */
+.rate-hist { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0; }
+.rate-chart { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; }
+.rate-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 8px; }
+.rate-head b { color: var(--enlace); }
+.rate-val { font-weight: 800; font-size: 1.1rem; margin-left: auto; }
+.rate-delta { font-size: .82rem; font-weight: 700; }
+.rate-delta small { color: var(--gris); font-weight: 400; }
+.rate-delta.up { color: #c0392b; }
+.rate-delta.down { color: #1e8449; }
+.rate-delta.flat { color: var(--gris); }
+.rate-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
+.rate-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.rate-fill { width: 80%; background: var(--azul); border-radius: 3px 3px 0 0; min-height: 2px; }
+.rate-gap { opacity: .35; }
+.rate-wait { color: var(--gris); }
+.rate-upd { color: var(--gris); font-size: .82rem; margin-top: 6px; }
 .visit-log { display: flex; flex-direction: column; gap: 2px; }
 .visit-row { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; padding: 7px 0; border-top: 1px solid var(--borde); font-size: .9rem; }
 .visit-row .vr-when { color: var(--gris); }

@@ -15,6 +15,7 @@ import "src/chat"
 import "src/ws"
 import "src/baquiano"
 import "src/admin"
+import "src/rates"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -73,6 +74,8 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</a>\n")
     sb.append("<h2 class=\"finz-h\">Divisas</h2>\n")
     sb.append("<div id=\"fz-div\" class=\"finz-grid\">Cargando&hellip;</div>\n")
+    sb.append("<h2 class=\"finz-h\">Hist&oacute;rico</h2>\n")
+    sb.append(rates_history_html())
     sb.append("<h2 class=\"finz-h\">Cripto (USD)</h2>\n")
     sb.append("<div id=\"fz-cripto\" class=\"finz-grid\">Cargando&hellip;</div>\n")
     sb.append("<h2 class=\"finz-h\">Bolsa de Valores de Caracas</h2>\n")
@@ -488,11 +491,13 @@ fn handle_icon_calc_512(req: Request) -> Response {
 fn refresher_worker() -> int {
     news_warm()
     sismos_warm()
+    rates_snapshot()
     var go: bool = true
     while go {
         sleep(1800000)
         news_warm()
         sismos_warm()
+        rates_snapshot()
     }
     return 0
 }
