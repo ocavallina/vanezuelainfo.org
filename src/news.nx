@@ -6,6 +6,7 @@
 // Solo se muestra titular + resumen corto + enlace al original (no se republica).
 
 import "src/md"
+import "src/kv"
 
 // Caché de HTML renderizado (holders init en news_init(); el literal de array
 // global multi-elemento se inicializa vacio -> hay que asignarlo en una funcion).
@@ -27,6 +28,164 @@ pub fn news_init() {
     __bvc_list = [""]
     __bvc_ibc = [""]
     __bvc_ts = [0]
+}
+
+// ── Fuentes de noticias editables (nyx-kv: news:sources = lista "nombre|url") ──
+// Editables desde el panel admin. Si la lista está vacía se siembra con las 5 por
+// defecto; si nyx-kv no está disponible, refresh() cae a esas 5 hardcodeadas para
+// que las noticias NUNCA queden vacías.
+
+fn news_token() -> String {
+    let e: String = getenv("NYXKV_CHAT_TOKEN")
+    if e.length() > 0 {
+        return md_trim(e)
+    }
+    let f: String = read_file("/home/admin/.veninfo-chat-token")
+    return md_trim(f)
+}
+
+fn news_conn() -> int {
+    return kv_connect_auth("127.0.0.1", 6380, news_token())
+}
+
+// Quita '|' y controles (a espacio), recorta y limita a maxb bytes.
+fn news_clean(s: String, maxb: int) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if c == 124 or c < 32 {
+            sb.append(" ")
+        } else {
+            sb.append(s.substring(i, i + 1))
+        }
+        i = i + 1
+    }
+    var out: String = md_trim(sb.to_string())
+    if out.length() > maxb {
+        out = out.substring(0, maxb)
+    }
+    return out
+}
+
+fn news_seed_defaults(h: int) {
+    kv_rpush(h, "news:sources", "Efecto Cocuyo|https://efectococuyo.com/feed/")
+    kv_rpush(h, "news:sources", "El Pitazo|https://elpitazo.net/feed/")
+    kv_rpush(h, "news:sources", "Runrun.es|https://runrun.es/feed/")
+    kv_rpush(h, "news:sources", "Cronica Uno|https://cronica.uno/feed/")
+    kv_rpush(h, "news:sources", "El Nacional|https://www.elnacional.com/feed/")
+}
+
+// Lista de fuentes sobre una conexión abierta; siembra las 5 por defecto si está vacía.
+fn news_sources_h(h: int) -> Array {
+    var srcs: Array = kv_lrange(h, "news:sources", 0, -1)
+    if srcs.length() == 0 {
+        news_seed_defaults(h)
+        srcs = kv_lrange(h, "news:sources", 0, -1)
+    }
+    return srcs
+}
+
+// Fuerza el próximo refresh (tras editar las fuentes).
+pub fn news_invalidate() {
+    __news_ts[0] = 0
+}
+
+// Lista de fuentes "nombre|url" para el panel admin ([] si el almacén no responde).
+pub fn news_sources_list() -> Array {
+    let h: int = news_conn()
+    if h < 0 {
+        return []
+    }
+    let srcs: Array = news_sources_h(h)
+    kv_close(h)
+    return srcs
+}
+
+// Añade una fuente. Devuelve "" si OK o el texto del error.
+pub fn news_source_add(name_raw: String, url_raw: String) -> String {
+    let nm: String = news_clean(name_raw, 60)
+    let url: String = news_clean(url_raw, 300)
+    if nm.length() == 0 {
+        return "El nombre es obligatorio"
+    }
+    if !url.startsWith("https://") {
+        return "La URL debe empezar por https://"
+    }
+    let h: int = news_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    news_sources_h(h)
+    kv_rpush(h, "news:sources", nm + "|" + url)
+    kv_close(h)
+    news_invalidate()
+    return ""
+}
+
+// Reemplaza la fuente en la posición `index` (reconstruye la lista).
+pub fn news_source_edit(index: int, name_raw: String, url_raw: String) -> bool {
+    let nm: String = news_clean(name_raw, 60)
+    let url: String = news_clean(url_raw, 300)
+    if nm.length() == 0 or !url.startsWith("https://") {
+        return false
+    }
+    let h: int = news_conn()
+    if h < 0 {
+        return false
+    }
+    let srcs: Array = kv_lrange(h, "news:sources", 0, -1)
+    if index < 0 or index >= srcs.length() {
+        kv_close(h)
+        return false
+    }
+    kv_del(h, "news:sources")
+    var i: int = 0
+    while i < srcs.length() {
+        if i == index {
+            kv_rpush(h, "news:sources", nm + "|" + url)
+        } else {
+            let s: String = srcs[i]
+            kv_rpush(h, "news:sources", s)
+        }
+        i = i + 1
+    }
+    kv_close(h)
+    news_invalidate()
+    return true
+}
+
+// Borra la fuente en la posición `index` (reconstruye la lista).
+pub fn news_source_delete(index: int) -> bool {
+    let h: int = news_conn()
+    if h < 0 {
+        return false
+    }
+    let srcs: Array = kv_lrange(h, "news:sources", 0, -1)
+    if index < 0 or index >= srcs.length() {
+        kv_close(h)
+        return false
+    }
+    var survivors: Array = []
+    var i: int = 0
+    while i < srcs.length() {
+        if i != index {
+            let s: String = srcs[i]
+            survivors.push(s)
+        }
+        i = i + 1
+    }
+    kv_del(h, "news:sources")
+    var j: int = 0
+    while j < survivors.length() {
+        let s2: String = survivors[j]
+        kv_rpush(h, "news:sources", s2)
+        j = j + 1
+    }
+    kv_close(h)
+    news_invalidate()
+    return true
 }
 
 pub fn news_ts() -> int {
@@ -502,11 +661,34 @@ fn render_slides(items: Array, maxn: int) -> String {
 
 fn refresh() {
     var items: Array = []
-    fetch_into(items, "https://efectococuyo.com/feed/", "Efecto Cocuyo")
-    fetch_into(items, "https://elpitazo.net/feed/", "El Pitazo")
-    fetch_into(items, "https://runrun.es/feed/", "Runrun.es")
-    fetch_into(items, "https://cronica.uno/feed/", "Cronica Uno")
-    fetch_into(items, "https://www.elnacional.com/feed/", "El Nacional")
+    var used: bool = false
+    let h: int = news_conn()
+    if h >= 0 {
+        let srcs: Array = news_sources_h(h)
+        kv_close(h)
+        var i: int = 0
+        while i < srcs.length() {
+            let entry: String = srcs[i]
+            let p: int = entry.indexOf("|")
+            if p > 0 {
+                let name: String = entry.substring(0, p)
+                let url: String = entry.substring(p + 1, entry.length())
+                if url.length() > 0 {
+                    fetch_into(items, url, name)
+                    used = true
+                }
+            }
+            i = i + 1
+        }
+    }
+    if !used {
+        // Fallback: nyx-kv no disponible o sin fuentes → las 5 por defecto.
+        fetch_into(items, "https://efectococuyo.com/feed/", "Efecto Cocuyo")
+        fetch_into(items, "https://elpitazo.net/feed/", "El Pitazo")
+        fetch_into(items, "https://runrun.es/feed/", "Runrun.es")
+        fetch_into(items, "https://cronica.uno/feed/", "Cronica Uno")
+        fetch_into(items, "https://www.elnacional.com/feed/", "El Nacional")
+    }
     sort_desc(items)
     __news_full[0] = render_list(items, 60, false)
     __news_prev[0] = render_list(items, 5, true)

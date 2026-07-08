@@ -565,6 +565,8 @@ fn setup_routes(app: App) {
     app_post(app, "/admin/salas", handle_admin_salas_post)
     app_get(app, "/admin/visitas", handle_admin_visitas)
     app_post(app, "/admin/visitas", handle_admin_visitas_post)
+    app_get(app, "/admin/noticias", handle_admin_noticias)
+    app_post(app, "/admin/noticias", handle_admin_noticias_post)
     app_get(app, "/sismos", handle_sismos)
     app_get(app, "/sismos/{id}", handle_quake_detail)
     app_get(app, "/articulo/{slug}", handle_article)

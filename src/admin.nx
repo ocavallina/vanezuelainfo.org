@@ -258,6 +258,7 @@ fn render_dashboard() -> String {
     sb.append("<a class=\"admin-tile\" href=\"/admin/baquiano\"><span class=\"admin-tile-ico\">&#128205;</span><span>Baquiano</span><small>Zonas y sitios</small></a>\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>Crear, borrar, moderar</small></a>\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/visitas\"><span class=\"admin-tile-ico\">&#128202;</span><span>Visitas</span><small>Contador y registro</small></a>\n")
+    sb.append("<a class=\"admin-tile\" href=\"/admin/noticias\"><span class=\"admin-tile-ico\">&#128240;</span><span>Noticias</span><small>Fuentes RSS</small></a>\n")
     sb.append("</div>\n")
     sb.append("<p><a href=\"/\">&larr; Ver el sitio</a></p>\n")
     sb.append("</section>\n")
@@ -481,6 +482,86 @@ pub fn handle_admin_salas_post(req: Request) -> Response {
         chat_room_clear(form_field(req.body, "id"))
     }
     return redirect("/admin/salas")
+}
+
+// ── Fuentes de noticias (CRUD sobre news:sources en nyx-kv, vía src/news) ──────
+
+fn render_admin_noticias(csrf: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<section class=\"admin\">\n")
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("<h1>Fuentes de noticias</h1>\n")
+    sb.append("<p class=\"lede\">Feeds RSS que agrega la p&aacute;gina de Noticias. Usa la URL del RSS del medio (https). Los cambios se aplican en el pr&oacute;ximo refresco.</p>\n")
+    sb.append("<form method=\"post\" action=\"/admin/noticias\" class=\"admin-form\">\n")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"src_add\">\n")
+    sb.append("<input type=\"text\" name=\"nombre\" placeholder=\"Nombre (ej. El Pitazo)\" maxlength=\"60\" required>\n")
+    sb.append("<input type=\"url\" name=\"url\" placeholder=\"https://medio.com/feed/\" required>\n")
+    sb.append("<button type=\"submit\">Agregar fuente</button>\n")
+    sb.append("</form>\n")
+    let srcs: Array = news_sources_list()
+    var i: int = 0
+    while i < srcs.length() {
+        let entry: String = srcs[i]
+        let p: int = entry.indexOf("|")
+        var nm: String = entry
+        var url: String = ""
+        if p > 0 {
+            nm = entry.substring(0, p)
+            url = entry.substring(p + 1, entry.length())
+        }
+        sb.append("<div class=\"admin-zone\">\n")
+        sb.append("<form method=\"post\" action=\"/admin/noticias\" class=\"admin-form\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"src_edit\"><input type=\"hidden\" name=\"idx\" value=\"" + int_to_string(i) + "\">")
+        sb.append("<input type=\"text\" name=\"nombre\" value=\"" + aesc(nm) + "\" maxlength=\"60\">")
+        sb.append("<input type=\"url\" name=\"url\" value=\"" + aesc(url) + "\">")
+        sb.append("<button type=\"submit\">Guardar</button>")
+        sb.append("</form>\n")
+        sb.append("<form method=\"post\" action=\"/admin/noticias\" class=\"admin-inline\" onsubmit=\"return confirm('Borrar esta fuente?');\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"src_del\"><input type=\"hidden\" name=\"idx\" value=\"" + int_to_string(i) + "\">")
+        sb.append("<button type=\"submit\" class=\"admin-del\">Borrar</button>")
+        sb.append("</form>\n")
+        sb.append("</div>\n")
+        i = i + 1
+    }
+    if srcs.length() == 0 {
+        sb.append("<p class=\"admin-err\">Almac&eacute;n no disponible.</p>\n")
+    }
+    sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
+    sb.append("</section>\n")
+    return page("Admin noticias", sb.to_string())
+}
+
+pub fn handle_admin_noticias(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(200, render_login(""))
+    }
+    return admin_html(200, render_admin_noticias(csrf))
+}
+
+pub fn handle_admin_noticias_post(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(403, render_login("Sesion expirada."))
+    }
+    let tok: String = form_field(req.body, "csrf")
+    if tok != csrf {
+        return admin_html(403, render_login("Token invalido."))
+    }
+    let act: String = form_field(req.body, "act")
+    if act == "src_add" {
+        news_source_add(form_field(req.body, "nombre"), form_field(req.body, "url"))
+    } else if act == "src_edit" {
+        news_source_edit(string_to_int(form_field(req.body, "idx")), form_field(req.body, "nombre"), form_field(req.body, "url"))
+    } else if act == "src_del" {
+        news_source_delete(string_to_int(form_field(req.body, "idx")))
+    }
+    return redirect("/admin/noticias")
 }
 
 // ── Visitas: contador + log ────────────────────────────────────────────────────
