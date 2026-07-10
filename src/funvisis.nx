@@ -15,7 +15,6 @@
 //   properties.lat/long   = coordenadas (strings)
 
 import "std/http"
-import "src/md"
 
 const FV_URL: String = "http://www.funvisis.gob.ve/maravilla.json"
 const FV_TTL: int = 180
@@ -130,9 +129,11 @@ pub fn funvisis_records() -> Array {
             let epoch: int = ie[1]
             let latx: int = float_to_int(string_to_float(lat) * 100.0)
             let lonx: int = float_to_int(string_to_float(lon) * 100.0)
-            let id: String = "fv-" + int_to_string(epoch) + "-" + int_to_string(latx) + "-" + int_to_string(lonx)
-            let rec: Array = [id, iso, lat, lon, depth, "ML", mag, place, epoch]
-            out.push(rec)
+            if iso.length() > 0 {
+                let id: String = "fv-" + int_to_string(epoch) + "-" + int_to_string(latx) + "-" + int_to_string(lonx)
+                let rec: Array = [id, iso, lat, lon, depth, "ML", mag, place, epoch]
+                out.push(rec)
+            }
         }
         i = i + 1
     }
