@@ -1,0 +1,140 @@
+// src/funvisis.nx — Sismos recientes de FUNVISIS (autoridad sismica nacional de
+// Venezuela). Fuente COMPLEMENTARIA a EMSC: FUNVISIS cataloga los locales
+// pequenos (M<~4) que la red regional de EMSC no ve.
+//
+// Feed: http://www.funvisis.gob.ve/maravilla.json (GeoJSON, ~6.4 KB, Content-Length).
+// SOLO HTTP (sin TLS) -> http_get de std/http, NO https_get. Host CON www.
+//
+// El JSON reutiliza una plantilla de "localizador" con campos MAL NOMBRADOS
+// (unico punto fragil; si FUNVISIS rediseña el sitio, revisar este mapeo):
+//   properties.phone      = magnitud
+//   properties.address    = lugar ("38 km al noroeste de San Carlos")
+//   properties.city       = hora LOCAL (HH:MM, UTC-4)
+//   properties.postalCode = fecha (DD-MM-YYYY)
+//   properties.state      = profundidad ("14.0 km")
+//   properties.lat/long   = coordenadas (strings)
+
+import "std/http"
+import "src/md"
+
+const FV_URL: String = "http://www.funvisis.gob.ve/maravilla.json"
+const FV_TTL: int = 180
+
+var __fv_body: Array = [""]
+var __fv_ts: Array = [0]
+
+pub fn funvisis_init() {
+    __fv_body = [""]
+    __fv_ts = [0]
+}
+
+// Cuerpo JSON cacheado; descarga por HTTP plano si vacio/vencido. Nunca revienta:
+// ante fallo (status != 200 o body vacio) conserva lo cacheado (o "").
+fn funvisis_body() -> String {
+    let now: int = time()
+    let last: int = __fv_ts[0]
+    var body: String = __fv_body[0]
+    if body.length() == 0 or now - last > FV_TTL {
+        let resp: Array = http_get(FV_URL)
+        let status: int = resp[1]
+        if status == 200 {
+            let fresh: String = resp[3]
+            if fresh.length() > 0 {
+                __fv_body[0] = fresh
+                __fv_ts[0] = now
+                body = fresh
+            }
+        }
+    }
+    return body
+}
+
+// Valor string de la propiedad `key` dentro de `chunk`: busca  "key": "VALOR"
+// (con el espacio tras los dos puntos, como emite FUNVISIS) y devuelve VALOR.
+fn fv_str(chunk: String, key: String) -> String {
+    let pat: String = "\"" + key + "\": \""
+    let p: int = chunk.indexOf(pat)
+    if p < 0 { return "" }
+    let start: int = p + pat.length()
+    let rest: String = chunk.substring(start, chunk.length())
+    let q: int = rest.indexOf("\"")
+    if q < 0 { return "" }
+    return rest.substring(0, q)
+}
+
+// Dias desde 1970-01-01 (algoritmo de Howard Hinnant). Pub: la reutiliza sismos.nx
+// para el epoch de EMSC.
+pub fn fv_days_from_civil(y: int, m: int, d: int) -> int {
+    var yy: int = y
+    if m <= 2 { yy = yy - 1 }
+    let era: int = yy / 400
+    let yoe: int = yy - era * 400
+    var mp: int = m - 3
+    if m <= 2 { mp = m + 9 }
+    let doy: int = (153 * mp + 2) / 5 + d - 1
+    let doe: int = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+// De fecha "DD-MM-YYYY" y hora "HH:MM" LOCALES (UTC-4) a [iso_con_offset, epoch_utc].
+// El ISO lleva -04:00 para que el wasm (iso_to_epoch) lo normalice como los Z de EMSC.
+fn fv_iso_epoch(fecha: String, hora: String) -> Array {
+    let dp: Array = fecha.split("-")
+    if dp.length() < 3 {
+        let e: Array = ["", 0]
+        return e
+    }
+    let dd: String = dp[0]
+    let mo: String = dp[1]
+    let yy: String = dp[2]
+    var hh: String = "00"
+    var mi: String = "00"
+    let tp: Array = hora.split(":")
+    if tp.length() >= 2 {
+        let h0: String = tp[0]
+        let m0: String = tp[1]
+        hh = h0
+        mi = m0
+    }
+    let iso: String = yy + "-" + mo + "-" + dd + "T" + hh + ":" + mi + ":00-04:00"
+    let ep: int = fv_days_from_civil(string_to_int(yy), string_to_int(mo), string_to_int(dd)) * 86400 + string_to_int(hh) * 3600 + string_to_int(mi) * 60 + 14400
+    let r: Array = [iso, ep]
+    return r
+}
+
+// Lista normalizada de sismos FUNVISIS: [id,iso,lat,lon,depth,mtype,mag,place,epoch].
+pub fn funvisis_records() -> Array {
+    let body: String = funvisis_body()
+    let out: Array = []
+    if body.length() == 0 {
+        return out
+    }
+    let chunks: Array = body.split("{\"type\": \"Feature\"")
+    var i: int = 1
+    while i < chunks.length() {
+        let chunk: String = chunks[i]
+        let mag: String = fv_str(chunk, "phone")
+        let place: String = fv_str(chunk, "address")
+        let hora: String = fv_str(chunk, "city")
+        let fecha: String = fv_str(chunk, "postalCode")
+        var depth: String = fv_str(chunk, "state")
+        let lat: String = fv_str(chunk, "lat")
+        let lon: String = fv_str(chunk, "long")
+        if mag.length() > 0 and lat.length() > 0 and lon.length() > 0 {
+            let sp: int = depth.indexOf(" ")
+            if sp > 0 {
+                depth = depth.substring(0, sp)
+            }
+            let ie: Array = fv_iso_epoch(fecha, hora)
+            let iso: String = ie[0]
+            let epoch: int = ie[1]
+            let latx: int = float_to_int(string_to_float(lat) * 100.0)
+            let lonx: int = float_to_int(string_to_float(lon) * 100.0)
+            let id: String = "fv-" + int_to_string(epoch) + "-" + int_to_string(latx) + "-" + int_to_string(lonx)
+            let rec: Array = [id, iso, lat, lon, depth, "ML", mag, place, epoch]
+            out.push(rec)
+        }
+        i = i + 1
+    }
+    return out
+}

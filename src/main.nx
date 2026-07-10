@@ -11,6 +11,7 @@ import "src/layout"
 import "src/articles"
 import "src/sismos"
 import "src/news"
+import "src/funvisis"
 import "src/chat"
 import "src/ws"
 import "src/baquiano"
@@ -336,6 +337,33 @@ fn handle_article(req: Request) -> Response {
     return html_nocache(200, page("Articulo", content))
 }
 
+// TEMPORAL (Task 1/2): vuelca los registros para verificar por curl. Quitar en Task 4.
+fn handle_fv_debug(req: Request) -> Response {
+    let recs: Array = funvisis_records()
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("count=")
+    sb.append(int_to_string(recs.length()))
+    sb.append("\n")
+    var i: int = 0
+    while i < recs.length() {
+        let r: Array = recs[i]
+        let id: String = r[0]
+        let iso: String = r[1]
+        let mag: String = r[6]
+        let place: String = r[7]
+        sb.append(id)
+        sb.append("\tM")
+        sb.append(mag)
+        sb.append("\t")
+        sb.append(iso)
+        sb.append("\t")
+        sb.append(place)
+        sb.append("\n")
+        i = i + 1
+    }
+    return html_nocache(200, sb.to_string())
+}
+
 // Pagina de LISTA de sismos: encabezado con conteo + ultima actualizacion,
 // lista paginada, filtros abajo, detalle desplegable al seleccionar (con boton
 // a la pagina de detalle con mapa). Sin mapa en esta pagina (evita el secuestro
@@ -536,6 +564,7 @@ fn main() {
     }
 
     sismos_init()
+    funvisis_init()
     news_init()
     admin_init()
     ws_init()
@@ -575,6 +604,7 @@ fn setup_routes(app: App) {
     app_get(app, "/admin/noticias", handle_admin_noticias)
     app_post(app, "/admin/noticias", handle_admin_noticias_post)
     app_get(app, "/sismos", handle_sismos)
+    app_get(app, "/api/fv-debug", handle_fv_debug)
     app_get(app, "/sismos/{id}", handle_quake_detail)
     app_get(app, "/articulo/{slug}", handle_article)
     app_get(app, "/api/health", handle_health)
