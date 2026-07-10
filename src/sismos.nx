@@ -19,8 +19,8 @@ import "src/md"
 var __emsc_body: Array = [""]
 var __emsc_ts: Array = [0]
 
-// TTL de caché en segundos (5 minutos).
-const CACHE_TTL: int = 300
+// TTL de caché en segundos (3 minutos).
+const CACHE_TTL: int = 180
 
 pub fn sismos_init() {
     __emsc_body = [""]
@@ -29,12 +29,12 @@ pub fn sismos_init() {
 
 fn emsc_url() -> String {
     // EMSC FDSN: ruta /event/1/ y parametros minmag/minlat/maxlat/minlon/maxlon.
-    // Bounding box de Venezuela: lat 0..13, lon -74..-59. Filtramos a mag>=3.0
-    // (los sismos menores en Venezuela los cubre FUNVISIS, sin API publica; y la
-    // cobertura de EMSC para M<3 en la zona es escasa). render_quakes ademas
-    // filtra a eventos cuyo lugar contiene VENEZUELA.
+    // Bounding box de fetch: lat 0..13, lon -74..-59. Filtramos a mag>=2.5 (los
+    // sismos aun menores los cubre FUNVISIS, sin API publica). La inclusion final
+    // la decide quake_in_region() por GEOGRAFIA (no solo por el nombre del lugar),
+    // para captar eventos fronterizos sentidos en Venezuela con etiqueta vecina.
     var u: String = "https://www.seismicportal.eu/fdsnws/event/1/query?format=text"
-    u = u + "&orderby=time&limit=200&minmag=3.0"
+    u = u + "&orderby=time&limit=200&minmag=2.5"
     u = u + "&minlat=0&maxlat=13&minlon=-74&maxlon=-59"
     return u
 }
@@ -62,6 +62,24 @@ pub fn sismos_ts() -> int {
 
 fn attr_escape(s: String) -> String {
     return html_escape(s).replace("\"", "&quot;")
+}
+
+// ¿El evento pertenece a Venezuela (o su zona fronteriza sentida)?
+// NO basta con que la etiqueta de EMSC diga "VENEZUELA": muchos sismos sentidos
+// en Venezuela llevan etiqueta del país/región vecina (NORTHERN COLOMBIA, el nido
+// de Bucaramanga; GULF OF PARIA / TRINIDAD; CARIBBEAN SEA). Por eso, además del
+// nombre, aceptamos por GEOGRAFÍA: epicentro dentro de una caja ajustada a
+// Venezuela + margen fronterizo. Excluye Barbados/Windward lejanos (lon > -60.5).
+fn quake_in_region(lat_s: String, lon_s: String, place: String) -> bool {
+    if place.indexOf("VENEZUELA") >= 0 {
+        return true
+    }
+    let lat: float = string_to_float(lat_s)
+    let lon: float = string_to_float(lon_s)
+    if lat >= 0.5 and lat <= 12.9 and lon >= -73.6 and lon <= -60.5 {
+        return true
+    }
+    return false
 }
 
 // "2026-06-28T12:34:56.789Z" -> "2026-06-28 12:34"
@@ -113,7 +131,7 @@ pub fn render_quakes(body: String) -> String {
                 let mtype: String = md_trim(parts[9])
                 let mag: String = md_trim(parts[10])
                 let place: String = md_trim(parts[12])
-                if place.indexOf("VENEZUELA") >= 0 {
+                if quake_in_region(lat, lon, place) {
                 let ft: String = format_time(t)
                 let sp: int = ft.indexOf(" ")
                 var fdia: String = ft
@@ -183,11 +201,11 @@ pub fn sismos_data_block() -> String {
             let parts: Array = line.split("|")
             if parts.length() >= 13 {
                 let place: String = md_trim(parts[12])
-                if place.indexOf("VENEZUELA") >= 0 {
+                let lat: String = md_trim(parts[2])
+                let lon: String = md_trim(parts[3])
+                if quake_in_region(lat, lon, place) {
                     let eid: String = md_trim(parts[0])
                     let t: String = md_trim(parts[1])
-                    let lat: String = md_trim(parts[2])
-                    let lon: String = md_trim(parts[3])
                     let depth: String = md_trim(parts[4])
                     let mtype: String = md_trim(parts[9])
                     let mag: String = md_trim(parts[10])
@@ -227,7 +245,9 @@ pub fn sismos_rotator_html(maxn: int) -> String {
             let parts: Array = line.split("|")
             if parts.length() >= 13 {
                 let place: String = md_trim(parts[12])
-                if place.indexOf("VENEZUELA") >= 0 {
+                let lat: String = md_trim(parts[2])
+                let lon: String = md_trim(parts[3])
+                if quake_in_region(lat, lon, place) {
                     let mag: String = md_trim(parts[10])
                     let t: String = md_trim(parts[1])
                     sb.append("<div class=\"rot-slide\"><span class=\"news-src mag-badge\">M ")

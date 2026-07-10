@@ -346,8 +346,8 @@ fn handle_sismos(req: Request) -> Response {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"sismos\">\n")
     sb.append("<h1>Sismos recientes en Venezuela</h1>\n")
-    sb.append("<p class=\"lede\">Sismos recientes en Venezuela (magnitud &ge; 3). Fuente: red sismica <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
-    sb.append("<p class=\"hint\">Nota: mostramos sismos de magnitud &ge; 3. Los de menor magnitud los registra FUNVISIS (autoridad sismica nacional de Venezuela), que no ofrece API publica, por eso no aparecen aqui.</p>\n")
+    sb.append("<p class=\"lede\">Sismos recientes en Venezuela y su zona fronteriza (magnitud &ge; 2.5). Fuente: red sismica <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
+    sb.append("<p class=\"hint\">Nota: mostramos sismos de magnitud &ge; 2.5, incluidos los cercanos a la frontera (Colombia, Golfo de Paria, Trinidad, mar Caribe) que se sienten en Venezuela. Los de menor magnitud los registra FUNVISIS (autoridad sismica nacional de Venezuela), que no ofrece API publica.</p>\n")
     sb.append("<div class=\"sismos-top\"><span id=\"s-count\" class=\"s-count\">&mdash; sismos</span>")
     sb.append("<span id=\"s-updated\" class=\"s-updated\" data-updated=\"")
     sb.append(ts_str)
@@ -503,20 +503,27 @@ fn handle_icon_calc_512(req: Request) -> Response {
     return Response { status: 200, headers_flat: h, body: read_file("static/icon-calc-512.png") }
 }
 
-// Hilo en segundo plano: pre-calienta al arrancar y refresca cada 30 min, para
-// que las noticias/BVC esten siempre frescas (< 1 hora) aunque no haya trafico.
+// Hilo en segundo plano: pre-calienta al arrancar y refresca, para que el
+// contenido este siempre fresco aunque no haya trafico. Los SISMOS se refrescan
+// cada 10 min (mas sensibles al tiempo); noticias/tasas + limpieza cada ~30 min
+// (la cadencia del histórico de tasas está calibrada a 30 min, no acelerarla).
 fn refresher_worker() -> int {
     news_warm()
     sismos_warm()
     rates_snapshot()
     var go: bool = true
+    var tick: int = 0
     while go {
-        sleep(1800000)
-        news_warm()
+        sleep(600000)
         sismos_warm()
-        rates_snapshot()
-        // Retención de visitas (~30 días) en nyx-db.
-        sql_exec("DELETE FROM visits WHERE day < " + int_to_string(db_day() - 30))
+        tick = tick + 1
+        if tick >= 3 {
+            tick = 0
+            news_warm()
+            rates_snapshot()
+            // Retención de visitas (~30 días) en nyx-db.
+            sql_exec("DELETE FROM visits WHERE day < " + int_to_string(db_day() - 30))
+        }
     }
     return 0
 }

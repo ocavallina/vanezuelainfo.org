@@ -232,10 +232,19 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
 ## Sismos (src/sismos.nx)
 
 - Fuente: **EMSC** (`www.seismicportal.eu`), formato **FDSN text** (delimitado por
-  `|`). NO usar USGS (bloqueado/interceptado desde este host) ni GeoJSON (el
-  parser de `std/json` trunca floats). Bounding box Venezuela, `limit=200`.
+  `|`). NO usar GeoJSON (el parser de `std/json` trunca floats). Bounding box de fetch
+  lat 0..13 / lon -74..-59, `minmag=2.5`, `limit=200`. (USGS estuvo bloqueado desde
+  este host; en 2026-07 volvió a responder, pero se mantiene EMSC como única fuente.)
 - Columnas FDSN: 0 EventID, 1 Time, 2 Lat, 3 Lon, 4 Depth, 9 MagType, 10 Mag, 12 Lugar.
-- Caché del cuerpo crudo en memoria (TTL 5 min, `sismos_ts()`).
+- **Inclusión por GEOGRAFÍA, no por nombre** (`quake_in_region` en src/sismos.nx): el
+  filtro antiguo `place.indexOf("VENEZUELA")` descartaba ~la mitad de los eventos de
+  la caja (sismos sentidos en Venezuela con etiqueta vecina: NORTHERN COLOMBIA / GULF
+  OF PARIA / TRINIDAD / CARIBBEAN SEA → **causaban "no se registró"**). Ahora se
+  incluye si el nombre contiene VENEZUELA **o** el epicentro cae en la caja ajustada
+  lat 0.5..12.9 / lon -73.6..-60.5 (excluye Barbados/Windward por lon > -60.5). El
+  helper se usa en `render_quakes`, `sismos_data_block` y `sismos_rotator_html`.
+- Caché del cuerpo crudo en memoria (TTL 3 min, `sismos_ts()`); refresher warmea
+  sismos cada 10 min (main.nx; noticias/tasas siguen cada 30 min).
 - El servidor emite la tabla completa (SEO/no-JS) + `<textarea id="s-data" hidden>`
   (TSV de 8 campos, `sismos_data_block()`); la interactividad (paginación 12/pág,
   filtros mag/dist/lugar, orden fecha/distancia/magnitud, detalle inline, destacado
