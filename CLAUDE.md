@@ -256,7 +256,8 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
   OF PARIA / TRINIDAD / CARIBBEAN SEA → **causaban "no se registró"**). Ahora se
   incluye si el nombre contiene VENEZUELA **o** el epicentro cae en la caja ajustada
   lat 0.5..12.9 / lon -73.6..-60.5 (excluye Barbados/Windward por lon > -60.5). El
-  helper se usa en `render_quakes`, `sismos_data_block` y `sismos_rotator_html`.
+  helper se aplica dentro de `emsc_records()` (única fuente que lo necesita; los
+  eventos FUNVISIS ya vienen todos en tierra); el render consume `all_quakes()`.
 - Caché del cuerpo crudo en memoria (TTL 3 min, `sismos_ts()`); refresher warmea
   sismos cada 10 min (main.nx; noticias/tasas siguen cada 30 min).
 - El servidor emite la tabla completa (SEO/no-JS) + `<textarea id="s-data" hidden>`
