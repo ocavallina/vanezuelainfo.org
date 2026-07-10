@@ -231,163 +231,128 @@ fn fmt_depth(d: String) -> String {
     return d + " km"
 }
 
-// Parser puro: cuerpo FDSN text -> tabla HTML. "" si no hay nada parseable.
-// OJO: el markup de fila lo REPLICA s_row_html en wasm/veninfo.nx (el wasm
-// regenera el tbody #qtbody en el navegador) — cambiarlos JUNTOS.
-pub fn render_quakes(body: String) -> String {
-    if body.length() == 0 {
-        return ""
+// Parser puro: registros unificados -> tabla HTML. "" si no hay nada.
+// OJO: el markup de fila lo REPLICA s_row_html en wasm/veninfo.nx — cambiarlos JUNTOS.
+pub fn render_quakes(recs: Array) -> String {
+    if recs.length() == 0 {
+        return "<p>No hay sismos recientes registrados en la zona.</p>"
     }
-    let lines: Array = body.split("\n")
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<table class=\"quakes\">\n")
     sb.append("<thead><tr><th>Fecha</th><th>Magnitud</th><th>Profundidad</th><th>Lugar</th><th>Distancia</th></tr></thead>\n")
     sb.append("<tbody id=\"qtbody\">\n")
     var i: int = 0
-    var count: int = 0
-    while i < lines.length() {
-        let line: String = lines[i]
-        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
-            let parts: Array = line.split("|")
-            if parts.length() >= 13 {
-                let eid: String = md_trim(parts[0])
-                let t: String = md_trim(parts[1])
-                let lat: String = md_trim(parts[2])
-                let lon: String = md_trim(parts[3])
-                let depth: String = md_trim(parts[4])
-                let mtype: String = md_trim(parts[9])
-                let mag: String = md_trim(parts[10])
-                let place: String = md_trim(parts[12])
-                if quake_in_region(lat, lon, place) {
-                let ft: String = format_time(t)
-                let sp: int = ft.indexOf(" ")
-                var fdia: String = ft
-                var fhora: String = ""
-                if sp >= 0 {
-                    fdia = ft.substring(0, sp)
-                    fhora = ft.substring(sp + 1, ft.length())
-                }
-                sb.append("<tr data-id=\"")
-                sb.append(attr_escape(eid))
-                sb.append("\" data-lat=\"")
-                sb.append(attr_escape(lat))
-                sb.append("\" data-lon=\"")
-                sb.append(attr_escape(lon))
-                sb.append("\" data-mag=\"")
-                sb.append(attr_escape(mag))
-                sb.append("\" data-type=\"")
-                sb.append(attr_escape(mtype))
-                sb.append("\" data-depth=\"")
-                sb.append(attr_escape(depth))
-                sb.append("\" data-time=\"")
-                sb.append(attr_escape(ft))
-                sb.append("\" data-iso=\"")
-                sb.append(attr_escape(t))
-                sb.append("\" data-place=\"")
-                sb.append(attr_escape(place))
-                sb.append("\"><td class=\"fh\"><span class=\"f-dia\">")
-                sb.append(html_escape(fdia))
-                sb.append("</span><span class=\"f-hora\">")
-                sb.append(html_escape(fhora))
-                sb.append("</span></td><td class=\"mag\">")
-                sb.append(html_escape(mag))
-                sb.append("</td><td>")
-                sb.append(html_escape(fmt_depth(depth)))
-                sb.append("</td><td>")
-                sb.append(html_escape(place))
-                sb.append("</td><td class=\"dist\">&mdash;</td></tr>\n")
-                count = count + 1
-                }
-            }
+    while i < recs.length() {
+        let r: Array = recs[i]
+        let eid: String = r[0]
+        let t: String = r[1]
+        let lat: String = r[2]
+        let lon: String = r[3]
+        let depth: String = r[4]
+        let mtype: String = r[5]
+        let mag: String = r[6]
+        let place: String = r[7]
+        let ft: String = format_time(t)
+        let sp: int = ft.indexOf(" ")
+        var fdia: String = ft
+        var fhora: String = ""
+        if sp >= 0 {
+            fdia = ft.substring(0, sp)
+            fhora = ft.substring(sp + 1, ft.length())
         }
+        sb.append("<tr data-id=\"")
+        sb.append(attr_escape(eid))
+        sb.append("\" data-lat=\"")
+        sb.append(attr_escape(lat))
+        sb.append("\" data-lon=\"")
+        sb.append(attr_escape(lon))
+        sb.append("\" data-mag=\"")
+        sb.append(attr_escape(mag))
+        sb.append("\" data-type=\"")
+        sb.append(attr_escape(mtype))
+        sb.append("\" data-depth=\"")
+        sb.append(attr_escape(depth))
+        sb.append("\" data-time=\"")
+        sb.append(attr_escape(ft))
+        sb.append("\" data-iso=\"")
+        sb.append(attr_escape(t))
+        sb.append("\" data-place=\"")
+        sb.append(attr_escape(place))
+        sb.append("\"><td class=\"fh\"><span class=\"f-dia\">")
+        sb.append(html_escape(fdia))
+        sb.append("</span><span class=\"f-hora\">")
+        sb.append(html_escape(fhora))
+        sb.append("</span></td><td class=\"mag\">")
+        sb.append(html_escape(mag))
+        sb.append("</td><td>")
+        sb.append(html_escape(fmt_depth(depth)))
+        sb.append("</td><td>")
+        sb.append(html_escape(place))
+        sb.append("</td><td class=\"dist\">&mdash;</td></tr>\n")
         i = i + 1
     }
     sb.append("</tbody>\n</table>\n")
-    if count == 0 {
-        return "<p>No hay sismos recientes registrados en la zona.</p>"
-    }
     return sb.to_string()
 }
 
 // Bloque de datos crudos para el front Nyx→WASM: <textarea id="s-data" hidden>
 // con una línea TSV por sismo (id, iso, lat, lon, depth, type, mag, place).
 // veninfo.wasm (sismos_boot) lo lee con dom_get_value y deriva epoch/hora
-// local él mismo. Mismo filtrado (VENEZUELA) que render_quakes.
+// local él mismo. Fuente: all_quakes() (unificado FUNVISIS+EMSC).
 pub fn sismos_data_block() -> String {
-    let body: String = emsc_body()
-    if body.length() == 0 {
+    let recs: Array = all_quakes()
+    if recs.length() == 0 {
         return ""
     }
-    let lines: Array = body.split("\n")
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<textarea id=\"s-data\" hidden>")
     var i: int = 0
-    while i < lines.length() {
-        let line: String = lines[i]
-        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
-            let parts: Array = line.split("|")
-            if parts.length() >= 13 {
-                let place: String = md_trim(parts[12])
-                let lat: String = md_trim(parts[2])
-                let lon: String = md_trim(parts[3])
-                if quake_in_region(lat, lon, place) {
-                    let eid: String = md_trim(parts[0])
-                    let t: String = md_trim(parts[1])
-                    let depth: String = md_trim(parts[4])
-                    let mtype: String = md_trim(parts[9])
-                    let mag: String = md_trim(parts[10])
-                    sb.append(html_escape(eid + "\t" + t + "\t" + lat + "\t" + lon + "\t" + depth + "\t" + mtype + "\t" + mag + "\t" + place))
-                    sb.append("\n")
-                }
-            }
-        }
+    while i < recs.length() {
+        let r: Array = recs[i]
+        let eid: String = r[0]
+        let t: String = r[1]
+        let lat: String = r[2]
+        let lon: String = r[3]
+        let depth: String = r[4]
+        let mtype: String = r[5]
+        let mag: String = r[6]
+        let place: String = r[7]
+        sb.append(html_escape(eid + "\t" + t + "\t" + lat + "\t" + lon + "\t" + depth + "\t" + mtype + "\t" + mag + "\t" + place))
+        sb.append("\n")
         i = i + 1
     }
     sb.append("</textarea>\n")
     return sb.to_string()
 }
 
-// HTML de la lista (usa el cuerpo cacheado).
+// HTML de la lista (usa la lista unificada FUNVISIS+EMSC).
 pub fn sismos_section() -> String {
-    let body: String = emsc_body()
-    if body.length() == 0 {
+    let recs: Array = all_quakes()
+    if recs.length() == 0 {
         return "<p class=\"error\">No se pudieron cargar los sismos en este momento. Intenta de nuevo en unos minutos.</p>"
     }
-    return render_quakes(body)
+    return render_quakes(recs)
 }
 
 // Slides para el rotador de la portada: los N sismos mas recientes de Venezuela.
 pub fn sismos_rotator_html(maxn: int) -> String {
-    let body: String = emsc_body()
-    if body.length() == 0 {
-        return ""
-    }
-    let lines: Array = body.split("\n")
+    let recs: Array = all_quakes()
     var sb: StringBuilder = StringBuilder.new()
     var i: int = 0
     var cnt: int = 0
-    while i < lines.length() and cnt < maxn {
-        let line: String = lines[i]
-        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
-            let parts: Array = line.split("|")
-            if parts.length() >= 13 {
-                let place: String = md_trim(parts[12])
-                let lat: String = md_trim(parts[2])
-                let lon: String = md_trim(parts[3])
-                if quake_in_region(lat, lon, place) {
-                    let mag: String = md_trim(parts[10])
-                    let t: String = md_trim(parts[1])
-                    sb.append("<div class=\"rot-slide\"><span class=\"news-src mag-badge\">M ")
-                    sb.append(html_escape(mag))
-                    sb.append("</span><span class=\"rot-title\">")
-                    sb.append(html_escape(place))
-                    sb.append("</span><time class=\"news-date\" data-ts=\"")
-                    sb.append(attr_escape(t))
-                    sb.append("\"></time></div>\n")
-                    cnt = cnt + 1
-                }
-            }
-        }
+    while i < recs.length() and cnt < maxn {
+        let r: Array = recs[i]
+        let mag: String = r[6]
+        let place: String = r[7]
+        let t: String = r[1]
+        sb.append("<div class=\"rot-slide\"><span class=\"news-src mag-badge\">M ")
+        sb.append(html_escape(mag))
+        sb.append("</span><span class=\"rot-title\">")
+        sb.append(html_escape(place))
+        sb.append("</span><time class=\"news-date\" data-ts=\"")
+        sb.append(attr_escape(t))
+        sb.append("\"></time></div>\n")
+        cnt = cnt + 1
         i = i + 1
     }
     return sb.to_string()
@@ -401,27 +366,17 @@ pub fn sismos_warm() {
     }
 }
 
-// Busca un evento por EventID en el cuerpo cacheado.
-// Devuelve [id, time, lat, lon, depth, mtype, mag, place] o [] si no existe.
+// Busca un evento por id (EMSC o FUNVISIS) en la lista unificada.
+// Devuelve [id, iso, lat, lon, depth, mtype, mag, place] o [] si no existe.
 pub fn quake_by_id(id: String) -> Array {
-    let body: String = emsc_body()
-    if body.length() == 0 {
-        let e: Array = []
-        return e
-    }
-    let lines: Array = body.split("\n")
+    let recs: Array = all_quakes()
     var i: int = 0
-    while i < lines.length() {
-        let line: String = lines[i]
-        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
-            let parts: Array = line.split("|")
-            if parts.length() >= 13 {
-                let eid: String = md_trim(parts[0])
-                if eid == id {
-                    let r: Array = [eid, md_trim(parts[1]), md_trim(parts[2]), md_trim(parts[3]), md_trim(parts[4]), md_trim(parts[9]), md_trim(parts[10]), md_trim(parts[12])]
-                    return r
-                }
-            }
+    while i < recs.length() {
+        let r: Array = recs[i]
+        let eid: String = r[0]
+        if eid == id {
+            let out: Array = [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]]
+            return out
         }
         i = i + 1
     }
