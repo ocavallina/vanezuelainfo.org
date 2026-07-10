@@ -361,6 +361,27 @@ fn handle_fv_debug(req: Request) -> Response {
         sb.append("\n")
         i = i + 1
     }
+    let allq: Array = all_quakes()
+    sb.append("ALL count=")
+    sb.append(int_to_string(allq.length()))
+    sb.append("\n")
+    var m: int = 0
+    while m < allq.length() {
+        let ar: Array = allq[m]
+        let aid: String = ar[0]
+        let amag: String = ar[6]
+        let aiso: String = ar[1]
+        let aplace: String = ar[7]
+        sb.append(aid)
+        sb.append("\tM")
+        sb.append(amag)
+        sb.append("\t")
+        sb.append(aiso)
+        sb.append("\t")
+        sb.append(aplace)
+        sb.append("\n")
+        m = m + 1
+    }
     return html_nocache(200, sb.to_string())
 }
 

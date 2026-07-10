@@ -11,6 +11,7 @@
 // La primera linea es una cabecera que empieza con '#'.
 
 import "src/md"
+import "src/funvisis"
 
 // Caché del cuerpo CRUDO de EMSC (no del HTML), para poder tanto renderizar la
 // lista como buscar un evento por id para su pagina de detalle. Holders de 1
@@ -80,6 +81,132 @@ fn quake_in_region(lat_s: String, lon_s: String, place: String) -> bool {
         return true
     }
     return false
+}
+
+// Epoch UTC de un ISO EMSC "2026-07-07T08:41:38.68Z" (siempre Z/UTC). 0 si corto.
+fn emsc_iso_epoch(iso: String) -> int {
+    if iso.length() < 16 {
+        return 0
+    }
+    let y: int = string_to_int(iso.substring(0, 4))
+    let mo: int = string_to_int(iso.substring(5, 7))
+    let d: int = string_to_int(iso.substring(8, 10))
+    let h: int = string_to_int(iso.substring(11, 13))
+    let mi: int = string_to_int(iso.substring(14, 16))
+    return fv_days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60
+}
+
+// Registros EMSC normalizados (aplica quake_in_region + epoch). Mismo shape que FUNVISIS.
+fn emsc_records() -> Array {
+    let body: String = emsc_body()
+    let out: Array = []
+    if body.length() == 0 {
+        return out
+    }
+    let lines: Array = body.split("\n")
+    var i: int = 0
+    while i < lines.length() {
+        let line: String = lines[i]
+        if line.length() > 5 and !line.startsWith("#") and !line.startsWith("<") {
+            let parts: Array = line.split("|")
+            if parts.length() >= 13 {
+                let place: String = md_trim(parts[12])
+                let lat: String = md_trim(parts[2])
+                let lon: String = md_trim(parts[3])
+                if quake_in_region(lat, lon, place) {
+                    let eid: String = md_trim(parts[0])
+                    let t: String = md_trim(parts[1])
+                    let depth: String = md_trim(parts[4])
+                    let mtype: String = md_trim(parts[9])
+                    let mag: String = md_trim(parts[10])
+                    let ep: int = emsc_iso_epoch(t)
+                    let rec: Array = [eid, t, lat, lon, depth, mtype, mag, place, ep]
+                    out.push(rec)
+                }
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// ¿Hay en fvrecs un evento que coincida (|Δt|<=90s y |Δlat|,|Δlon|<=0.3)?
+fn dup_in_funvisis(fvrecs: Array, ep: int, lat: float, lon: float) -> bool {
+    var j: int = 0
+    while j < fvrecs.length() {
+        let r: Array = fvrecs[j]
+        let fep: int = r[8]
+        var dt: int = ep - fep
+        if dt < 0 { dt = -dt }
+        if dt <= 90 {
+            let flat: String = r[2]
+            let flon: String = r[3]
+            var dla: float = string_to_float(flat) - lat
+            var dlo: float = string_to_float(flon) - lon
+            if dla < 0.0 { dla = -dla }
+            if dlo < 0.0 { dlo = -dlo }
+            if dla <= 0.3 and dlo <= 0.3 {
+                return true
+            }
+        }
+        j = j + 1
+    }
+    return false
+}
+
+// Selection sort in-place por epoch (campo 8) descendente. N pequeño (<=~220).
+fn sort_recs_desc(recs: Array) {
+    var i: int = 0
+    let n: int = recs.length()
+    while i < n {
+        var best: int = i
+        var j: int = i + 1
+        while j < n {
+            let rj: Array = recs[j]
+            let rb: Array = recs[best]
+            let ej: int = rj[8]
+            let eb: int = rb[8]
+            if ej > eb {
+                best = j
+            }
+            j = j + 1
+        }
+        if best != i {
+            let tmp: Array = recs[i]
+            recs[i] = recs[best]
+            recs[best] = tmp
+        }
+        i = i + 1
+    }
+}
+
+// Lista unificada: FUNVISIS (primaria en tierra) + EMSC no-duplicado (fronterizos/
+// offshore que FUNVISIS no lista), orden por fecha desc.
+pub fn all_quakes() -> Array {
+    let fv: Array = funvisis_records()
+    let em: Array = emsc_records()
+    let merged: Array = []
+    var a: int = 0
+    while a < fv.length() {
+        let fr: Array = fv[a]
+        merged.push(fr)
+        a = a + 1
+    }
+    var k: int = 0
+    while k < em.length() {
+        let r: Array = em[k]
+        let ep: int = r[8]
+        let la: String = r[2]
+        let lo: String = r[3]
+        let latf: float = string_to_float(la)
+        let lonf: float = string_to_float(lo)
+        if !dup_in_funvisis(fv, ep, latf, lonf) {
+            merged.push(r)
+        }
+        k = k + 1
+    }
+    sort_recs_desc(merged)
+    return merged
 }
 
 // "2026-06-28T12:34:56.789Z" -> "2026-06-28 12:34"
