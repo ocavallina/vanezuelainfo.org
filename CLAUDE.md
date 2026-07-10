@@ -80,7 +80,10 @@ src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom 
                  metas PWA, registro del service worker.
 src/articles.nx  Portada + render de artículos (server-side desde content/).
 src/md.nx        Renderizador Markdown→HTML propio + html_escape.
-src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, caché, tabla HTML con data-*.
+src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, all_quakes() (fusión con
+                 FUNVISIS + dedup por tiempo+coords), caché, tabla HTML con data-*.
+src/funvisis.nx  Cliente FUNVISIS (http_get, HTTP plano, feed maravilla.json), mapeo de
+                 campos mal nombrados a registros, caché en RAM.
 src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexión corta por request.
                  Helpers kv_get/set/setex/del/exists/incr/expire/rpush/ltrim/lrange sobre kv_cmd.
                  nyx-kv guarda: admin (pass/sesiones), chat (salas/mensajes/rate-limit), baquiano.
@@ -229,12 +232,23 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
 - CSS de todo esto en `static/assets/style.css` (`.cfg-btn`, `.home-card`,
   `.card-move`, `.cm-btn`). **Al tocarlo, subir `veninfo-vN` en `static/sw.js`.**
 
-## Sismos (src/sismos.nx)
+## Sismos (src/sismos.nx + src/funvisis.nx)
 
-- Fuente: **EMSC** (`www.seismicportal.eu`), formato **FDSN text** (delimitado por
-  `|`). NO usar GeoJSON (el parser de `std/json` trunca floats). Bounding box de fetch
-  lat 0..13 / lon -74..-59, `minmag=2.5`, `limit=200`. (USGS estuvo bloqueado desde
-  este host; en 2026-07 volvió a responder, pero se mantiene EMSC como única fuente.)
+- Fuente: **FUNVISIS** (primaria en tierra) **+ EMSC** (fronterizos/costa afuera),
+  fusionadas por `all_quakes()` (src/sismos.nx): junta `funvisis_records()` y
+  `emsc_records()`, descartando de EMSC los duplicados de FUNVISIS por
+  tiempo+coordenadas (`dup_in_funvisis`).
+  - **FUNVISIS** (`src/funvisis.nx`): feed `http://www.funvisis.gob.ve/maravilla.json`
+    (GeoJSON, HTTP **plano** sin TLS → `http_get`, NO `https_get`). Reutiliza una
+    plantilla de "localizador" con campos **mal nombrados** (único punto frágil si
+    FUNVISIS rediseña el sitio): `phone`=magnitud, `address`=lugar, `city`=hora LOCAL
+    (HH:MM, **UTC-4**), `postalCode`=fecha (DD-MM-YYYY), `state`=profundidad,
+    `lat`/`long`=coordenadas. Caché en RAM (TTL 3 min).
+  - **EMSC** (`www.seismicportal.eu`), formato **FDSN text** (delimitado por
+    `|`). NO usar GeoJSON (el parser de `std/json` trunca floats). Bounding box de fetch
+    lat 0..13 / lon -74..-59, `minmag=2.5`, `limit=200`. (USGS estuvo bloqueado desde
+    este host; en 2026-07 volvió a responder, pero se mantiene EMSC como fuente
+    fronteriza/offshore, complementada por FUNVISIS para los locales.)
 - Columnas FDSN: 0 EventID, 1 Time, 2 Lat, 3 Lon, 4 Depth, 9 MagType, 10 Mag, 12 Lugar.
 - **Inclusión por GEOGRAFÍA, no por nombre** (`quake_in_region` en src/sismos.nx): el
   filtro antiguo `place.indexOf("VENEZUELA")` descartaba ~la mitad de los eventos de
