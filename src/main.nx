@@ -11,6 +11,7 @@ import "src/layout"
 import "src/articles"
 import "src/sismos"
 import "src/news"
+import "src/funvisis"
 import "src/chat"
 import "src/ws"
 import "src/baquiano"
@@ -346,8 +347,8 @@ fn handle_sismos(req: Request) -> Response {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"sismos\">\n")
     sb.append("<h1>Sismos recientes en Venezuela</h1>\n")
-    sb.append("<p class=\"lede\">Sismos recientes en Venezuela y su zona fronteriza (magnitud &ge; 2.5). Fuente: red sismica <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
-    sb.append("<p class=\"hint\">Nota: mostramos sismos de magnitud &ge; 2.5, incluidos los cercanos a la frontera (Colombia, Golfo de Paria, Trinidad, mar Caribe) que se sienten en Venezuela. Los de menor magnitud los registra FUNVISIS (autoridad sismica nacional de Venezuela), que no ofrece API publica.</p>\n")
+    sb.append("<p class=\"lede\">Sismos recientes en Venezuela y su zona fronteriza (magnitud &ge; 2). Fuentes: <a href=\"http://www.funvisis.gob.ve\">FUNVISIS</a> (red nacional) y <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
+    sb.append("<p class=\"hint\">Nota: combinamos FUNVISIS (autoridad sismica nacional, cubre los locales pequenos) con EMSC (aporta los eventos fronterizos y costa afuera: Colombia, Golfo de Paria, Trinidad, mar Caribe). Las horas se muestran en tu hora local.</p>\n")
     sb.append("<div class=\"sismos-top\"><span id=\"s-count\" class=\"s-count\">&mdash; sismos</span>")
     sb.append("<span id=\"s-updated\" class=\"s-updated\" data-updated=\"")
     sb.append(ts_str)
@@ -388,7 +389,7 @@ fn handle_quake_detail(req: Request) -> Response {
     let id: String = req.params.get("id")
     let q: Array = quake_by_id(id)
     if q.length() == 0 {
-        let nf: String = "<section class=\"sismos\"><p><a href=\"/sismos\">&larr; Volver a la lista</a></p><h1>Sismo no encontrado</h1><p>Este evento puede haber salido del listado reciente (ultimos 40).</p></section>"
+        let nf: String = "<section class=\"sismos\"><p><a href=\"/sismos\">&larr; Volver a la lista</a></p><h1>Sismo no encontrado</h1><p>Este evento puede haber salido del listado reciente.</p></section>"
         return html_nocache(404, page("Sismo no encontrado", nf))
     }
     // q = [id, time, lat, lon, depth, mtype, mag, place]
@@ -536,6 +537,7 @@ fn main() {
     }
 
     sismos_init()
+    funvisis_init()
     news_init()
     admin_init()
     ws_init()
