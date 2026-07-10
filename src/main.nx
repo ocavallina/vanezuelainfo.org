@@ -366,7 +366,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("<option value=\"fecha\">Fecha (recientes)</option><option value=\"distancia\">Distancia (cercanos)</option><option value=\"magnitud\">Magnitud (mayores)</option>")
     sb.append("</select></label>\n")
     sb.append("  <label>Magnitud min: <select id=\"f-mag\">")
-    sb.append("<option value=\"0\">Todas</option><option value=\"3.5\">3.5+</option><option value=\"4\">4.0+</option><option value=\"4.5\">4.5+</option><option value=\"5\">5.0+</option><option value=\"6\">6.0+</option>")
+    sb.append("<option value=\"0\">Todas</option><option value=\"3.5\" selected>3.5+</option><option value=\"4\">4.0+</option><option value=\"4.5\">4.5+</option><option value=\"5\">5.0+</option><option value=\"6\">6.0+</option>")
     sb.append("</select></label>\n")
     sb.append("  <label>Distancia max: <input id=\"f-dist\" type=\"range\" min=\"50\" max=\"2000\" step=\"50\" value=\"2000\" disabled> <span id=\"f-dist-val\" class=\"f-dist-val\">activa tu ubicacion</span></label>\n")
     sb.append("  <label>Lugar: <input id=\"f-text\" type=\"text\" placeholder=\"ej. Zulia\"></label>\n")
