@@ -71,7 +71,27 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
         sb.append("function show(h){for(var i=0;i<btns.length;i++)btns[i].hidden=h;}\n")
         sb.append("window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dfp=e;show(false);});\n")
         sb.append("for(var i=0;i<btns.length;i++)btns[i].addEventListener('click',function(){if(!dfp)return;dfp.prompt();dfp.userChoice.then(function(){dfp=null;show(true);});});\n")
-        sb.append("window.addEventListener('appinstalled',function(){show(true);});})();\n")
+        sb.append("window.addEventListener('appinstalled',function(){show(true);});\n")
+        // iOS Safari NO emite beforeinstallprompt: revelamos el mismo botón y, al
+        // tocarlo, mostramos las instrucciones "Compartir → Añadir a inicio".
+        // Solo Safari (no CriOS/FxiOS/webviews, donde no crea app standalone).
+        sb.append("var ua=navigator.userAgent||'';\n")
+        sb.append("var iOS=/iphone|ipad|ipod/i.test(ua);\n")
+        sb.append("var safari=iOS&&/Safari/.test(ua)&&!/(CriOS|FxiOS|EdgiOS|OPiOS|Mercury|FBAN|FBAV|Instagram|Line|GSA)/.test(ua);\n")
+        sb.append("var sa=(navigator.standalone===true)||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);\n")
+        sb.append("if(safari&&!sa){show(false);\n")
+        sb.append("  var hint=null;\n")
+        sb.append("  function iosHint(){\n")
+        sb.append("    if(hint){hint.remove();hint=null;return;}\n")
+        sb.append("    hint=document.createElement('div');hint.className='calc-ios-hint';\n")
+        sb.append("    hint.innerHTML='<span>Para instalar: toca <strong>Compartir</strong> (el icono con la flecha) y elige <strong>\\u00abA\\u00f1adir a inicio\\u00bb</strong>.</span><button type=\"button\" aria-label=\"Cerrar\">\\u00d7</button>';\n")
+        sb.append("    hint.querySelector('button').addEventListener('click',function(){hint.remove();hint=null;});\n")
+        sb.append("    var m=document.querySelector('main.container')||document.body;m.insertBefore(hint,m.firstChild);\n")
+        sb.append("    hint.scrollIntoView({block:'nearest'});\n")
+        sb.append("  }\n")
+        sb.append("  for(var j=0;j<btns.length;j++)btns[j].addEventListener('click',iosHint);\n")
+        sb.append("}\n")
+        sb.append("})();\n")
     } else {
         // Calculadora (app aparte): enlace discreto "Instalar como app". Se muestra en
         // navegadores que pueden instalar PWA (no iOS, no ya instalada); al tocarlo
