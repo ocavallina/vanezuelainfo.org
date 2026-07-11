@@ -620,7 +620,8 @@ a { color: var(--enlace); }
 .baq-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
 .baq-map, .baq-hotels { display: inline-block; font-size: .85rem; font-weight: 700; color: var(--enlace); text-decoration: none; }
 .baq-map:hover, .baq-hotels:hover { text-decoration: underline; }
-.baq-hero { width: 100%; max-height: 300px; object-fit: cover; border-radius: 14px; margin: 6px 0 4px; background: var(--borde); }
+.baquiano-zone img { max-width: 100%; }
+.baq-hero { display: block; width: 100%; max-height: 300px; object-fit: cover; border-radius: 14px; margin: 6px 0 4px; background: var(--borde); }
 .baq-zone-links { margin: 8px 0 14px; }
 .baq-credit { margin-top: 20px; font-size: .78rem; color: var(--gris); }
 .admin-thumb { width: 40px; height: 30px; object-fit: cover; border-radius: 5px; vertical-align: middle; }
