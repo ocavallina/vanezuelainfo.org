@@ -371,7 +371,22 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   Ids `is_valid_slug`. La ficha pública muestra todo + un **enlace a Google Maps por
   destino** (`maps_url`/`baq_urlenc`, URL de búsqueda `nombre, zona, Venezuela`).
 - Se **crea/edita/borra desde el panel admin** (`/admin/baquiano`): editar zona
-  (nombre/capital/panorama) + add/del de datos/municipios/destinos/directorio.
+  (nombre/capital/panorama/imagen) + add/del de datos/municipios/destinos/directorio.
+- **Imágenes** (Wikipedia): cada destino lleva un 4º campo opcional `imgurl` en su entrada
+  (`nombre|categoria|descripcion|imgurl`) y cada zona una clave `:img` (portada). Se
+  autorrellenan con `wiki_image()` (busca en `es.wikipedia.org/w/api.php` pageimages;
+  parseo por scan de string, NO std/json). **Fetch SÍNCRONO por zona** (`baquiano_fetch_zone`,
+  botón "Buscar imagenes de la zona" en el admin — fiable) o global en hilo
+  (`baquiano_fetch_start`, botón "Buscar imagenes"). Override manual por sitio
+  (`site_set_img`) y por zona (campo imagen del form). Render: `<img class=baq-hero>` +
+  `baq-site-img`, con fallback y crédito a Wikimedia.
+  - **GOTCHA Wikipedia**: la API **EXIGE un User-Agent descriptivo**; con el UA por defecto
+    de `https_get` **bloquea/throttlea la IP tras una ráfaga** (las llamadas devuelven vacío).
+    Por eso `wiki_get()` usa `http_build_request`+`http_tls_request` (std/http) con
+    `User-Agent: venezuelainfo.org/...` y un **throttle de 0.8 s** por llamada. No quitar.
+- **Hoteles/reseñas (gratis)**: enlaces a Google Maps — "Ver en Google Maps (reseñas y
+  fotos)" por destino, "Hoteles cerca" por destino y "Hoteles en {estado}" por zona
+  (`maps_url`/`hotels_url`, sin API). Places API embebida (de pago) queda de futuro.
 - **Carga inicial**: `content/baquiano-seed.txt` (delim `~~~`, párrafos con centinela
   `~~P~~`) → `baquiano_import()` (wipe+reload, botón "Importar guía" en el admin). El
   seed se generó a partir de `content/guia_turistica_venezuela.md` (referencia).
