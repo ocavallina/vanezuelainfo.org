@@ -360,13 +360,25 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 
 ## Baquiano (src/baquiano.nx + panel admin)
 
-- Guía de sitios de Venezuela **por zona** (estados/regiones). Tarjeta reordenable
-  en la portada (`data-key="baquiano"`), páginas `/baquiano` (índice de zonas) y
-  `/baquiano/{zona}` (sitios de la zona, con `req.params`, nunca `req.query`).
-- **Contenido en nyx-kv** (namespace `veninfo::`, sin TTL): `baq:zones` (lista de
-  ids), `baq:zone:<id>` (nombre), `baq:zone:<id>:sites` (lista `nombre|categoria|
-  descripcion`, saneados sin `|`). Ids validados con `is_valid_slug` (pub en articles).
-- Se **crea/edita/borra desde el panel admin** (`/admin/baquiano`).
+- **Guía turística de Venezuela por zona** (24 estados). Tarjeta reordenable en la
+  portada (`data-key="baquiano"`), `/baquiano` (índice) y `/baquiano/{zona}` (ficha de
+  zona, con `req.params`, nunca `req.query`).
+- **Contenido en nyx-kv** (namespace `veninfo::`, sin TTL), modelo plano por zona:
+  `baq:zones` (lista de ids), `baq:zone:<id>` (nombre), `baq:zone:<id>:capital`,
+  `:desc` (panorama), `:facts` (lista `etiqueta|valor` — datos prácticos, **extensible**),
+  `:municipios` (lista `municipio|capital`), `:sites` (destinos, `nombre|categoria|
+  descripcion`), `:poblados` (directorio, `municipio|localidades`). Todo saneado sin `|`.
+  Ids `is_valid_slug`. La ficha pública muestra todo + un **enlace a Google Maps por
+  destino** (`maps_url`/`baq_urlenc`, URL de búsqueda `nombre, zona, Venezuela`).
+- Se **crea/edita/borra desde el panel admin** (`/admin/baquiano`): editar zona
+  (nombre/capital/panorama) + add/del de datos/municipios/destinos/directorio.
+- **Carga inicial**: `content/baquiano-seed.txt` (delim `~~~`, párrafos con centinela
+  `~~P~~`) → `baquiano_import()` (wipe+reload, botón "Importar guía" en el admin). El
+  seed se generó a partir de `content/guia_turistica_venezuela.md` (referencia).
+- **GOTCHA nyx-kv: el cliente (src/kv.nx) TRUNCA valores que contienen `\n` real** al
+  escribir (el SET queda cortado en el primer salto). Por eso `desc` guarda los párrafos
+  con el centinela `~~P~~` (no `\n`); `zone_edit` convierte los `\n` del textarea a
+  `~~P~~` antes de `kv_set`. No almacenar strings con saltos de línea en nyx-kv.
 
 ## Panel admin (src/admin.nx)
 

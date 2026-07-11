@@ -276,11 +276,45 @@ pub fn handle_admin(req: Request) -> Response {
 
 // ── Baquiano (CRUD) ──────────────────────────────────────────────────────────
 
+// Lista con boton de borrar por indice, para facts/municipios/poblados.
+fn admin_del_list(sb: StringBuilder, csrf: String, id: String, act: String, items: Array) {
+    var j: int = 0
+    while j < items.length() {
+        let entry: String = items[j]
+        let bar: int = entry.indexOf("|")
+        var head: String = entry
+        var tail: String = ""
+        if bar >= 0 {
+            head = entry.substring(0, bar)
+            tail = entry.substring(bar + 1, entry.length())
+        }
+        sb.append("<div class=\"admin-site\"><span><strong>")
+        sb.append(html_escape(head))
+        sb.append("</strong> ")
+        sb.append(html_escape(tail))
+        sb.append("</span>")
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"")
+        sb.append(act)
+        sb.append("\"><input type=\"hidden\" name=\"zone\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><input type=\"hidden\" name=\"idx\" value=\"")
+        sb.append(int_to_string(j))
+        sb.append("\"><button type=\"submit\" class=\"admin-del\">x</button></form></div>\n")
+        j = j + 1
+    }
+}
+
 fn render_admin_baquiano(csrf: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"admin\">\n")
     sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
     sb.append("<h1>Baquiano</h1>\n")
+    // Importar la guia completa desde el seed
+    sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Reemplaza TODO el contenido de Baquiano con la guia del seed. Continuar?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"baquiano_import\"><button type=\"submit\">Importar guia (seed)</button></form>\n")
     // Crear zona
     sb.append("<h2>Nueva zona (estado/region)</h2>\n")
     sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-row\">\n")
@@ -288,6 +322,7 @@ fn render_admin_baquiano(csrf: String) -> String {
     sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_create\">\n")
     sb.append("<input name=\"id\" placeholder=\"id (ej. zulia)\" required>\n")
     sb.append("<input name=\"nombre\" placeholder=\"Nombre (ej. Zulia)\">\n")
+    sb.append("<input name=\"capital\" placeholder=\"Capital\">\n")
     sb.append("<button type=\"submit\">Crear zona</button>\n")
     sb.append("</form>\n")
     // Zonas existentes
@@ -304,29 +339,56 @@ fn render_admin_baquiano(csrf: String) -> String {
     while i < ids.length() {
         let id: String = ids[i]
         let nm: String = kv_get(h, "baq:zone:" + id)
+        let capital: String = kv_get(h, "baq:zone:" + id + ":capital")
+        let descraw: String = kv_get(h, "baq:zone:" + id + ":desc")
+        let desc: String = descraw.replace("~~P~~", "\n")
+        let facts: Array = kv_lrange(h, "baq:zone:" + id + ":facts", 0, -1)
+        let munis: Array = kv_lrange(h, "baq:zone:" + id + ":municipios", 0, -1)
         let sites: Array = kv_lrange(h, "baq:zone:" + id + ":sites", 0, -1)
+        let poblados: Array = kv_lrange(h, "baq:zone:" + id + ":poblados", 0, -1)
         sb.append("<div class=\"admin-zone\">\n")
         sb.append("<div class=\"admin-zone-head\"><h3>")
         sb.append(html_escape(nm))
         sb.append(" <small>/baquiano/")
         sb.append(html_escape(id))
         sb.append("</small></h3>\n")
-        // Borrar zona
-        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Borrar la zona y sus sitios?');\">")
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Borrar la zona y todo su contenido?');\">")
         sb.append(csrf_input(csrf))
         sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_delete\"><input type=\"hidden\" name=\"id\" value=\"")
         sb.append(aesc(id))
         sb.append("\"><button type=\"submit\" class=\"admin-del\">Borrar zona</button></form>\n")
         sb.append("</div>\n")
-        // Renombrar zona
+        // Editar zona: nombre + capital + panorama
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_edit\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><div class=\"admin-row\"><input name=\"nombre\" placeholder=\"Nombre\" value=\"")
+        sb.append(aesc(nm))
+        sb.append("\"><input name=\"capital\" placeholder=\"Capital\" value=\"")
+        sb.append(aesc(capital))
+        sb.append("\"></div>")
+        sb.append("<textarea name=\"descripcion\" rows=\"4\" placeholder=\"Panorama general (una linea en blanco = parrafo nuevo)\">")
+        sb.append(html_escape(desc))
+        sb.append("</textarea><button type=\"submit\">Guardar zona</button></form>\n")
+        // Datos practicos
+        sb.append("<h4>Datos practicos</h4>\n")
+        admin_del_list(sb, csrf, id, "fact_delete", facts)
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-site-add\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"fact_add\"><input type=\"hidden\" name=\"zone\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><input name=\"etiqueta\" placeholder=\"Etiqueta (ej. Clima)\" required><textarea name=\"valor\" rows=\"2\" placeholder=\"Valor\"></textarea><button type=\"submit\">Añadir dato</button></form>\n")
+        // Municipios
+        sb.append("<h4>Municipios</h4>\n")
+        admin_del_list(sb, csrf, id, "muni_delete", munis)
         sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-row\">")
         sb.append(csrf_input(csrf))
-        sb.append("<input type=\"hidden\" name=\"act\" value=\"zone_rename\"><input type=\"hidden\" name=\"id\" value=\"")
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"muni_add\"><input type=\"hidden\" name=\"zone\" value=\"")
         sb.append(aesc(id))
-        sb.append("\"><input name=\"nombre\" placeholder=\"Nuevo nombre\" value=\"")
-        sb.append(aesc(nm))
-        sb.append("\"><button type=\"submit\">Renombrar</button></form>\n")
-        // Sitios
+        sb.append("\"><input name=\"nombre\" placeholder=\"Municipio\" required><input name=\"capital\" placeholder=\"Capital\"><button type=\"submit\">Añadir municipio</button></form>\n")
+        // Destinos (sitios)
+        sb.append("<h4>Destinos turisticos</h4>\n")
         var j: int = 0
         while j < sites.length() {
             let entry: String = sites[j]
@@ -347,7 +409,6 @@ fn render_admin_baquiano(csrf: String) -> String {
             sb.append("\"><button type=\"submit\" class=\"admin-del\">x</button></form></div>\n")
             j = j + 1
         }
-        // Añadir sitio
         sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-site-add\">")
         sb.append(csrf_input(csrf))
         sb.append("<input type=\"hidden\" name=\"act\" value=\"site_add\"><input type=\"hidden\" name=\"zone\" value=\"")
@@ -356,7 +417,15 @@ fn render_admin_baquiano(csrf: String) -> String {
         sb.append("<input name=\"nombre\" placeholder=\"Nombre del sitio\" required>")
         sb.append("<input name=\"categoria\" placeholder=\"Categoria (ej. Playa)\">")
         sb.append("<textarea name=\"descripcion\" rows=\"2\" placeholder=\"Descripcion\"></textarea>")
-        sb.append("<button type=\"submit\">Añadir sitio</button></form>\n")
+        sb.append("<button type=\"submit\">Añadir destino</button></form>\n")
+        // Directorio de centros poblados
+        sb.append("<h4>Directorio de centros poblados</h4>\n")
+        admin_del_list(sb, csrf, id, "poblado_delete", poblados)
+        sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-form admin-site-add\">")
+        sb.append(csrf_input(csrf))
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"poblado_add\"><input type=\"hidden\" name=\"zone\" value=\"")
+        sb.append(aesc(id))
+        sb.append("\"><input name=\"municipio\" placeholder=\"Municipio\" required><textarea name=\"localidades\" rows=\"2\" placeholder=\"Localidades (separadas por comas)\"></textarea><button type=\"submit\">Añadir</button></form>\n")
         sb.append("</div>\n")
         i = i + 1
     }
@@ -387,8 +456,9 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
     let act: String = form_field(req.body, "act")
     if act == "zone_create" {
         zone_create(form_field(req.body, "id"), form_field(req.body, "nombre"))
-    } else if act == "zone_rename" {
-        zone_rename(form_field(req.body, "id"), form_field(req.body, "nombre"))
+        zone_edit(form_field(req.body, "id"), form_field(req.body, "nombre"), form_field(req.body, "capital"), "")
+    } else if act == "zone_edit" {
+        zone_edit(form_field(req.body, "id"), form_field(req.body, "nombre"), form_field(req.body, "capital"), form_field(req.body, "descripcion"))
     } else if act == "zone_delete" {
         zone_delete(form_field(req.body, "id"))
     } else if act == "site_add" {
@@ -396,6 +466,20 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
     } else if act == "site_delete" {
         let idx: int = string_to_int(form_field(req.body, "idx"))
         site_delete(form_field(req.body, "zone"), idx)
+    } else if act == "fact_add" {
+        fact_add(form_field(req.body, "zone"), form_field(req.body, "etiqueta"), form_field(req.body, "valor"))
+    } else if act == "fact_delete" {
+        fact_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+    } else if act == "muni_add" {
+        muni_add(form_field(req.body, "zone"), form_field(req.body, "nombre"), form_field(req.body, "capital"))
+    } else if act == "muni_delete" {
+        muni_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+    } else if act == "poblado_add" {
+        poblado_add(form_field(req.body, "zone"), form_field(req.body, "municipio"), form_field(req.body, "localidades"))
+    } else if act == "poblado_delete" {
+        poblado_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+    } else if act == "baquiano_import" {
+        baquiano_import()
     }
     return redirect("/admin/baquiano")
 }

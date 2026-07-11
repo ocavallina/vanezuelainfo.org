@@ -55,6 +55,26 @@ fn zone_sites_key(id: String) -> String {
     return "baq:zone:" + id + ":sites"
 }
 
+fn zone_capital_key(id: String) -> String {
+    return "baq:zone:" + id + ":capital"
+}
+
+fn zone_desc_key(id: String) -> String {
+    return "baq:zone:" + id + ":desc"
+}
+
+fn zone_facts_key(id: String) -> String {
+    return "baq:zone:" + id + ":facts"
+}
+
+fn zone_munis_key(id: String) -> String {
+    return "baq:zone:" + id + ":municipios"
+}
+
+fn zone_poblados_key(id: String) -> String {
+    return "baq:zone:" + id + ":poblados"
+}
+
 // ── Lectura ──────────────────────────────────────────────────────────────────
 
 // Ids de zona (en orden de creacion).
@@ -147,8 +167,260 @@ pub fn zone_delete(id_raw: String) -> bool {
     }
     kv_del(h, zone_meta_key(id))
     kv_del(h, zone_sites_key(id))
+    kv_del(h, zone_capital_key(id))
+    kv_del(h, zone_desc_key(id))
+    kv_del(h, zone_facts_key(id))
+    kv_del(h, zone_munis_key(id))
+    kv_del(h, zone_poblados_key(id))
     kv_close(h)
     return found
+}
+
+// ── Campos enriquecidos de la zona (capital, panorama, datos, municipios, poblados) ──
+
+// Edita nombre + capital + descripcion de una zona existente. true si OK.
+pub fn zone_edit(id_raw: String, name_raw: String, cap_raw: String, desc_raw: String) -> bool {
+    let id: String = md_trim(id_raw)
+    if !is_valid_slug(id) {
+        return false
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return false
+    }
+    if !zone_exists_h(h, id) {
+        kv_close(h)
+        return false
+    }
+    let nm: String = baq_clean(name_raw, 60)
+    if nm.length() > 0 {
+        kv_set(h, zone_meta_key(id), nm)
+    }
+    kv_set(h, zone_capital_key(id), baq_clean(cap_raw, 60))
+    // Codifica saltos de linea (textarea) como centinela "~~P~~" antes de guardar
+    // (el cliente nyx-kv trunca valores con \n real).
+    let de: String = desc_raw.replace("\r\n", "~~P~~").replace("\n", "~~P~~")
+    kv_set(h, zone_desc_key(id), baq_clean(de, 8000))
+    kv_close(h)
+    return true
+}
+
+// Añade un dato practico (etiqueta|valor). "" si OK o el texto del error.
+pub fn fact_add(zone_raw: String, label_raw: String, val_raw: String) -> String {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return "Zona invalida"
+    }
+    let label: String = baq_clean(label_raw, 60)
+    if label.length() == 0 {
+        return "La etiqueta es obligatoria"
+    }
+    let val: String = baq_clean(val_raw, 2000)
+    let h: int = baq_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    if !zone_exists_h(h, zone) {
+        kv_close(h)
+        return "Esa zona no existe"
+    }
+    kv_rpush(h, zone_facts_key(zone), label + "|" + val)
+    kv_close(h)
+    return ""
+}
+
+// Añade un municipio (nombre|capital). "" si OK o el texto del error.
+pub fn muni_add(zone_raw: String, name_raw: String, cap_raw: String) -> String {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return "Zona invalida"
+    }
+    let nm: String = baq_clean(name_raw, 80)
+    if nm.length() == 0 {
+        return "El nombre del municipio es obligatorio"
+    }
+    let cap: String = baq_clean(cap_raw, 80)
+    let h: int = baq_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    if !zone_exists_h(h, zone) {
+        kv_close(h)
+        return "Esa zona no existe"
+    }
+    kv_rpush(h, zone_munis_key(zone), nm + "|" + cap)
+    kv_close(h)
+    return ""
+}
+
+// Añade una entrada del directorio de centros poblados (municipio|localidades).
+pub fn poblado_add(zone_raw: String, muni_raw: String, locs_raw: String) -> String {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return "Zona invalida"
+    }
+    let muni: String = baq_clean(muni_raw, 80)
+    if muni.length() == 0 {
+        return "El municipio es obligatorio"
+    }
+    let locs: String = baq_clean(locs_raw, 4000)
+    let h: int = baq_conn()
+    if h < 0 {
+        return "Almacen no disponible"
+    }
+    if !zone_exists_h(h, zone) {
+        kv_close(h)
+        return "Esa zona no existe"
+    }
+    kv_rpush(h, zone_poblados_key(zone), muni + "|" + locs)
+    kv_close(h)
+    return ""
+}
+
+// Borra por indice una entrada de una lista `key` de la zona (reconstruye la lista).
+fn list_delete(zone_raw: String, keyfn_which: int, index: int) -> bool {
+    let zone: String = md_trim(zone_raw)
+    if !is_valid_slug(zone) {
+        return false
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return false
+    }
+    var key: String = zone_facts_key(zone)
+    if keyfn_which == 1 {
+        key = zone_munis_key(zone)
+    } else if keyfn_which == 2 {
+        key = zone_poblados_key(zone)
+    }
+    let items: Array = kv_lrange(h, key, 0, -1)
+    if index < 0 or index >= items.length() {
+        kv_close(h)
+        return false
+    }
+    var survivors: Array = []
+    var i: int = 0
+    while i < items.length() {
+        if i != index {
+            let s: String = items[i]
+            survivors.push(s)
+        }
+        i = i + 1
+    }
+    kv_del(h, key)
+    var j: int = 0
+    while j < survivors.length() {
+        let s2: String = survivors[j]
+        kv_rpush(h, key, s2)
+        j = j + 1
+    }
+    kv_close(h)
+    return true
+}
+
+pub fn fact_delete(zone_raw: String, index: int) -> bool {
+    return list_delete(zone_raw, 0, index)
+}
+
+pub fn muni_delete(zone_raw: String, index: int) -> bool {
+    return list_delete(zone_raw, 1, index)
+}
+
+pub fn poblado_delete(zone_raw: String, index: int) -> bool {
+    return list_delete(zone_raw, 2, index)
+}
+
+// ── Importacion desde content/baquiano-seed.txt ──────────────────────────────
+// Una linea por registro; campos separados por "~~~" (token que no aparece en prosa);
+// \n reales escapados como "\n" literal en los campos de texto (D/S):
+//   Z~~~id~~~nombre~~~capital
+//   D~~~id~~~desc            (panorama; "\n" escapados)
+//   F~~~id~~~etiqueta~~~valor
+//   M~~~id~~~municipio~~~capital
+//   S~~~id~~~nombre~~~categoria~~~desc
+//   P~~~id~~~municipio~~~localidades
+// Idempotente: borra TODAS las zonas actuales y recarga. Devuelve nº de zonas (-1 si falla).
+pub fn baquiano_import() -> int {
+    let raw: String = read_file("content/baquiano-seed.txt")
+    if raw.length() == 0 {
+        return -1
+    }
+    let h: int = baq_conn()
+    if h < 0 {
+        return -1
+    }
+    // WIPE de lo existente
+    let old: Array = zones_list_h(h)
+    var oi: int = 0
+    while oi < old.length() {
+        let z: String = old[oi]
+        kv_del(h, zone_meta_key(z))
+        kv_del(h, zone_sites_key(z))
+        kv_del(h, zone_capital_key(z))
+        kv_del(h, zone_desc_key(z))
+        kv_del(h, zone_facts_key(z))
+        kv_del(h, zone_munis_key(z))
+        kv_del(h, zone_poblados_key(z))
+        oi = oi + 1
+    }
+    kv_del(h, "baq:zones")
+    // CARGA
+    let lines: Array = raw.split("\n")
+    var count: int = 0
+    var i: int = 0
+    while i < lines.length() {
+        let line: String = lines[i]
+        if line.length() > 2 {
+            let f: Array = line.split("~~~")
+            if f.length() >= 3 {
+                let typ: String = f[0]
+                let id: String = md_trim(f[1])
+                if is_valid_slug(id) {
+                    if typ == "Z" {
+                        var nm: String = baq_clean(f[2], 60)
+                        if nm.length() == 0 { nm = id }
+                        kv_set(h, zone_meta_key(id), nm)
+                        kv_rpush(h, "baq:zones", id)
+                        if f.length() >= 4 {
+                            kv_set(h, zone_capital_key(id), baq_clean(f[3], 60))
+                        }
+                        count = count + 1
+                    } else if typ == "D" {
+                        let d0: String = f[2]
+                        kv_set(h, zone_desc_key(id), baq_clean(d0, 8000))
+                    } else if typ == "F" and f.length() >= 4 {
+                        let lb: String = baq_clean(f[2], 60)
+                        let vl: String = baq_clean(f[3], 2000)
+                        if lb.length() > 0 {
+                            kv_rpush(h, zone_facts_key(id), lb + "|" + vl)
+                        }
+                    } else if typ == "M" and f.length() >= 4 {
+                        let mn: String = baq_clean(f[2], 80)
+                        let mc: String = baq_clean(f[3], 80)
+                        if mn.length() > 0 {
+                            kv_rpush(h, zone_munis_key(id), mn + "|" + mc)
+                        }
+                    } else if typ == "S" and f.length() >= 5 {
+                        let sn: String = baq_clean(f[2], 80)
+                        let sc: String = baq_clean(f[3], 40)
+                        let sd: String = baq_clean(f[4], 900)
+                        if sn.length() > 0 {
+                            kv_rpush(h, zone_sites_key(id), sn + "|" + sc + "|" + sd)
+                        }
+                    } else if typ == "P" and f.length() >= 4 {
+                        let pm: String = baq_clean(f[2], 80)
+                        let pl: String = baq_clean(f[3], 4000)
+                        if pm.length() > 0 {
+                            kv_rpush(h, zone_poblados_key(id), pm + "|" + pl)
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    kv_close(h)
+    return count
 }
 
 // Añade un sitio a una zona. Devuelve "" si OK o el texto del error.
@@ -212,7 +484,43 @@ pub fn site_delete(zone_raw: String, index: int) -> bool {
 }
 
 // ── Render de un sitio ("nombre|categoria|descripcion") como tarjeta ─────────
-fn render_site_entry(entry: String) -> String {
+// Percent-encoding minimo (local, sin externs: evita el gotcha de redefinicion de
+// nyx_url_*). Conserva [A-Za-z0-9], codifica el resto como %XX.
+fn baq_hex2(b: int) -> String {
+    var v: int = b
+    if v < 0 {
+        v = v + 256
+    }
+    let digits: String = "0123456789ABCDEF"
+    let hi: int = v / 16
+    let lo: int = v - hi * 16
+    return digits.substring(hi, hi + 1) + digits.substring(lo, lo + 1)
+}
+
+fn baq_urlenc(s: String) -> String {
+    var sb: StringBuilder = StringBuilder.new()
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        if (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) {
+            sb.append(s.substring(i, i + 1))
+        } else {
+            sb.append("%")
+            sb.append(baq_hex2(c))
+        }
+        i = i + 1
+    }
+    return sb.to_string()
+}
+
+// Enlace de busqueda en Google Maps para "<sitio>, <zona>, Venezuela" (sin coordenadas).
+fn maps_url(name: String, zone_label: String) -> String {
+    let q: String = name + ", " + zone_label + ", Venezuela"
+    return "https://www.google.com/maps/search/?api=1&query=" + baq_urlenc(q)
+}
+
+fn render_site_entry(entry: String, zone_label: String) -> String {
     let p1: int = entry.indexOf("|")
     var nm: String = entry
     var cat: String = ""
@@ -244,6 +552,9 @@ fn render_site_entry(entry: String) -> String {
         sb.append(html_escape(desc))
         sb.append("</p>")
     }
+    sb.append("<a class=\"baq-map\" href=\"")
+    sb.append(maps_url(nm, zone_label))
+    sb.append("\" target=\"_blank\" rel=\"noopener\">&#128205; Ver en Google Maps</a>")
     sb.append("</div>\n")
     return sb.to_string()
 }
@@ -292,7 +603,117 @@ pub fn render_baquiano_index() -> String {
     return sb.to_string()
 }
 
-// Pagina de una zona: cabecera + sitios. Devuelve "" si la zona no existe.
+// Panorama (desc con \n) -> parrafos.
+fn render_desc_html(desc: String) -> String {
+    if desc.length() == 0 {
+        return ""
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<div class=\"baq-desc\">\n")
+    // Los parrafos van separados por el centinela "~~P~~" (NO por \n real: el
+    // cliente nyx-kv trunca valores con salto de linea al escribir).
+    let lines: Array = desc.split("~~P~~")
+    var i: int = 0
+    while i < lines.length() {
+        let ln: String = lines[i]
+        let t: String = md_trim(ln)
+        if t.length() > 0 {
+            sb.append("<p>")
+            sb.append(html_escape(t))
+            sb.append("</p>\n")
+        }
+        i = i + 1
+    }
+    sb.append("</div>\n")
+    return sb.to_string()
+}
+
+// Datos practicos (etiqueta|valor) -> lista de definiciones.
+fn render_facts_html(facts: Array) -> String {
+    if facts.length() == 0 {
+        return ""
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<h2>Datos practicos</h2>\n<dl class=\"baq-facts\">\n")
+    var i: int = 0
+    while i < facts.length() {
+        let e: String = facts[i]
+        let p: int = e.indexOf("|")
+        var lb: String = e
+        var vl: String = ""
+        if p >= 0 {
+            lb = e.substring(0, p)
+            vl = e.substring(p + 1, e.length())
+        }
+        sb.append("<dt>")
+        sb.append(html_escape(lb))
+        sb.append("</dt><dd>")
+        sb.append(html_escape(vl))
+        sb.append("</dd>\n")
+        i = i + 1
+    }
+    sb.append("</dl>\n")
+    return sb.to_string()
+}
+
+// Municipios (nombre|capital) -> tabla.
+fn render_munis_html(munis: Array) -> String {
+    if munis.length() == 0 {
+        return ""
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<h2>Municipios</h2>\n<table class=\"baq-muni\"><thead><tr><th>Municipio</th><th>Capital</th></tr></thead><tbody>\n")
+    var i: int = 0
+    while i < munis.length() {
+        let e: String = munis[i]
+        let p: int = e.indexOf("|")
+        var mn: String = e
+        var mc: String = ""
+        if p >= 0 {
+            mn = e.substring(0, p)
+            mc = e.substring(p + 1, e.length())
+        }
+        sb.append("<tr><td>")
+        sb.append(html_escape(mn))
+        sb.append("</td><td>")
+        sb.append(html_escape(mc))
+        sb.append("</td></tr>\n")
+        i = i + 1
+    }
+    sb.append("</tbody></table>\n")
+    return sb.to_string()
+}
+
+// Directorio de centros poblados (municipio|localidades) -> bloque colapsable.
+fn render_poblados_html(poblados: Array) -> String {
+    if poblados.length() == 0 {
+        return ""
+    }
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("<details class=\"baq-poblados\"><summary>Directorio de centros poblados</summary>\n")
+    var i: int = 0
+    while i < poblados.length() {
+        let e: String = poblados[i]
+        let p: int = e.indexOf("|")
+        var mu: String = e
+        var lo: String = ""
+        if p >= 0 {
+            mu = e.substring(0, p)
+            lo = e.substring(p + 1, e.length())
+        }
+        sb.append("<p><strong>")
+        sb.append(html_escape(mu))
+        sb.append("</strong>: ")
+        sb.append(html_escape(lo))
+        sb.append("</p>\n")
+        i = i + 1
+    }
+    sb.append("</details>\n")
+    return sb.to_string()
+}
+
+// Pagina de una zona: cabecera + panorama + datos + municipios + destinos + directorio.
+// Devuelve "" si la zona no existe.
 pub fn render_baquiano_zone(id_raw: String) -> String {
     let id: String = md_trim(id_raw)
     if !is_valid_slug(id) {
@@ -307,29 +728,45 @@ pub fn render_baquiano_zone(id_raw: String) -> String {
         return ""
     }
     let nm: String = kv_get(h, zone_meta_key(id))
+    let capital: String = kv_get(h, zone_capital_key(id))
+    let desc: String = kv_get(h, zone_desc_key(id))
+    let facts: Array = kv_lrange(h, zone_facts_key(id), 0, -1)
+    let munis: Array = kv_lrange(h, zone_munis_key(id), 0, -1)
     let sites: Array = kv_lrange(h, zone_sites_key(id), 0, -1)
+    let poblados: Array = kv_lrange(h, zone_poblados_key(id), 0, -1)
     kv_close(h)
     var label: String = nm
     if label.length() == 0 {
         label = id
     }
     var sb: StringBuilder = StringBuilder.new()
-    sb.append("<section class=\"baquiano\">\n")
+    sb.append("<section class=\"baquiano baquiano-zone\">\n")
     sb.append("<p><a href=\"/baquiano\">&larr; Todas las zonas</a></p>\n")
     sb.append("<h1>")
     sb.append(html_escape(label))
     sb.append("</h1>\n")
-    if sites.length() == 0 {
-        sb.append("<p class=\"hint\">Aun no hay sitios en esta zona.</p>\n")
-    } else {
-        sb.append("<div class=\"baq-sites\">\n")
+    if capital.length() > 0 {
+        sb.append("<p class=\"baq-capital\">Capital: <strong>")
+        sb.append(html_escape(capital))
+        sb.append("</strong></p>\n")
+    }
+    sb.append(render_desc_html(desc))
+    // Destinos turisticos (sitios)
+    if sites.length() > 0 {
+        sb.append("<h2>Destinos turisticos</h2>\n<div class=\"baq-sites\">\n")
         var i: int = 0
         while i < sites.length() {
             let entry: String = sites[i]
-            sb.append(render_site_entry(entry))
+            sb.append(render_site_entry(entry, label))
             i = i + 1
         }
         sb.append("</div>\n")
+    }
+    sb.append(render_facts_html(facts))
+    sb.append(render_munis_html(munis))
+    sb.append(render_poblados_html(poblados))
+    if sites.length() == 0 and desc.length() == 0 and facts.length() == 0 {
+        sb.append("<p class=\"hint\">Aun no hay informacion en esta zona.</p>\n")
     }
     sb.append("</section>\n")
     return sb.to_string()

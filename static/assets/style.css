@@ -614,6 +614,21 @@ a { color: var(--enlace); }
 .baq-site-head h3 { margin: 0; color: var(--enlace); font-size: 1.05rem; }
 .baq-cat { background: var(--amarillo); color: var(--tinta); border-radius: 999px; padding: 2px 10px; font-size: .72rem; font-weight: 700; }
 .baq-site p { margin: 8px 0 0; color: var(--tinta); font-size: .95rem; }
+.baq-map { display: inline-block; margin-top: 10px; font-size: .85rem; font-weight: 700; color: var(--enlace); text-decoration: none; }
+.baq-map:hover { text-decoration: underline; }
+/* Zona enriquecida (guia turistica) */
+.baquiano-zone h2 { margin: 26px 0 10px; font-size: 1.2rem; border-bottom: 2px solid var(--borde); padding-bottom: 4px; }
+.baq-capital { color: var(--gris); font-size: .95rem; margin: 2px 0 14px; }
+.baq-desc p { margin: 0 0 10px; color: var(--tinta); line-height: 1.6; }
+.baq-facts { display: grid; grid-template-columns: 1fr; gap: 0; margin: 0; }
+.baq-facts dt { font-weight: 700; color: var(--enlace); margin-top: 10px; }
+.baq-facts dd { margin: 2px 0 0; color: var(--tinta); line-height: 1.5; }
+.baq-muni { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.baq-muni th, .baq-muni td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--borde); }
+.baq-muni thead th { background: var(--azul); color: #fff; }
+.baq-poblados { margin-top: 20px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 10px 16px; }
+.baq-poblados summary { cursor: pointer; font-weight: 700; color: var(--enlace); }
+.baq-poblados p { margin: 8px 0 0; color: var(--tinta); font-size: .9rem; line-height: 1.5; }
 
 /* ── Panel admin ────────────────────────────────────────────────── */
 .admin h1 { color: var(--enlace); margin: 6px 0; }
