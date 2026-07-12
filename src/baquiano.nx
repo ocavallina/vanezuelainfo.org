@@ -345,8 +345,10 @@ pub fn poblado_delete(zone_raw: String, index: int) -> bool {
 //   M~~~id~~~municipio~~~capital
 //   S~~~id~~~nombre~~~categoria~~~desc
 //   P~~~id~~~municipio~~~localidades
-// Idempotente: borra TODAS las zonas actuales y recarga. Devuelve nº de zonas (-1 si falla).
-pub fn baquiano_import() -> int {
+// Carga el seed. wipe=1 borra todo y recarga (reemplazo total); wipe=0 NO borra (restaura
+// sobre estado vacio/parcial, p.ej. tras perdida de datos). load_sites=0 NO toca los :sites
+// (para conservar imagenes ya buscadas). Devuelve nº de zonas (-1 si falla).
+pub fn baquiano_import_ex(wipe: int, load_sites: int) -> int {
     let raw: String = read_file("content/baquiano-seed.txt")
     if raw.length() == 0 {
         return -1
@@ -355,21 +357,23 @@ pub fn baquiano_import() -> int {
     if h < 0 {
         return -1
     }
-    // WIPE de lo existente
-    let old: Array = zones_list_h(h)
-    var oi: int = 0
-    while oi < old.length() {
-        let z: String = old[oi]
-        kv_del(h, zone_meta_key(z))
-        kv_del(h, zone_sites_key(z))
-        kv_del(h, zone_capital_key(z))
-        kv_del(h, zone_desc_key(z))
-        kv_del(h, zone_facts_key(z))
-        kv_del(h, zone_munis_key(z))
-        kv_del(h, zone_poblados_key(z))
-        oi = oi + 1
+    if wipe == 1 {
+        let old: Array = zones_list_h(h)
+        var oi: int = 0
+        while oi < old.length() {
+            let z: String = old[oi]
+            kv_del(h, zone_meta_key(z))
+            kv_del(h, zone_sites_key(z))
+            kv_del(h, zone_capital_key(z))
+            kv_del(h, zone_desc_key(z))
+            kv_del(h, zone_facts_key(z))
+            kv_del(h, zone_munis_key(z))
+            kv_del(h, zone_poblados_key(z))
+            kv_del(h, zone_img_key(z))
+            oi = oi + 1
+        }
+        kv_del(h, "baq:zones")
     }
-    kv_del(h, "baq:zones")
     // CARGA
     let lines: Array = raw.split("\n")
     var count: int = 0
@@ -406,7 +410,7 @@ pub fn baquiano_import() -> int {
                         if mn.length() > 0 {
                             kv_rpush(h, zone_munis_key(id), mn + "|" + mc)
                         }
-                    } else if typ == "S" and f.length() >= 5 {
+                    } else if typ == "S" and f.length() >= 5 and load_sites == 1 {
                         let sn: String = baq_clean(f[2], 80)
                         let sc: String = baq_clean(f[3], 40)
                         let sd: String = baq_clean(f[4], 900)
@@ -427,6 +431,11 @@ pub fn baquiano_import() -> int {
     }
     kv_close(h)
     return count
+}
+
+// Import estandar (reemplazo total). Usado por el boton "Importar guia" del admin.
+pub fn baquiano_import() -> int {
+    return baquiano_import_ex(1, 1)
 }
 
 // Añade un sitio a una zona. Devuelve "" si OK o el texto del error.

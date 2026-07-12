@@ -315,6 +315,11 @@ fn render_admin_baquiano(csrf: String) -> String {
     sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Reemplaza TODO el contenido de Baquiano con la guia del seed. Continuar?');\">")
     sb.append(csrf_input(csrf))
     sb.append("<input type=\"hidden\" name=\"act\" value=\"baquiano_import\"><button type=\"submit\">Importar guia (seed)</button></form>\n")
+    // Restaurar texto sin borrar (recupera zonas/desc/datos/municipios/directorio del seed
+    // conservando sitios e imagenes; util tras una perdida de datos de nyx-kv).
+    sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Restaura textos faltantes del seed SIN borrar sitios ni imagenes. Continuar?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"baquiano_restore\"><button type=\"submit\">Restaurar (no destructivo)</button></form>\n")
     // Buscar imagenes (Wikipedia) en un hilo de fondo
     sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Busca imagenes faltantes en Wikipedia (tarda 1-2 min en segundo plano). Continuar?');\">")
     sb.append(csrf_input(csrf))
@@ -509,6 +514,8 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
         poblado_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
     } else if act == "baquiano_import" {
         baquiano_import()
+    } else if act == "baquiano_restore" {
+        baquiano_import_ex(0, 0)
     } else if act == "fetch_images" {
         baquiano_fetch_start(0)
     } else if act == "fetch_images_force" {
