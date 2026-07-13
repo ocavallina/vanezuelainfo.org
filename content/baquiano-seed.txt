@@ -1,5 +1,12 @@
 Z~~~amazonas~~~Amazonas~~~Puerto Ayacucho
+I~~~amazonas~~~https://upload.wikimedia.org/wikipedia/commons/2/2a/Raudales_de_Atures._Estado_Amazonas._Venezuela.JPG
 D~~~amazonas~~~Amazonas es el llamado "Estado Indigena de Amazonas", ubicado al sur del pais en la region Guayana. Es el segundo estado mas extenso de Venezuela pero el menos poblado y con menor densidad demografica del pais. Cerca de la mitad de su poblacion se identifica como indigena (pueblos piaroa, jivi, yanomami y yekuana). El castellano es el idioma oficial junto con las lenguas indigenas, reconocidas como patrimonio cultural.~~P~~Es un territorio mayoritariamente selvatico: apenas un tercio de sus vias esta asfaltado, por lo que el transporte fluvial y aereo predomina sobre el terrestre. Solo cuenta con un aeropuerto nacional, en Puerto Ayacucho.~~P~~Division politico-territorial: 7 municipios y 23 parroquias.
+F~~~amazonas~~~Clima~~~Tropical lluvioso y monzonico, con estacion seca y otra de lluvias (casi todo el ano hacia el sur). Temperatura media 22-27C, alta humedad y oscilacion termica diaria notable (hasta 15C entre dia y noche).
+F~~~amazonas~~~Gastronomia~~~Cocina de raiz indigena basada en pescado de rio (payara, morocoto, curvina, lau lau), yuca amarga (casabe y farina), platano y frutos silvestres (seje, copoazu, tupiro, araza). Platos: tortuga en su caparazon, ajicero, casabe; bebidas fermentadas (masato/chicha de yuca, yare, cachiri). Mercado indigena de Puerto Ayacucho (jue-sab); restaurante La Pusana.
+F~~~amazonas~~~Museos~~~Museo Etnologico de Amazonas "Monsenor Enzo Ceccarelli", dedicado a las culturas indigenas de la region.
+F~~~amazonas~~~Hoteles y posadas~~~Oferta concentrada en Puerto Ayacucho (basicos a medios) y campamentos/posadas de expedicion (Autana, Canaima, Orinoco), contratados con guia y transporte fluvial. Fuera de la capital, alojamiento rustico (churuatas, hamacas) en comunidades indigenas o campamentos ecoturisticos.
+F~~~amazonas~~~Actividad economica principal~~~Agricultura de subsistencia, pesca, turismo (eco y etnoturismo) y, de forma menos regulada, mineria de oro y diamantes en reservas de biosfera (actividad de fuerte controversia ambiental).
+F~~~amazonas~~~Personajes destacados~~~Nelson Mendez, cocinero de Puerto Ayacucho conocido como "el Chaman de la gastronomia" venezolana; Rafael Cartay, economista e historiador especializado en cocina amazonica.
 M~~~amazonas~~~Atures~~~Puerto Ayacucho
 M~~~amazonas~~~Autana~~~Isla Raton
 M~~~amazonas~~~Alto Orinoco~~~La Esmeralda
@@ -7,18 +14,12 @@ M~~~amazonas~~~Atabapo~~~San Fernando de Atabapo
 M~~~amazonas~~~Manapiare~~~San Juan de Manapiare
 M~~~amazonas~~~Maroa (Guainia)~~~Maroa
 M~~~amazonas~~~Rio Negro~~~San Carlos de Rio Negro
-S~~~amazonas~~~Puerto Ayacucho~~~Capital~~~Ciudad de acceso principal a la selva amazonica venezolana (~135.000 hab.), con fuerte identidad indigena e infraestructura turistica basica. Puntos de interes: Tobogan de la Selva (gran laja natural por la que resbala el agua, a 50 km por la via Samariapo); Cerro Autana (tepuy sagrado piaroa, el "arbol de la vida"); Monumentos Naturales Cerro Pintado y Piedra de la Tortuga (petroglifos); Petroglifo Piedra Pintada; Plaza Indigena / Romulo Gallegos (mercado artesanal); Museo Etnologico "Monsenor Enzo Ceccarelli"; La Casa sobre la Piedra; Raudales de Atures.
-S~~~amazonas~~~San Fernando de Atabapo~~~Pueblo~~~Pueblo fronterizo en la confluencia de los rios Orinoco, Atabapo y Guaviare; antigua capital historica del Territorio Amazonas.
-S~~~amazonas~~~San Carlos de Rio Negro~~~Pueblo~~~Poblado fronterizo con Colombia y Brasil, punto de partida para explorar la cuenca del rio Negro.
-S~~~amazonas~~~San Juan de Manapiare~~~Pueblo~~~Asentamiento multietnico (piaroa, guahibo, maco) en un valle fertil; centro turistico emergente de la region.
-S~~~amazonas~~~Maroa~~~Pueblo~~~Pueblo fundado en 1760, con relieve de mesetas y selva tropical.
-S~~~amazonas~~~La Esmeralda~~~Pueblo~~~Asentamiento en el nacimiento del rio Orinoco, el mas importante de Venezuela.
-F~~~amazonas~~~Clima~~~Tropical lluvioso y monzonico, con estacion seca y otra de lluvias (casi todo el ano hacia el sur). Temperatura media 22-27C, alta humedad y oscilacion termica diaria notable (hasta 15C entre dia y noche).
-F~~~amazonas~~~Gastronomia~~~Cocina de raiz indigena basada en pescado de rio (payara, morocoto, curvina, lau lau), yuca amarga (casabe y farina), platano y frutos silvestres (seje, copoazu, tupiro, araza). Platos: tortuga en su caparazon, ajicero, casabe; bebidas fermentadas (masato/chicha de yuca, yare, cachiri). Mercado indigena de Puerto Ayacucho (jue-sab); restaurante La Pusana.
-F~~~amazonas~~~Museos~~~Museo Etnologico de Amazonas "Monsenor Enzo Ceccarelli", dedicado a las culturas indigenas de la region.
-F~~~amazonas~~~Hoteles y posadas~~~Oferta concentrada en Puerto Ayacucho (basicos a medios) y campamentos/posadas de expedicion (Autana, Canaima, Orinoco), contratados con guia y transporte fluvial. Fuera de la capital, alojamiento rustico (churuatas, hamacas) en comunidades indigenas o campamentos ecoturisticos.
-F~~~amazonas~~~Actividad economica principal~~~Agricultura de subsistencia, pesca, turismo (eco y etnoturismo) y, de forma menos regulada, mineria de oro y diamantes en reservas de biosfera (actividad de fuerte controversia ambiental).
-F~~~amazonas~~~Personajes destacados~~~Nelson Mendez, cocinero de Puerto Ayacucho conocido como "el Chaman de la gastronomia" venezolana; Rafael Cartay, economista e historiador especializado en cocina amazonica.
+S~~~amazonas~~~Puerto Ayacucho~~~Capital~~~Ciudad de acceso principal a la selva amazonica venezolana (~135.000 hab.), con fuerte identidad indigena e infraestructura turistica basica. Puntos de interes: Tobogan de la Selva (gran laja natural por la que resbala el agua, a 50 km por la via Samariapo); Cerro Autana (tepuy sagrado piaroa, el "arbol de la vida"); Monumentos Naturales Cerro Pintado y Piedra de la Tortuga (petroglifos); Petroglifo Piedra Pintada; Plaza Indigena / Romulo Gallegos (mercado artesanal); Museo Etnologico "Monsenor Enzo Ceccarelli"; La Casa sobre la Piedra; Raudales de Atures.~~~https://upload.wikimedia.org/wikipedia/commons/a/a1/Catedral_de_Puerto_Ayacucho.jpg
+S~~~amazonas~~~San Fernando de Atabapo~~~Pueblo~~~Pueblo fronterizo en la confluencia de los rios Orinoco, Atabapo y Guaviare; antigua capital historica del Territorio Amazonas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Copia_de_Puerto_Atabapo_43._2006.jpg/960px-Copia_de_Puerto_Atabapo_43._2006.jpg
+S~~~amazonas~~~San Carlos de Rio Negro~~~Pueblo~~~Poblado fronterizo con Colombia y Brasil, punto de partida para explorar la cuenca del rio Negro.~~~https://upload.wikimedia.org/wikipedia/commons/c/c0/San_Carlos_de_Rio_Negro_2002.jpg
+S~~~amazonas~~~San Juan de Manapiare~~~Pueblo~~~Asentamiento multietnico (piaroa, guahibo, maco) en un valle fertil; centro turistico emergente de la region.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Venezuela_Amazonas_location_map.svg/960px-Venezuela_Amazonas_location_map.svg.png
+S~~~amazonas~~~Maroa~~~Pueblo~~~Pueblo fundado en 1760, con relieve de mesetas y selva tropical.~~~https://upload.wikimedia.org/wikipedia/commons/4/42/Rio_Tiriquin.JPG
+S~~~amazonas~~~La Esmeralda~~~Pueblo~~~Asentamiento en el nacimiento del rio Orinoco, el mas importante de Venezuela.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/La_Esmeralda%2C_Venezuela.jpg/960px-La_Esmeralda%2C_Venezuela.jpg
 P~~~amazonas~~~Municipio Atures~~~Agua Blanca, Agua Linda, Albarical, Babilla, Boca de Paria, Carinagua, Cataniapo, Chimborazo, Churuata de Don Juan, Coromoto, entre decenas mas.
 P~~~amazonas~~~Municipio Autana~~~Anegadizo, Apure, Araguato, Barranco Blanco, Barranco Colorado, Barrancos de Grulla, Capuana, Chalana, entre otros.
 P~~~amazonas~~~Municipio Alto Orinoco~~~Amauaca, Boca Mavaca, Buenos Aires, Campamento El Cacaotal, Campamento El Gigante, Capibara, entre otras (numerosas comunidades yanomami).
@@ -27,7 +28,14 @@ P~~~amazonas~~~Municipio Manapiare~~~Anacadina, Aramare, Aratana, Bocon, Cabadis
 P~~~amazonas~~~Municipio Maroa (Guainia)~~~Baltazar, Banderita, Chiquichical, Comunidad, entre otros.
 P~~~amazonas~~~Municipio Rio Negro~~~Andre Tapo, Arecifral, Arubap, Barabaguite, Bruno, Catarico, Chapazon, Colon, Coromoto, entre otros.
 Z~~~anzoategui~~~Anzoategui~~~Barcelona
+I~~~anzoategui~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Flag_of_Anzo%C3%A1tegui_State_%28original_version%29.svg/960px-Flag_of_Anzo%C3%A1tegui_State_%28original_version%29.svg.png
 D~~~anzoategui~~~Anzoategui esta ubicado en la region nororiental del pais, con costa sobre el mar Caribe. Es el sexto estado mas extenso de Venezuela y uno de los mas poblados, con una economia dominada por la actividad petrolera.~~P~~En 2018 fue distinguido como Capital Americana de la Cultura, reconociendo su arquitectura caribeña, gastronomia y diversidad geografica.
+F~~~anzoategui~~~Clima~~~Cuatro tipos: semiarido calido en costa (40-45C), tropical de sabana (27C), oceanico en elevaciones (18C) y de montana. Lluvia: 256 dias/ano. Mejor epoca: diciembre-abril.
+F~~~anzoategui~~~Gastronomia~~~Identidad oriental venezolana: pastel de morrocoy, sopa de tortuga, talkari de chivo, hervido de res, pescados y mariscos frescos, huevas de lisa y empanadas. Bebidas: agua de coco, guarapo de pina, guarapo de papelon.
+F~~~anzoategui~~~Museos~~~Ateneo de Barcelona (1971, coleccion pintura venezolana 1940-1960), Teatro Cajigal, Museo Clarines, Museo Dimitrius Demu (Lecheria).
+F~~~anzoategui~~~Hoteles y posadas~~~Una de las mayores capacidades hoteleras del oriente, desde cinco estrellas hasta posadas familiares en Barcelona, Puerto La Cruz, Lecheria y Guanta; posadas tambien en Mochima.
+F~~~anzoategui~~~Actividad economica principal~~~Petroleo y petroquimica (Complejo Petroquimico Jose Antonio Anzoategui, refinerias Puerto La Cruz y San Roque), con aporte creciente del turismo, pesca y agricultura.
+F~~~anzoategui~~~Personajes destacados~~~Jose Antonio Anzoategui (procer independencia, Barcelona); Susana Duijm (Miss Mundo 1955); Olga Antonetti Nuñez (Miss Venezuela 1962).
 M~~~anzoategui~~~Simon Bolivar~~~Barcelona
 M~~~anzoategui~~~Juan Antonio Sotillo~~~Puerto La Cruz
 M~~~anzoategui~~~Guanta~~~Guanta
@@ -38,22 +46,23 @@ M~~~anzoategui~~~Jose Gregorio Monagas~~~Mapire
 M~~~anzoategui~~~Juan Manuel Cajigal~~~Onoto
 M~~~anzoategui~~~Santa Ana~~~Santa Ana
 M~~~anzoategui~~~Sir Arthur Mc Gregor~~~El Chaparro
-S~~~anzoategui~~~Barcelona~~~Capital~~~Fundada en 1671, conserva centro historico colonial con Catedral de San Cristobal y Casa Fuerte.
-S~~~anzoategui~~~Puerto La Cruz~~~Ciudad~~~Puerta de entrada maritima al Parque Nacional Mochima con Paseo Colon como eje de paseo costero.
-S~~~anzoategui~~~Lecheria~~~Balneario~~~Zona de desarrollo turistico reciente con centros comerciales frente al mar y embarcaderos hacia islas de Mochima.
-S~~~anzoategui~~~El Morro~~~Complejo~~~Complejo turistico residencial sobre canales navegables, similar a Venecia caribeno, mas de 10.000 hectareas.
-S~~~anzoategui~~~Parque Nacional Mochima~~~Parque~~~94.935 hectareas entre montana y mar, mas de 20 islas y playas de arena blanca. Puntos de interes: paseos en penero/lancha hacia islas, snorkel y buceo en arrecifes de coral, avistamiento de delfines, senderismo.
-S~~~anzoategui~~~El Tigre~~~Ciudad~~~Ciudad del interior con fuerte actividad petrolera, punto de transito hacia Bolivar y Guarico.
-S~~~anzoategui~~~Anaco~~~Ciudad~~~Ciudad del interior con fuerte actividad petrolera, punto de transito hacia Bolivar y Guarico.
-S~~~anzoategui~~~Laguna de Unare~~~Laguna~~~La laguna salobre mas grande de Venezuela, entre municipios San Juan de Capistrano, Bruzual y Pnalver, de interes para observacion de aves y paisajismo costero.
-F~~~anzoategui~~~Clima~~~Cuatro tipos: semiarido calido en costa (40-45C), tropical de sabana (27C), oceanico en elevaciones (18C) y de montana. Lluvia: 256 dias/ano. Mejor epoca: diciembre-abril.
-F~~~anzoategui~~~Gastronomia~~~Identidad oriental venezolana: pastel de morrocoy, sopa de tortuga, talkari de chivo, hervido de res, pescados y mariscos frescos, huevas de lisa y empanadas. Bebidas: agua de coco, guarapo de pina, guarapo de papelon.
-F~~~anzoategui~~~Museos~~~Ateneo de Barcelona (1971, coleccion pintura venezolana 1940-1960), Teatro Cajigal, Museo Clarines, Museo Dimitrius Demu (Lecheria).
-F~~~anzoategui~~~Hoteles y posadas~~~Una de las mayores capacidades hoteleras del oriente, desde cinco estrellas hasta posadas familiares en Barcelona, Puerto La Cruz, Lecheria y Guanta; posadas tambien en Mochima.
-F~~~anzoategui~~~Actividad economica principal~~~Petroleo y petroquimica (Complejo Petroquimico Jose Antonio Anzoategui, refinerias Puerto La Cruz y San Roque), con aporte creciente del turismo, pesca y agricultura.
-F~~~anzoategui~~~Personajes destacados~~~Jose Antonio Anzoategui (procer independencia, Barcelona); Susana Duijm (Miss Mundo 1955); Olga Antonetti Nuñez (Miss Venezuela 1962).
+S~~~anzoategui~~~Barcelona~~~Capital~~~Fundada en 1671, conserva centro historico colonial con Catedral de San Cristobal y Casa Fuerte.~~~https://upload.wikimedia.org/wikipedia/commons/1/1d/Catedral_Barcelona_Anzo%C3%A1tegui_Venezuela.jpg
+S~~~anzoategui~~~Puerto La Cruz~~~Ciudad~~~Puerta de entrada maritima al Parque Nacional Mochima con Paseo Colon como eje de paseo costero.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Parque_Nacional_Mochima_Puerto_La_cruz%2C_Edo_Anzoategui..JPG/960px-Parque_Nacional_Mochima_Puerto_La_cruz%2C_Edo_Anzoategui..JPG
+S~~~anzoategui~~~Lecheria~~~Balneario~~~Zona de desarrollo turistico reciente con centros comerciales frente al mar y embarcaderos hacia islas de Mochima.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Vista_desde_Cerro_el_Morro.jpg/960px-Vista_desde_Cerro_el_Morro.jpg
+S~~~anzoategui~~~El Morro~~~Complejo~~~Complejo turistico residencial sobre canales navegables, similar a Venecia caribeno, mas de 10.000 hectareas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/Acercando_la_vista.jpg/960px-Acercando_la_vista.jpg
+S~~~anzoategui~~~Parque Nacional Mochima~~~Parque~~~94.935 hectareas entre montana y mar, mas de 20 islas y playas de arena blanca. Puntos de interes: paseos en penero/lancha hacia islas, snorkel y buceo en arrecifes de coral, avistamiento de delfines, senderismo.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Parque_Nacional_mochima.jpg/960px-Parque_Nacional_mochima.jpg
+S~~~anzoategui~~~El Tigre~~~Ciudad~~~Ciudad del interior con fuerte actividad petrolera, punto de transito hacia Bolivar y Guarico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Venezuela_relief_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_relief_location_map_%28%2Bclaimed%29.svg.png
+S~~~anzoategui~~~Anaco~~~Ciudad~~~Ciudad del interior con fuerte actividad petrolera, punto de transito hacia Bolivar y Guarico.~~~https://upload.wikimedia.org/wikipedia/commons/a/ac/Aereo1.jpg
+S~~~anzoategui~~~Laguna de Unare~~~Laguna~~~La laguna salobre mas grande de Venezuela, entre municipios San Juan de Capistrano, Bruzual y Pnalver, de interes para observacion de aves y paisajismo costero.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Rio_unare_anzoategui_venezuela.jpg/960px-Rio_unare_anzoategui_venezuela.jpg
 Z~~~apure~~~Apure~~~San Fernando de Apure
+I~~~apure~~~https://upload.wikimedia.org/wikipedia/commons/3/3c/Vista_a%C3%A9rea_de_San_Fernando_de_Apure_%28Apure%29_y_Puerto_Miranda_%28Gu%C3%A1rico%29_y_el_R%C3%ADo_Apure._Venezuela..jpg
 D~~~apure~~~Apure es el corazon llanero de Venezuela: territorio practicamente plano, dominado por sabanas, morichales y bosques de galeria en la region de Los Llanos, al suroeste del pais.~~P~~Sirve de frontera internacional con Colombia por el sur y oeste. Inspiro a Romulo Gallegos para escribir "Dona Barbara" y fue tierra clave en la Guerra de Independencia, cuna de los legendarios Lanceros de Paez.
+F~~~apure~~~Clima~~~Tropical de sabana, 27.5C de media (min 20C, max 34.5C). Humedad hasta 79%. Lluvias mayo-noviembre, sequia diciembre-abril (mejor epoca para visitar).
+F~~~apure~~~Gastronomia~~~Cocina llanera: carne en vara, pisillo de chiguire o venado, coporo frito, bagre rayado, pabellon veguero y sancocho de pescado. Bebida: guarapo de cana.
+F~~~apure~~~Museos~~~Museo de la Cultura "Antonio Jose Torrealba Osto" (San Fernando, desde 1985) con perspectiva antropologica, ambiental y artistica.
+F~~~apure~~~Hoteles y posadas~~~Oferta concentrada en San Fernando (hasta 4 estrellas). Fuera capital: hatos ganaderos convertidos en posadas (El Cedral, El Frio) con pension completa y excursiones guiadas.
+F~~~apure~~~Actividad economica principal~~~Ganaderia bovina y bufalina extensiva, agricultura (maiz) y turismo ecologico en hatos.
+F~~~apure~~~Personajes destacados~~~Pedro Camejo (Negro Primero), lancero heroe independencia; Eneas Perdomo, cantautor musica llanera; Jose Antonio Paez, caudillo Lanceros Paez.
 M~~~apure~~~San Fernando~~~San Fernando de Apure
 M~~~apure~~~Paez~~~Guasdualito
 M~~~apure~~~Pedro Camejo~~~San Juan de Payara
@@ -61,43 +70,45 @@ M~~~apure~~~Munoz~~~Bruzual
 M~~~apure~~~Achaguas~~~Achaguas
 M~~~apure~~~Biruaca~~~Biruaca
 M~~~apure~~~Romulo Gallegos~~~Elorza
-S~~~apure~~~San Fernando de Apure~~~Capital~~~Fundada en 1788, asentada sobre el rio Apure. Incluye Catedral colonial siglo XIX, Palacio de Barbarito (arquitectura afrancesada) y Plaza Camejo con estatua lancero Pedro Camejo.
-S~~~apure~~~Hatos llaneros~~~Rural~~~Safaris fotograficos, avistamiento de garceros, fauna tipica del llano (chiguire, caiman, venado, oso palmero) en hatos como El Cedral y El Frio.
-S~~~apure~~~Achaguas~~~Pueblo~~~Pueblo ganadero celebre por Cristo de Achaguas (centro de devocion religiosa) y balnearios de Matiyure y rio Apure.
-S~~~apure~~~Elorza~~~Pueblo~~~Capital folclorica de Venezuela, sede Festival de Elorza en marzo, referente de musica y cultura llanera.
-S~~~apure~~~El Amparo~~~Pueblo~~~Poblacion fronteriza sobre rio Arauca, punto de cruce hacia Colombia.
-S~~~apure~~~Guasdualito~~~Pueblo~~~Poblacion fronteriza sobre rio Arauca, punto de cruce hacia Colombia.
-S~~~apure~~~Parque Nacional Santos Luzardo~~~Parque~~~El mas extenso con sede en municipio Pedro Camejo. Destino de turismo ecologico poco desarrollado pero de gran valor natural.
-S~~~apure~~~Parque Nacional Rio Viejo~~~Parque~~~Destino de turismo ecologico poco desarrollado pero de gran valor natural.
-S~~~apure~~~Parque Nacional El Tama~~~Parque~~~Porcion en limite con Tachira. Destino de turismo ecologico poco desarrollado pero de gran valor natural.
-S~~~apure~~~Medanos de la Soledad~~~Paisaje~~~Formaciones de dunas en pleno llano, uno de los paisajes mas singulares del estado.
-F~~~apure~~~Clima~~~Tropical de sabana, 27.5C de media (min 20C, max 34.5C). Humedad hasta 79%. Lluvias mayo-noviembre, sequia diciembre-abril (mejor epoca para visitar).
-F~~~apure~~~Gastronomia~~~Cocina llanera: carne en vara, pisillo de chiguire o venado, coporo frito, bagre rayado, pabellon veguero y sancocho de pescado. Bebida: guarapo de cana.
-F~~~apure~~~Museos~~~Museo de la Cultura "Antonio Jose Torrealba Osto" (San Fernando, desde 1985) con perspectiva antropologica, ambiental y artistica.
-F~~~apure~~~Hoteles y posadas~~~Oferta concentrada en San Fernando (hasta 4 estrellas). Fuera capital: hatos ganaderos convertidos en posadas (El Cedral, El Frio) con pension completa y excursiones guiadas.
-F~~~apure~~~Actividad economica principal~~~Ganaderia bovina y bufalina extensiva, agricultura (maiz) y turismo ecologico en hatos.
-F~~~apure~~~Personajes destacados~~~Pedro Camejo (Negro Primero), lancero heroe independencia; Eneas Perdomo, cantautor musica llanera; Jose Antonio Paez, caudillo Lanceros Paez.
+S~~~apure~~~San Fernando de Apure~~~Capital~~~Fundada en 1788, asentada sobre el rio Apure. Incluye Catedral colonial siglo XIX, Palacio de Barbarito (arquitectura afrancesada) y Plaza Camejo con estatua lancero Pedro Camejo.~~~https://upload.wikimedia.org/wikipedia/commons/3/3c/Vista_a%C3%A9rea_de_San_Fernando_de_Apure_%28Apure%29_y_Puerto_Miranda_%28Gu%C3%A1rico%29_y_el_R%C3%ADo_Apure._Venezuela..jpg
+S~~~apure~~~Hatos llaneros~~~Rural~~~Safaris fotograficos, avistamiento de garceros, fauna tipica del llano (chiguire, caiman, venado, oso palmero) en hatos como El Cedral y El Frio.~~~https://upload.wikimedia.org/wikipedia/commons/2/2b/Cazadores_venezolanos%2C_siglo_XIX.jpg
+S~~~apure~~~Achaguas~~~Pueblo~~~Pueblo ganadero celebre por Cristo de Achaguas (centro de devocion religiosa) y balnearios de Matiyure y rio Apure.~~~https://upload.wikimedia.org/wikipedia/commons/8/83/Escudo_del_Municipio_Achaguas.jpg
+S~~~apure~~~Elorza~~~Pueblo~~~Capital folclorica de Venezuela, sede Festival de Elorza en marzo, referente de musica y cultura llanera.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~apure~~~El Amparo~~~Pueblo~~~Poblacion fronteriza sobre rio Arauca, punto de cruce hacia Colombia.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Parroquia_El_Amparo_-_Municipio_P%C3%A1ez_-_Apure_-_Venezuela.svg/960px-Parroquia_El_Amparo_-_Municipio_P%C3%A1ez_-_Apure_-_Venezuela.svg.png
+S~~~apure~~~Guasdualito~~~Pueblo~~~Poblacion fronteriza sobre rio Arauca, punto de cruce hacia Colombia.~~~https://upload.wikimedia.org/wikipedia/commons/b/ba/Iglesiacatedralnuestrase%C3%B1oradelcarmenGuasdualitoapureVenezuela.png
+S~~~apure~~~Parque Nacional Santos Luzardo~~~Parque~~~El mas extenso con sede en municipio Pedro Camejo. Destino de turismo ecologico poco desarrollado pero de gran valor natural.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Parque_Nacional_Santos_Luzardo.JPG/960px-Parque_Nacional_Santos_Luzardo.JPG
+S~~~apure~~~Parque Nacional Rio Viejo~~~Parque~~~Destino de turismo ecologico poco desarrollado pero de gran valor natural.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Venezuela_relief_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_relief_location_map_%28%2Bclaimed%29.svg.png
+S~~~apure~~~Parque Nacional El Tama~~~Parque~~~Porcion en limite con Tachira. Destino de turismo ecologico poco desarrollado pero de gran valor natural.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Colombia_continental_relief_location_map.jpg/960px-Colombia_continental_relief_location_map.jpg
+S~~~apure~~~Medanos de la Soledad~~~Paisaje~~~Formaciones de dunas en pleno llano, uno de los paisajes mas singulares del estado.~~~
 Z~~~aragua~~~Aragua~~~Maracay
+I~~~aragua~~~https://upload.wikimedia.org/wikipedia/commons/5/55/ColoniaTovarMountains.jpg
 D~~~aragua~~~Aragua, en la region central del pais, es uno de los estados mas densamente poblados e industrializados de Venezuela, pero tambien uno de los mas ricos en diversidad turistica: combina playas caribenas, montana nublada, pueblos coloniales y legado cultural afrovenezolano e inmigrante europeo poco comun en el resto del pais.
-S~~~aragua~~~Maracay~~~Capital~~~Conocida como "la ciudad jardin de Venezuela". Destaca: Museo Aeronautico, Museo de Antropologia e Historia, Museo de Arte Contemporaneo Mario Abreu y santuario Madre Maria de San Jose.
-S~~~aragua~~~Parque Nacional Henri Pittier~~~Parque~~~Primer parque nacional decretado en Venezuela (1937), compartido con Carabobo. Alberga estacion biologica Rancho Grande con miles de especies de aves y bosque nublado con orquideas y helechos.
-S~~~aragua~~~Colonia Tovar~~~Pueblo~~~Fundado en 1843 por inmigrantes alemanes, conocido como "la Alemania del Caribe". Conserva arquitectura, gastronomia (salchichas, cerveceria artesanal) y tradiciones alemanas. Ofrece parapente y canopy.
-S~~~aragua~~~Choroni~~~Playa~~~Red hotelera consolidada y recorrido colonial.
-S~~~aragua~~~Puerto Colombia~~~Playa~~~Red hotelera consolidada y recorrido colonial.
-S~~~aragua~~~Cata~~~Playa~~~Playa de la costa aragueña.
-S~~~aragua~~~Cuyagua~~~Playa~~~Paraiso de surfistas, menos masificado.
-S~~~aragua~~~Chuao~~~Pueblo~~~Celebre por cacao de altisima calidad y sus Diablos Danzantes (Patrimonio Cultural).
-S~~~aragua~~~Ocumare de la Costa~~~Playa~~~Playa de la costa aragueña.
-S~~~aragua~~~Turiamo~~~Playa~~~Playa de la costa aragueña.
-S~~~aragua~~~San Mateo~~~Historico~~~Pueblo historico con Museo Historico dedicado al heroe independentista Antonio Ricaurte.
 F~~~aragua~~~Clima~~~Muy variado: isotermo altura Colonia Tovar (15.4C, 1.790 m), templado-calido depresion lago Valencia y Maracay (25.5C, 436 m), tropical lluvioso sur llanero (26C). Estacion seca bien definida.
 F~~~aragua~~~Gastronomia~~~Mezcla criolla: hallacas, pabellon criollo, albondigas, mondongo, sancocho, pescado frito en costa; en Colonia Tovar gastronomia alemana (salchichas, pretzels, cerveza, cafe). Dulces: besos, suspiros, pinones, conservas. Bebidas: chicha criolla, guarapo de cana, cocuy.
 F~~~aragua~~~Museos~~~Museo Aeronautico Maracay (1963, unico Venezuela), Museo Antropologia Historia Maracay, MACMA, Museo Suelos CENIAP, Museo Historia Artesania Colonia Tovar, Museo CADAFE Choroni, Museo Historico San Mateo. Teatro Opera Maracay.
 F~~~aragua~~~Hoteles y posadas~~~Maracay con oferta mayor categoria (cadenas Hesperia). Colonia Tovar y costa (Choroni, Puerto Colombia, Cata) con amplia red posadas familiares y hoteles montana/playa.
 F~~~aragua~~~Actividad economica principal~~~Industria (ensamblaje automotriz, metalmecanica, quimica, textil, agroindustria) en area metropolitana Maracay. Agricultura Valles Aragua (cana azucar, citricos, hortalizas) y cacao alta calidad costa (Chuao).
 F~~~aragua~~~Personajes destacados~~~Antonio Ricaurte (heroe independencia, San Mateo); Francisco Lazo Marti (poeta venezolano); Juan Vicente Gomez (dictador, modernizo Maracay siglo XX).
+S~~~aragua~~~Maracay~~~Capital~~~Conocida como "la ciudad jardin de Venezuela". Destaca: Museo Aeronautico, Museo de Antropologia e Historia, Museo de Arte Contemporaneo Mario Abreu y santuario Madre Maria de San Jose.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Maracay_cerro_%28cropped%29.jpg/960px-Maracay_cerro_%28cropped%29.jpg
+S~~~aragua~~~Parque Nacional Henri Pittier~~~Parque~~~Primer parque nacional decretado en Venezuela (1937), compartido con Carabobo. Alberga estacion biologica Rancho Grande con miles de especies de aves y bosque nublado con orquideas y helechos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Parque_Nacional_Henri_Pittier_en_2023.jpg/960px-Parque_Nacional_Henri_Pittier_en_2023.jpg
+S~~~aragua~~~Colonia Tovar~~~Pueblo~~~Fundado en 1843 por inmigrantes alemanes, conocido como "la Alemania del Caribe". Conserva arquitectura, gastronomia (salchichas, cerveceria artesanal) y tradiciones alemanas. Ofrece parapente y canopy.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/Colonia_Tovar_2.JPG/960px-Colonia_Tovar_2.JPG
+S~~~aragua~~~Choroni~~~Playa~~~Red hotelera consolidada y recorrido colonial.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/Colores_de_Pueblo.JPG/960px-Colores_de_Pueblo.JPG
+S~~~aragua~~~Puerto Colombia~~~Playa~~~Red hotelera consolidada y recorrido colonial.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Mapa_de_la_frontera_Colombia-Venezuela.svg/960px-Mapa_de_la_frontera_Colombia-Venezuela.svg.png
+S~~~aragua~~~Cata~~~Playa~~~Playa de la costa aragueña.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Bah%C3%ADa_de_Cata%2C_Costas_de_Aragua.jpg/960px-Bah%C3%ADa_de_Cata%2C_Costas_de_Aragua.jpg
+S~~~aragua~~~Cuyagua~~~Playa~~~Paraiso de surfistas, menos masificado.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cuyagua_2.jpg/960px-Cuyagua_2.jpg
+S~~~aragua~~~Chuao~~~Pueblo~~~Celebre por cacao de altisima calidad y sus Diablos Danzantes (Patrimonio Cultural).~~~https://upload.wikimedia.org/wikipedia/commons/c/c9/Chuao_002.JPG
+S~~~aragua~~~Ocumare de la Costa~~~Playa~~~Playa de la costa aragueña.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~aragua~~~Turiamo~~~Playa~~~Playa de la costa aragueña.~~~
+S~~~aragua~~~San Mateo~~~Historico~~~Pueblo historico con Museo Historico dedicado al heroe independentista Antonio Ricaurte.~~~https://upload.wikimedia.org/wikipedia/commons/e/e0/Vista_de_Zamora_desde_lo_alto_del_cerro.jpg
 Z~~~barinas~~~Barinas~~~Barinas
+I~~~barinas~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
 D~~~barinas~~~Barinas se ubica entre Los Llanos y el piedemonte andino, en el occidente de Venezuela. Es conocida como "la capital ganadera de la nacion" y puerta de entrada a circuitos ecoturisticos llaneros.~~P~~Comparte parte del Parque Nacional Sierra Nevada con Merida, incluyendo el pico Bolivar, la maxima altura de Venezuela con 5.007 m.
+F~~~barinas~~~Clima~~~Muy variado: frio paramo Andes (5-26C), tropical humedo llanos altos occidentales (24-27C), seco tropical centro (26-27C). Capital: calido sabana.
+F~~~barinas~~~Gastronomia~~~Cocina llanera con influencia andina: picadillo llanero, carne en vara, pisillo de chiguire, pabellon criollo, cachapas queso de mano, asado negro, sancocho. Bebida: chicha andina.
+F~~~barinas~~~Museos~~~Museo Alberto Arvelo Torrealba (poeta "Florentino y el Diablo"), Casa Natal Jose Antonio Paez (objetos y documentos "Centauro Llanos"), Museo Arte Contemporaneo Barinas.
+F~~~barinas~~~Hoteles y posadas~~~Oferta hotelera en ciudad Barinas (medios y negocios). Fuera capital: posadas rurales hatos y balnearios.
+F~~~barinas~~~Actividad economica principal~~~Ganaderia bovina extensiva, agricultura (arroz, maiz, sorgo, algodon, cana azucar, cafe) y explotacion petrolera Cuenca Barinas-Apure.
+F~~~barinas~~~Personajes destacados~~~Jose Antonio Paez ("Centauro Llanos"), caudillo independentista; Alberto Arvelo Torrealba (poeta "Florentino y Diablo", Premio Literatura 1965); Luis Avril (primer reportero grafico); Angel Custodio Loyola ("Carrao Palmarito").
 M~~~barinas~~~Barinas~~~Barinas
 M~~~barinas~~~Alberto Arvelo Torrealba~~~Sabaneta
 M~~~barinas~~~Antonio Jose de Sucre~~~Socopó
@@ -111,22 +122,23 @@ M~~~barinas~~~Pedraza~~~Ciudad Bolivia
 M~~~barinas~~~Rojas~~~Libertad
 M~~~barinas~~~Sosa~~~Ciudad de Nutrias
 M~~~barinas~~~Paez~~~San Rafael de Canagua
-S~~~barinas~~~Barinas~~~Capital~~~Fundada en 1577, a orillas rio Santo Domingo. Centro historico Patrimonio Cultural. Atractivos: Boulevard Plaza Bolivar, Iglesia San Pedro, Parque Moromoy, Balneario La Barinesa.
-S~~~barinas~~~Parque Nacional Sierra Nevada~~~Parque~~~Compartido con Merida, abarca maximas alturas pais: pico Bolivar (5.007 m), Humboldt, Bonpland, La Concha, El Toro, El Leon. Ecosistema paramo y bosque nublado.
-S~~~barinas~~~San Silvestre~~~Pueblo~~~Poblado celebre por fiestas patronales diciembre con toros coleados.
-S~~~barinas~~~Altamira de Caceres~~~Pueblo~~~Localidad con identidad andina. Pozos de Altamira: cascadas y pozas aguas cristalinas bajando cordillera.
-S~~~barinas~~~Petroglifos de Peña Viva~~~Historico~~~Muestrario arte rupestre precolombino en region montanosa del estado.
-S~~~barinas~~~Balneario municipal~~~Balneario~~~Balneario municipal en los municipios.
-S~~~barinas~~~Balneario Rio Bocono~~~Balneario~~~Sobre rio Cipe en municipios Obispos y Alberto Arvelo Torrealba.
-F~~~barinas~~~Clima~~~Muy variado: frio paramo Andes (5-26C), tropical humedo llanos altos occidentales (24-27C), seco tropical centro (26-27C). Capital: calido sabana.
-F~~~barinas~~~Gastronomia~~~Cocina llanera con influencia andina: picadillo llanero, carne en vara, pisillo de chiguire, pabellon criollo, cachapas queso de mano, asado negro, sancocho. Bebida: chicha andina.
-F~~~barinas~~~Museos~~~Museo Alberto Arvelo Torrealba (poeta "Florentino y el Diablo"), Casa Natal Jose Antonio Paez (objetos y documentos "Centauro Llanos"), Museo Arte Contemporaneo Barinas.
-F~~~barinas~~~Hoteles y posadas~~~Oferta hotelera en ciudad Barinas (medios y negocios). Fuera capital: posadas rurales hatos y balnearios.
-F~~~barinas~~~Actividad economica principal~~~Ganaderia bovina extensiva, agricultura (arroz, maiz, sorgo, algodon, cana azucar, cafe) y explotacion petrolera Cuenca Barinas-Apure.
-F~~~barinas~~~Personajes destacados~~~Jose Antonio Paez ("Centauro Llanos"), caudillo independentista; Alberto Arvelo Torrealba (poeta "Florentino y Diablo", Premio Literatura 1965); Luis Avril (primer reportero grafico); Angel Custodio Loyola ("Carrao Palmarito").
+S~~~barinas~~~Barinas~~~Capital~~~Fundada en 1577, a orillas rio Santo Domingo. Centro historico Patrimonio Cultural. Atractivos: Boulevard Plaza Bolivar, Iglesia San Pedro, Parque Moromoy, Balneario La Barinesa.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~barinas~~~Parque Nacional Sierra Nevada~~~Parque~~~Compartido con Merida, abarca maximas alturas pais: pico Bolivar (5.007 m), Humboldt, Bonpland, La Concha, El Toro, El Leon. Ecosistema paramo y bosque nublado.~~~https://upload.wikimedia.org/wikipedia/commons/8/8f/Bol%C3%ADvar_usgs.jpg
+S~~~barinas~~~San Silvestre~~~Pueblo~~~Poblado celebre por fiestas patronales diciembre con toros coleados.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Venezuela_relief_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_relief_location_map_%28%2Bclaimed%29.svg.png
+S~~~barinas~~~Altamira de Caceres~~~Pueblo~~~Localidad con identidad andina. Pozos de Altamira: cascadas y pozas aguas cristalinas bajando cordillera.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Venezuela_Barinas_location_map.svg/960px-Venezuela_Barinas_location_map.svg.png
+S~~~barinas~~~Petroglifos de Peña Viva~~~Historico~~~Muestrario arte rupestre precolombino en region montanosa del estado.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Flag_of_Venezuela.svg/960px-Flag_of_Venezuela.svg.png
+S~~~barinas~~~Balneario municipal~~~Balneario~~~Balneario municipal en los municipios.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Municipios_Venezuela_2007.svg/960px-Municipios_Venezuela_2007.svg.png
+S~~~barinas~~~Balneario Rio Bocono~~~Balneario~~~Sobre rio Cipe en municipios Obispos y Alberto Arvelo Torrealba.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Venezuela_-_Barinas_-_Bol%C3%ADvar.svg/960px-Venezuela_-_Barinas_-_Bol%C3%ADvar.svg.png
 P~~~barinas~~~Barinas~~~Quebrada Seca, San Silvestre, Santa Ines, Santa Lucia, Torunos, La Caramuca, El Corozo, La Mula
 Z~~~bolivar~~~Bolivar~~~Ciudad Bolivar
+I~~~bolivar~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Bolivar_in_Venezuela_%28%2Bclaimed%29.svg/960px-Bolivar_in_Venezuela_%28%2Bclaimed%29.svg.png
 D~~~bolivar~~~Bolivar es el estado mas extenso de Venezuela (mas del 25% del territorio nacional) y uno de los mas visitados internacionalmente, gracias al Parque Nacional Canaima, Patrimonio de la Humanidad por la UNESCO. Su territorio forma parte del Macizo o Escudo Guayanes, una de las formaciones geologicas mas antiguas del planeta, dominado por los tepuyes (montanas de cima plana). La economia combina mineria (hierro, oro, bauxita), industria pesada en Ciudad Guayana e hidroelectricidad (represa del Guri).
+F~~~bolivar~~~Clima~~~Tropical, calido y humedo casi todo el ano (temperatura media 27°C en Ciudad Bolivar), con vegetacion de sabana en el norte y selva hacia el sur. En la Gran Sabana, la altitud modera las temperaturas.
+F~~~bolivar~~~Gastronomia~~~Cocina guayanesa de fusion indigena, con sapoara (pez de rio) como plato insignia, pastel de morrocoy, casabe de yuca, quesos artesanales. Bebida tipica: agua de maiz.
+F~~~bolivar~~~Museos~~~Museo de Arte Moderno Jesus Soto (1972), Museo Historico de Ciudad Bolivar, Museo Correo del Orinoco, casas coloniales (Casa San Isidro, Casa Piar).
+F~~~bolivar~~~Hoteles y posadas~~~Ciudad Bolivar y Ciudad Guayana concentran hoteles formales. Canaima y Gran Sabana: campamentos y posadas todo incluido. Santa Elena de Uairen: base para expediciones al Roraima.
+F~~~bolivar~~~Actividad economica principal~~~Mineria (hierro, oro, bauxita, diamantes), industria pesada (siderurgica, aluminio) e hidroelectricidad; ganaderia y turismo.
+F~~~bolivar~~~Personajes destacados~~~Jesus Rafael Soto (artista cinetico nacido en Ciudad Bolivar), Manuel Piar (procer de independencia), Simon Bolivar (Discurso de Angostura 1819).
 M~~~bolivar~~~Heres (Angostura del Orinoco)~~~Ciudad Bolivar
 M~~~bolivar~~~Caroni~~~Ciudad Guayana (Puerto Ordaz + San Felix)
 M~~~bolivar~~~Cedeno~~~Caicara del Orinoco
@@ -138,33 +150,35 @@ M~~~bolivar~~~Piar~~~Upata
 M~~~bolivar~~~Roscio~~~Guasipati
 M~~~bolivar~~~Sifontes~~~Tumeremo / El Dorado
 M~~~bolivar~~~Sucre~~~Maripa
-S~~~bolivar~~~Ciudad Bolivar~~~Capital~~~Centro historico colonial a orillas del Orinoco, con la Catedral en la Plaza Bolivar, la Casa del Congreso de Angostura donde Bolivar pronuncio su celebre discurso de 1819, el Puente de Angostura (icono de ingenieria venezolana) y el Parque Cachamay. Puerta de entrada aerea a Canaima.
-S~~~bolivar~~~Parque Nacional Canaima~~~Parque~~~Segundo parque nacional mas grande de Venezuela (30.000 km²), Patrimonio de la Humanidad. Puntos de interes: Salto Angel (979 m), Gran Sabana con Salto El Sapo, Quebrada de Jaspe, monte Roraima (2.810 m). Acceso solo por via aerea.
-S~~~bolivar~~~Santa Elena de Uairen~~~Ciudad~~~Ciudad fronteriza con Brasil, punto base para expediciones al Roraima y recorridos por la Gran Sabana.
-S~~~bolivar~~~Ciudad Guayana~~~Ciudad~~~Principal polo industrial del sur, con Puente de Angostura, represa del Guri (Central Hidroelectrica Simon Bolivar) y Penetrable de Jesus Soto (arte cinetico).
-S~~~bolivar~~~El Callao~~~Pueblo~~~Pueblo minero de tradicion aurifera, celebre por su Carnaval declarado Patrimonio Cultural Inmaterial por la UNESCO por su musica calipso de raiz afroantillana.
-F~~~bolivar~~~Clima~~~Tropical, calido y humedo casi todo el ano (temperatura media 27°C en Ciudad Bolivar), con vegetacion de sabana en el norte y selva hacia el sur. En la Gran Sabana, la altitud modera las temperaturas.
-F~~~bolivar~~~Gastronomia~~~Cocina guayanesa de fusion indigena, con sapoara (pez de rio) como plato insignia, pastel de morrocoy, casabe de yuca, quesos artesanales. Bebida tipica: agua de maiz.
-F~~~bolivar~~~Museos~~~Museo de Arte Moderno Jesus Soto (1972), Museo Historico de Ciudad Bolivar, Museo Correo del Orinoco, casas coloniales (Casa San Isidro, Casa Piar).
-F~~~bolivar~~~Hoteles y posadas~~~Ciudad Bolivar y Ciudad Guayana concentran hoteles formales. Canaima y Gran Sabana: campamentos y posadas todo incluido. Santa Elena de Uairen: base para expediciones al Roraima.
-F~~~bolivar~~~Actividad economica principal~~~Mineria (hierro, oro, bauxita, diamantes), industria pesada (siderurgica, aluminio) e hidroelectricidad; ganaderia y turismo.
-F~~~bolivar~~~Personajes destacados~~~Jesus Rafael Soto (artista cinetico nacido en Ciudad Bolivar), Manuel Piar (procer de independencia), Simon Bolivar (Discurso de Angostura 1819).
+S~~~bolivar~~~Ciudad Bolivar~~~Capital~~~Centro historico colonial a orillas del Orinoco, con la Catedral en la Plaza Bolivar, la Casa del Congreso de Angostura donde Bolivar pronuncio su celebre discurso de 1819, el Puente de Angostura (icono de ingenieria venezolana) y el Parque Cachamay. Puerta de entrada aerea a Canaima.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Ciudad_Bol%C3%ADvar_historical_zone.jpg/960px-Ciudad_Bol%C3%ADvar_historical_zone.jpg
+S~~~bolivar~~~Parque Nacional Canaima~~~Parque~~~Segundo parque nacional mas grande de Venezuela (30.000 km²), Patrimonio de la Humanidad. Puntos de interes: Salto Angel (979 m), Gran Sabana con Salto El Sapo, Quebrada de Jaspe, monte Roraima (2.810 m). Acceso solo por via aerea.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Salto_del_Angel-Canaima-Venezuela07.JPG/960px-Salto_del_Angel-Canaima-Venezuela07.JPG
+S~~~bolivar~~~Santa Elena de Uairen~~~Ciudad~~~Ciudad fronteriza con Brasil, punto base para expediciones al Roraima y recorridos por la Gran Sabana.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Aereopuerto_de_Santa_Elena_de_Uair%C3%A9n.JPG/960px-Aereopuerto_de_Santa_Elena_de_Uair%C3%A9n.JPG
+S~~~bolivar~~~Ciudad Guayana~~~Ciudad~~~Principal polo industrial del sur, con Puente de Angostura, represa del Guri (Central Hidroelectrica Simon Bolivar) y Penetrable de Jesus Soto (arte cinetico).~~~
+S~~~bolivar~~~El Callao~~~Pueblo~~~Pueblo minero de tradicion aurifera, celebre por su Carnaval declarado Patrimonio Cultural Inmaterial por la UNESCO por su musica calipso de raiz afroantillana.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/El_Callao%2C_Edo._Bol%C3%ADvar..jpg/960px-El_Callao%2C_Edo._Bol%C3%ADvar..jpg
 Z~~~carabobo~~~Carabobo~~~Valencia
+I~~~carabobo~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Monumento_del_campo_de_Carabobo_2.JPG/960px-Monumento_del_campo_de_Carabobo_2.JPG
 D~~~carabobo~~~Carabobo, en la region central costera, es el estado con mayor densidad de poblacion de Venezuela y uno de los mas industrializados. Su nombre proviene del Campo de Carabobo, escenario de la batalla que sello la independencia venezolana en 1821. Combina perfil industrial y portuario con playas caribenas, valles de montana y patrimonio colonial.
-S~~~carabobo~~~Valencia~~~Capital~~~Casco historico colonial, Parque Fernando Penalver, Aquarium de Valencia, vida comercial y gastronomica. Cuna de la Reina Pepiada (arepa de pollo y aguacate).
-S~~~carabobo~~~Campo de Carabobo~~~Historico~~~Monumento historico nacional donde se libro la batalla decisiva de la independencia. Sitio de peregrinacion civica con Arco de Triunfo y Ecomuseo Quinta Villavicencio.
-S~~~carabobo~~~Puerto Cabello~~~Ciudad~~~Principal puerto comercial de Venezuela, con centro historico colonial (catedral, Teatro Municipal, fortificaciones), astilleros y playas cercanas.
-S~~~carabobo~~~Playas de Carabobo~~~Playa~~~Playas de Patanemo (con laguna y formaciones coralinas), Borburata, arena fina de Palma Sola a Boca de Yaracuy. Parque Nacional San Esteban protege las cuencas.
-S~~~carabobo~~~Aguas termales de Las Trincheras~~~Balneario~~~Balneario de aguas sulfurosas de fama curativa, con instalaciones desarrolladas.
-S~~~carabobo~~~Valles altos (Bejuma, Miranda, Montalban)~~~Montana~~~Zona de clima fresco muy visitada por paisaje, posadas y campamentos. Parador turistico y aldea artesanal de proyeccion internacional.
 F~~~carabobo~~~Clima~~~Calido en Valencia y depresion central, mas fresco en valles altos (Bejuma, Miranda, Montalban) y humedo tropical en la costa.
 F~~~carabobo~~~Gastronomia~~~Cocina influenciada por inmigracion (italiana, espanola, portuguesa, arabe, china). Pescado frito con tostones, chicha de maiz, tostones de Borburata, tentalarias, panelas de San Joaquin.
 F~~~carabobo~~~Museos~~~Museo de Antropologia e Historia Henriqueta Penalver (Casa de los Celis), Casa Paez (Jose Antonio Paez), Museo de Arte Valencia, Museo de Beisbol Venezolano.
 F~~~carabobo~~~Hoteles y posadas~~~Valencia concentra hoteles de negocios (Hesperia, Lidotel). Casco historico: posadas coloniales (La Pastora). Costa (Patanemo) y valles altos: posadas y campamentos vacacionales.
 F~~~carabobo~~~Actividad economica principal~~~Industria manufacturera (mayor concentracion industrial), puerto y comercio internacional (Puerto Cabello), agricultura y ganaderia.
 F~~~carabobo~~~Personajes destacados~~~Jose Antonio Paez (residio en Valencia 1821-1835), Juan Pablo Rojas Paul (presidente del estado), Batalla de Carabobo (1821).
+S~~~carabobo~~~Valencia~~~Capital~~~Casco historico colonial, Parque Fernando Penalver, Aquarium de Valencia, vida comercial y gastronomica. Cuna de la Reina Pepiada (arepa de pollo y aguacate).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Vista_de_la_ciudad_desde_las_urbanizacion_la_trigale%C3%B1a.jpg/960px-Vista_de_la_ciudad_desde_las_urbanizacion_la_trigale%C3%B1a.jpg
+S~~~carabobo~~~Campo de Carabobo~~~Historico~~~Monumento historico nacional donde se libro la batalla decisiva de la independencia. Sitio de peregrinacion civica con Arco de Triunfo y Ecomuseo Quinta Villavicencio.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Monumento_del_campo_de_Carabobo_2.JPG/960px-Monumento_del_campo_de_Carabobo_2.JPG
+S~~~carabobo~~~Puerto Cabello~~~Ciudad~~~Principal puerto comercial de Venezuela, con centro historico colonial (catedral, Teatro Municipal, fortificaciones), astilleros y playas cercanas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Venezuela_-_Carabobo_-_Puerto_Cabello.svg/960px-Venezuela_-_Carabobo_-_Puerto_Cabello.svg.png
+S~~~carabobo~~~Playas de Carabobo~~~Playa~~~Playas de Patanemo (con laguna y formaciones coralinas), Borburata, arena fina de Palma Sola a Boca de Yaracuy. Parque Nacional San Esteban protege las cuencas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Monumento_del_campo_de_Carabobo_2.JPG/960px-Monumento_del_campo_de_Carabobo_2.JPG
+S~~~carabobo~~~Aguas termales de Las Trincheras~~~Balneario~~~Balneario de aguas sulfurosas de fama curativa, con instalaciones desarrolladas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Las_Trincheras%2C_Carabobo%2C_Venezuela_-_panoramio.jpg/960px-Las_Trincheras%2C_Carabobo%2C_Venezuela_-_panoramio.jpg
+S~~~carabobo~~~Valles altos (Bejuma, Miranda, Montalban)~~~Montana~~~Zona de clima fresco muy visitada por paisaje, posadas y campamentos. Parador turistico y aldea artesanal de proyeccion internacional.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Iglesia_Parroquial_San_Rafael_de_Bejuma_%281956%29.png/960px-Iglesia_Parroquial_San_Rafael_de_Bejuma_%281956%29.png
 Z~~~cojedes~~~Cojedes~~~San Carlos
+I~~~cojedes~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/Venezuela_-_Cojedes_-_R%C3%B3mulo_Gallegos.svg/960px-Venezuela_-_Cojedes_-_R%C3%B3mulo_Gallegos.svg.png
 D~~~cojedes~~~Cojedes, en los llanos centrales, es uno de los estados menos poblados y con menor perfil turistico masivo del pais, pero conserva un notable patrimonio colonial e historico ligado a la independencia venezolana, ademas de espacios de ecoturismo poco explotados.
+F~~~cojedes~~~Clima~~~Calido de sabana, con temperatura media anual de 26,1°C, estacion seca y lluviosa.
+F~~~cojedes~~~Gastronomia~~~Cocina llanera: pisillo, guiso de galapago y morrocoy, casabe, cochino frito, cachapa, pescado frito. Dulceria de frutas. Bebidas: guarapita, chicha, leche de burra, agua de panela.
+F~~~cojedes~~~Museos~~~Casa-Museo La Blanquera en San Carlos, edificacion barroca colonial donde Bolivar planico Batalla de Carabobo. Casa de la cultura cojedena.
+F~~~cojedes~~~Hoteles y posadas~~~Oferta modesta en San Carlos (Hotel San Carlos) y Tinaquillo (campamentos El Yaque y 5J). Campamento Hato Pinero en El Baul con observacion de fauna.
+F~~~cojedes~~~Actividad economica principal~~~Ganaderia bovina y porcina extensiva y agricultura (arroz, name, sorgo, tabaco).
+F~~~cojedes~~~Personajes destacados~~~Jose Laurencio Silva (procer independentista nacido en Tinaco), familia Blanco y Salazar (ganaderos fundadores Casa La Blanquera).
 M~~~cojedes~~~San Carlos~~~San Carlos
 M~~~cojedes~~~Anzoategui~~~El Pao de San Juan Bautista
 M~~~cojedes~~~Girardot~~~El Baul
@@ -172,49 +186,52 @@ M~~~cojedes~~~Lima Blanco~~~Macapo
 M~~~cojedes~~~Ricaurte~~~Libertad
 M~~~cojedes~~~Romulo Gallegos~~~Las Vegas
 M~~~cojedes~~~Tinaco~~~Tinaco
-S~~~cojedes~~~San Carlos~~~Capital~~~Conserva iglesias coloniales (Santo Domingo), Casa La Blanquera (donde Simon Bolivar planico Batalla de Carabobo), Autodroma Internacional para carreras automovilisticas.
-S~~~cojedes~~~Parque Nacional General Manuel Manrique (Tirgua)~~~Parque~~~Unico parque nacional del estado, al norte de San Carlos, junto a pueblitos La Sierra y Manrique. Principal pulmon vegetal de la region.
-S~~~cojedes~~~Tinaco~~~Pueblo~~~Pueblo natal del procer Jose Laurencio Silva, con arquitectura colonial (Casa Municipal, Iglesia Nuestra Senora de la Chiquinquira) y Cerro Tiramuto.
-S~~~cojedes~~~El Baul~~~Montana~~~Asentado en macizo rocoso antiguo que emerge como isla en los llanos. Parque turistico Los Barrancones con canotaje y paseos en lancha por represa La Panchita.
-S~~~cojedes~~~Aguas termales La Aguadita~~~Balneario~~~Aguas termales con fama de curativas.
-S~~~cojedes~~~El Hato Pinero~~~Montana~~~Reserva privada de fauna llanera, referente de ecoturismo.
-F~~~cojedes~~~Clima~~~Calido de sabana, con temperatura media anual de 26,1°C, estacion seca y lluviosa.
-F~~~cojedes~~~Gastronomia~~~Cocina llanera: pisillo, guiso de galapago y morrocoy, casabe, cochino frito, cachapa, pescado frito. Dulceria de frutas. Bebidas: guarapita, chicha, leche de burra, agua de panela.
-F~~~cojedes~~~Museos~~~Casa-Museo La Blanquera en San Carlos, edificacion barroca colonial donde Bolivar planico Batalla de Carabobo. Casa de la cultura cojedena.
-F~~~cojedes~~~Hoteles y posadas~~~Oferta modesta en San Carlos (Hotel San Carlos) y Tinaquillo (campamentos El Yaque y 5J). Campamento Hato Pinero en El Baul con observacion de fauna.
-F~~~cojedes~~~Actividad economica principal~~~Ganaderia bovina y porcina extensiva y agricultura (arroz, name, sorgo, tabaco).
-F~~~cojedes~~~Personajes destacados~~~Jose Laurencio Silva (procer independentista nacido en Tinaco), familia Blanco y Salazar (ganaderos fundadores Casa La Blanquera).
+S~~~cojedes~~~San Carlos~~~Capital~~~Conserva iglesias coloniales (Santo Domingo), Casa La Blanquera (donde Simon Bolivar planico Batalla de Carabobo), Autodroma Internacional para carreras automovilisticas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Iglesia_San_Juan_Bautista%2C_San_Carlos.jpg/960px-Iglesia_San_Juan_Bautista%2C_San_Carlos.jpg
+S~~~cojedes~~~Parque Nacional General Manuel Manrique (Tirgua)~~~Parque~~~Unico parque nacional del estado, al norte de San Carlos, junto a pueblitos La Sierra y Manrique. Principal pulmon vegetal de la region.~~~https://upload.wikimedia.org/wikipedia/commons/b/b8/Tirgua.jpg
+S~~~cojedes~~~Tinaco~~~Pueblo~~~Pueblo natal del procer Jose Laurencio Silva, con arquitectura colonial (Casa Municipal, Iglesia Nuestra Senora de la Chiquinquira) y Cerro Tiramuto.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/IMAG0566.jpg/960px-IMAG0566.jpg
+S~~~cojedes~~~El Baul~~~Montana~~~Asentado en macizo rocoso antiguo que emerge como isla en los llanos. Parque turistico Los Barrancones con canotaje y paseos en lancha por represa La Panchita.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~cojedes~~~Aguas termales La Aguadita~~~Balneario~~~Aguas termales con fama de curativas.~~~https://upload.wikimedia.org/wikipedia/commons/c/ce/Tirgua_National_Park%2C_Venezuela_1.jpg
+S~~~cojedes~~~El Hato Pinero~~~Montana~~~Reserva privada de fauna llanera, referente de ecoturismo.~~~
 Z~~~delta-amacuro~~~Delta Amacuro~~~Tucupita
+I~~~delta-amacuro~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Curiapo.jpg/960px-Curiapo.jpg
 D~~~delta-amacuro~~~Delta Amacuro alberga el gigantesco delta del rio Orinoco, un laberinto de canos, manglares e islas fluviales en el extremo noreste del pais. Es uno de los estados menos poblados y menos conectados por via terrestre. Hogar ancestral del pueblo indigena warao que habita en palafitos.
-M~~~delta-amacuro~~~Tucupita~~~Tucupita
-M~~~delta-amacuro~~~Pedernales~~~Pedernales
-M~~~delta-amacuro~~~Antonio Diaz~~~Curiapo
-M~~~delta-amacuro~~~Casacoima~~~Sierra Imataca
-S~~~delta-amacuro~~~Tucupita~~~Capital~~~A orillas del cano Manamo. Iglesia de San Jose de Tucupita (mision capuchina 1930), Catedral de la Divina Pastora (1982), Parque Central.
-S~~~delta-amacuro~~~Parque Nacional Delta del Orinoco (Mariusa)~~~Parque~~~Uno de los parques nacionales mas extensos del pais. Fauna: manati, chiguire, guacamayo, tucan. Territorio ancestral warao con etnoturismo en comunidades palafiticas.
-S~~~delta-amacuro~~~Los Castillos de Guayana~~~Historico~~~Dos fortines coloniales para defensa contra piratas: San Francisco de Asis (siglo XVII) y El Padrastro/San Diego (1734-1735).
-S~~~delta-amacuro~~~Saltos El Toro y Acoima~~~Cascada~~~Cascadas naturales ubicadas entre localidades de Manoa y Santa Catalina.
 F~~~delta-amacuro~~~Clima~~~Tropical humedo, calido todo el ano, con precipitaciones abundantes propias de un sistema deltaico.
 F~~~delta-amacuro~~~Gastronomia~~~Fuertemente ligada a recursos del rio: morocoto deltano. Moriche (palma warao) elabora yuruma (harina). Bebida: papelona con limon. Comida: funche.
 F~~~delta-amacuro~~~Museos~~~Espacios culturales de artesania, fotografia y objetos historicos warao. Patrimonio inmaterial (cesteria, alfareria, talla de madera) mantenido por artesanos warao.
 F~~~delta-amacuro~~~Hoteles y posadas~~~Oferta formal (hoteles, discotecas, restaurantes) en Tucupita. Resto del delta: campamentos ecoturisticos o comunidades warao (acceso fluvial o aereo).
 F~~~delta-amacuro~~~Actividad economica principal~~~Pesca (principal en los canos), agricultura de subsistencia y explotacion petrolera (refineria de Tucupita).
 F~~~delta-amacuro~~~Personajes destacados~~~Padre Barral (misionero capuchino, diccionario espanol-warao), Francisco Aniceto Lugo (educador, escritor, poeta), Almirante Luis Brion (procer).
+M~~~delta-amacuro~~~Tucupita~~~Tucupita
+M~~~delta-amacuro~~~Pedernales~~~Pedernales
+M~~~delta-amacuro~~~Antonio Diaz~~~Curiapo
+M~~~delta-amacuro~~~Casacoima~~~Sierra Imataca
+S~~~delta-amacuro~~~Tucupita~~~Capital~~~A orillas del cano Manamo. Iglesia de San Jose de Tucupita (mision capuchina 1930), Catedral de la Divina Pastora (1982), Parque Central.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Catedraltucupita.jpg/960px-Catedraltucupita.jpg
+S~~~delta-amacuro~~~Parque Nacional Delta del Orinoco (Mariusa)~~~Parque~~~Uno de los parques nacionales mas extensos del pais. Fauna: manati, chiguire, guacamayo, tucan. Territorio ancestral warao con etnoturismo en comunidades palafiticas.~~~
+S~~~delta-amacuro~~~Los Castillos de Guayana~~~Historico~~~Dos fortines coloniales para defensa contra piratas: San Francisco de Asis (siglo XVII) y El Padrastro/San Diego (1734-1735).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/1599_Guyana_Hondius.jpg/960px-1599_Guyana_Hondius.jpg
+S~~~delta-amacuro~~~Saltos El Toro y Acoima~~~Cascada~~~Cascadas naturales ubicadas entre localidades de Manoa y Santa Catalina.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Delta_del_Orinoco_110514-15.JPG/960px-Delta_del_Orinoco_110514-15.JPG
 Z~~~distrito-capital~~~Distrito Capital~~~Caracas
+I~~~distrito-capital~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Vista_PlazaVenezuela.jpg/960px-Vista_PlazaVenezuela.jpg
 D~~~distrito-capital~~~El Distrito Capital comprende la ciudad de Caracas, capital de Venezuela, sede de los Poderes Publicos Nacionales. A diferencia de los estados, esta compuesto por un unico municipio (Bolivariano Libertador), dividido en 22 parroquias, y ocupa la zona centro-occidental del Distrito Metropolitano de Caracas.~~P~~La ciudad se asienta en un valle de la Cordillera de la Costa, separada del mar Caribe por el cerro El Avila.
-S~~~distrito-capital~~~Casco Historico de Caracas~~~Historico~~~Centro historico colonial con Plaza Bolivar, Catedral de Caracas, Casa Natal de Simon Bolivar (1680), Casa Amarilla, Palacio de Miraflores, Panteon Nacional y Concejo Municipal.
-S~~~distrito-capital~~~Parque Nacional Waraira Repano~~~Montana~~~Gran montana que domina Caracas con picos de mas de 2000 m. Acceso por senderismo o teleférico histórico. Puntos de interes: Pico Naiaguata (2765 m); Sabas Nieves; Puerta Caracas; pueblo de Galiapn.
-S~~~distrito-capital~~~Museos y Cultura~~~Museo~~~Complejo Cultural Teresa Carreno, Galeria de Arte Nacional, Museo de Bellas Artes, Museo de Ciencias, Museo de los Ninos. Puntos de interes: Ciudad Universitaria de Caracas (Patrimonio UNESCO 2000).
-S~~~distrito-capital~~~Casco Historico de Petare~~~Historico~~~Casco historico del este con calles empedradas y casas coloniales bien conservadas. Recomendado recorrerlo con organizaciones de turismo comunitario.
-S~~~distrito-capital~~~Espacios Verdes Urbanos~~~Parque~~~Parque del Este, Parque Los Caobos, Jardin Botanico de Caracas, Parque Los Chorros y Paseo Los Proceres.
 F~~~distrito-capital~~~Clima~~~Tropical de altura, agradable todo el ano a unos 900 m sobre el nivel del mar. Temperatura media anual 22.5 grados C. Precipitaciones 900-1300 mm. Estación lluviosa mayo a noviembre.
 F~~~distrito-capital~~~Gastronomia~~~Pabellon criollo, hallaca, arepa, cachapa con queso guayanes, asado negro criollo, ensalada de gallina. Cocina mantuana: resbaladera, torta melosa. Bebidas: chicha, guarapo, carato, tizana. Dulces: quesillo, bienmesabe, majarete, torta bejarana.
 F~~~distrito-capital~~~Museos~~~Galeria de Arte Nacional, Museo de Bellas Artes, Museo de Ciencias, Museo Sacro, Museo Bolivariano, Ciudad Universitaria de Caracas (Patrimonio UNESCO).
 F~~~distrito-capital~~~Hoteles y Posadas~~~Mayor oferta hotelera formal del pais en La Castellana, Altamira y centro historico. El Hatillo ofrece posadas de ambiente colonial.
 F~~~distrito-capital~~~Actividad Economica Principal~~~Servicios financieros, administración publica y comercio. Genera entre 18-19 por ciento del PIB nacional.
 F~~~distrito-capital~~~Personajes Destacados~~~Simon Bolivar, nacido en la ciudad, cuyos restos reposan en el Panteon Nacional desde 1876 junto a otros proceres como Ezequiel Zamora.
+S~~~distrito-capital~~~Casco Historico de Caracas~~~Historico~~~Centro historico colonial con Plaza Bolivar, Catedral de Caracas, Casa Natal de Simon Bolivar (1680), Casa Amarilla, Palacio de Miraflores, Panteon Nacional y Concejo Municipal.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Collage_Caracas.jpg/960px-Collage_Caracas.jpg
+S~~~distrito-capital~~~Parque Nacional Waraira Repano~~~Montana~~~Gran montana que domina Caracas con picos de mas de 2000 m. Acceso por senderismo o teleférico histórico. Puntos de interes: Pico Naiaguata (2765 m); Sabas Nieves; Puerta Caracas; pueblo de Galiapn.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg/960px-Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg
+S~~~distrito-capital~~~Museos y Cultura~~~Museo~~~Complejo Cultural Teresa Carreno, Galeria de Arte Nacional, Museo de Bellas Artes, Museo de Ciencias, Museo de los Ninos. Puntos de interes: Ciudad Universitaria de Caracas (Patrimonio UNESCO 2000).~~~
+S~~~distrito-capital~~~Casco Historico de Petare~~~Historico~~~Casco historico del este con calles empedradas y casas coloniales bien conservadas. Recomendado recorrerlo con organizaciones de turismo comunitario.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Petare_1.JPG/960px-Petare_1.JPG
+S~~~distrito-capital~~~Espacios Verdes Urbanos~~~Parque~~~Parque del Este, Parque Los Caobos, Jardin Botanico de Caracas, Parque Los Chorros y Paseo Los Proceres.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg/960px-Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg
 Z~~~falcon~~~Estado Falcon~~~Santa Ana de Coro
+I~~~falcon~~~https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Venezuela_-_Falc%C3%B3n_-_Falc%C3%B3n.svg/960px-Venezuela_-_Falc%C3%B3n_-_Falc%C3%B3n.svg.png
 D~~~falcon~~~Falcon, en la region centro-occidental, es uno de los estados con mayor diversidad de paisajes del pais: desde el desierto de Los Medanos hasta las playas de cayos turquesa de Morrocoy y las sierras verdes del interior.~~P~~En 2026 fue reconocido oficialmente como el destino mas visitado de Venezuela durante Semana Santa.~~P~~Su capital, Coro, es la primera ciudad fundada en Venezuela (1527) y Patrimonio de la Humanidad por la UNESCO desde 1993.
+F~~~falcon~~~Clima~~~El mas seco de Venezuela: semiárido en litoral occidental y península de Paraguaná. Coro: 417 mm lluvia/ano, 28.4 grados C. Punto Fijo: 316 mm, 27.6 grados C. Mas humedo en sierras (hasta 1300 mm, 22 grados C).
+F~~~falcon~~~Gastronomia~~~Carne de chivo base: talkarí de chivo, chivo en coco, chivo en yuca, mojito de chivo. Celse coriano (cabeza cerdo curada vinagre), escabeche costeño pescado, arepa pelada, queso leche cabra. Postres: arroz coco, dulce leche cabra, mancarrón, paledonias. Bebidas: cocuy, manzanilla, leche de burra.
+F~~~falcon~~~Museos~~~Casa de las Ventanas de Hierro (Coro siglo XVIII ventanas Sevilla), Balcón de los Arcaya (Museo Loza y Arte Popular), Casa del Tesoro, Casa de los Senior. Cementerio judio mas antiguo de Sudamérica.
+F~~~falcon~~~Hoteles y Posadas~~~Morrocoy (Tucacas, Chichiriviche) y Paraguaná (Adicora) concentran mayor oferta posadas. Coro y Punto Fijo tienen hoteles urbanos de categoria.
+F~~~falcon~~~Actividad Economica Principal~~~Industria petrolera (refinerías península Paraguaná entre mas grandes mundo), pesca (30000 toneladas/ano), turismo y salinas.
+F~~~falcon~~~Personajes Destacados~~~Juan Crisóstomo Falcón, mariscal y presidente nacido Jadacaquiva. José Leonardo Chirino, lider insurreccion antiesclavista (1795). Josefa Camejo, heroína que proclamó independencia Coro 1821.
 M~~~falcon~~~Miranda~~~Coro
 M~~~falcon~~~Carirubana~~~Punto Fijo
 M~~~falcon~~~Silva~~~Tucacas
@@ -222,36 +239,38 @@ M~~~falcon~~~Colina~~~La Vela de Coro
 M~~~falcon~~~Monsenor Iturriza~~~Chichiriviche
 M~~~falcon~~~Zamora~~~Puerto Cumarebo
 M~~~falcon~~~Los Taques~~~Los Taques
-S~~~falcon~~~Coro~~~Capital~~~Centro historico colonial Patrimonio de la Humanidad con arquitectura influenciada por Curazao y Aruba. Destacan Museo Diocesano (arte Escuela Bizantina 800+ anos), Casa de los Arcaya (siglo XVIII), Casa de los Senior (hospedaje Simon Bolivar 1827), Casa del Tesoro (mas antigua).
-S~~~falcon~~~Parque Nacional Los Medanos de Coro~~~Parque~~~Desierto costero mas grande del Caribe con dunas moviles de mas de 8 metros desplazadas por vientos alisios. Declarado parque nacional en 1974.
-S~~~falcon~~~Parque Nacional Morrocoy~~~Playa~~~Destino de playa celebre con decenas de cayos de arena blanca y aguas turquesa accesibles en lancha desde Tucacas y Chichiriviche. Cayos como Sombrero, Paiclás, Boca Seca.
-S~~~falcon~~~Peninsula de Paraguaná~~~Playa~~~Unida al continente por el istmo de Los Medanos. Playas para windsurf y kitesurf (Adicora referente internacional), Cabo San Roman (faro colonial, Medano Blanco), Cerro Santa Ana ideal para senderismo.
-S~~~falcon~~~La Vela de Coro~~~Historico~~~De gran valor historico vinculada a los primeros movimientos independentistas de Venezuela.
-S~~~falcon~~~Sierra de San Luis~~~Montana~~~Parque nacional de clima serrano fresco con cuevas (Cueva del Toro) y paisajes de bosque nublado, contraste con la aridez costera.
-S~~~falcon~~~Urumaco~~~Historico~~~Region de importancia paleontologica con yacimientos de fosiles de vertebrados de hasta 14 millones de anos y museo dedicado a estos hallazgos.
-F~~~falcon~~~Clima~~~El mas seco de Venezuela: semiárido en litoral occidental y península de Paraguaná. Coro: 417 mm lluvia/ano, 28.4 grados C. Punto Fijo: 316 mm, 27.6 grados C. Mas humedo en sierras (hasta 1300 mm, 22 grados C).
-F~~~falcon~~~Gastronomia~~~Carne de chivo base: talkarí de chivo, chivo en coco, chivo en yuca, mojito de chivo. Celse coriano (cabeza cerdo curada vinagre), escabeche costeño pescado, arepa pelada, queso leche cabra. Postres: arroz coco, dulce leche cabra, mancarrón, paledonias. Bebidas: cocuy, manzanilla, leche de burra.
-F~~~falcon~~~Museos~~~Casa de las Ventanas de Hierro (Coro siglo XVIII ventanas Sevilla), Balcón de los Arcaya (Museo Loza y Arte Popular), Casa del Tesoro, Casa de los Senior. Cementerio judio mas antiguo de Sudamérica.
-F~~~falcon~~~Hoteles y Posadas~~~Morrocoy (Tucacas, Chichiriviche) y Paraguaná (Adicora) concentran mayor oferta posadas. Coro y Punto Fijo tienen hoteles urbanos de categoria.
-F~~~falcon~~~Actividad Economica Principal~~~Industria petrolera (refinerías península Paraguaná entre mas grandes mundo), pesca (30000 toneladas/ano), turismo y salinas.
-F~~~falcon~~~Personajes Destacados~~~Juan Crisóstomo Falcón, mariscal y presidente nacido Jadacaquiva. José Leonardo Chirino, lider insurreccion antiesclavista (1795). Josefa Camejo, heroína que proclamó independencia Coro 1821.
+S~~~falcon~~~Coro~~~Capital~~~Centro historico colonial Patrimonio de la Humanidad con arquitectura influenciada por Curazao y Aruba. Destacan Museo Diocesano (arte Escuela Bizantina 800+ anos), Casa de los Arcaya (siglo XVIII), Casa de los Senior (hospedaje Simon Bolivar 1827), Casa del Tesoro (mas antigua).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Monumento_a_la_Federaci%C3%B3n_Venezolana_I.jpg/960px-Monumento_a_la_Federaci%C3%B3n_Venezolana_I.jpg
+S~~~falcon~~~Parque Nacional Los Medanos de Coro~~~Parque~~~Desierto costero mas grande del Caribe con dunas moviles de mas de 8 metros desplazadas por vientos alisios. Declarado parque nacional en 1974.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Los_medanos_de_coro_PN.jpg/960px-Los_medanos_de_coro_PN.jpg
+S~~~falcon~~~Parque Nacional Morrocoy~~~Playa~~~Destino de playa celebre con decenas de cayos de arena blanca y aguas turquesa accesibles en lancha desde Tucacas y Chichiriviche. Cayos como Sombrero, Paiclás, Boca Seca.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Cocotero_en_Cayo_Sombrero.jpg/960px-Cocotero_en_Cayo_Sombrero.jpg
+S~~~falcon~~~Peninsula de Paraguaná~~~Playa~~~Unida al continente por el istmo de Los Medanos. Playas para windsurf y kitesurf (Adicora referente internacional), Cabo San Roman (faro colonial, Medano Blanco), Cerro Santa Ana ideal para senderismo.~~~https://upload.wikimedia.org/wikipedia/commons/e/e4/ParaguanaPeninsula.jpg
+S~~~falcon~~~La Vela de Coro~~~Historico~~~De gran valor historico vinculada a los primeros movimientos independentistas de Venezuela.~~~https://upload.wikimedia.org/wikipedia/commons/5/50/Monumento_a_la_Bandera_en_La_Vela_de_Coro.jpg
+S~~~falcon~~~Sierra de San Luis~~~Montana~~~Parque nacional de clima serrano fresco con cuevas (Cueva del Toro) y paisajes de bosque nublado, contraste con la aridez costera.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Plaza_Bol%C3%ADvar_de_San_Luis.JPG/960px-Plaza_Bol%C3%ADvar_de_San_Luis.JPG
+S~~~falcon~~~Urumaco~~~Historico~~~Region de importancia paleontologica con yacimientos de fosiles de vertebrados de hasta 14 millones de anos y museo dedicado a estos hallazgos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Venezuela_-_Falc%C3%B3n_-_Urumaco.svg/960px-Venezuela_-_Falc%C3%B3n_-_Urumaco.svg.png
 P~~~falcon~~~Zamora~~~Puerto Cumarebo, Pueblo Nuevo, Boca de Aroa
 Z~~~guarico~~~Estado Guarico~~~San Juan de los Morros
+I~~~guarico~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Flag_of_Gu%C3%A1rico_State.svg/960px-Flag_of_Gu%C3%A1rico_State.svg.png
 D~~~guarico~~~Guarico, en el centro del pais y corazon de Los Llanos, es el cuarto estado mas extenso de Venezuela.~~P~~Combina paisajes de sabana llanera con montanas bajas al norte (Cordillera de la Costa) y un notable patrimonio de aguas termales y parques nacionales.
-S~~~guarico~~~San Juan de los Morros~~~Capital~~~Llamada por Los Morros (Monumento Natural Aristides Rojas), formaciones rocosas escarpadas. Atractivos: Aguas Termales (manantial sulfuroso 33.5 grados C), Sanjuanote (monumento 20 m altura), Arco Federación La Puerta, balneario embalse Tierra Blanca.
-S~~~guarico~~~Calabozo~~~Ciudad~~~Antigua capital del estado, sede represa Generoso Campilongo (una mas grandes Latinoamérica) que sostiene producción arrocera. Iglesia colonial estilo barroco finales siglo XVIII.
-S~~~guarico~~~Parque Nacional Aguaro-Guariquito~~~Parque~~~Segundo parque nacional mas extenso Venezuela (596000 hectáreas) con sabanas, bosques, ríos y lagunas de gran biodiversidad, al sur del estado.
-S~~~guarico~~~Parque Nacional Guatopo~~~Parque~~~Region montanosa (compartido con Miranda) de bosque tropical humedo entre Santa Teresa del Tuy y Altagracia de Orituco.
-S~~~guarico~~~Aguas Termales de Gurumen~~~Balneario~~~Entre poblaciones Ortiz y San Francisco de Cara, con piscinas naturales de origen geotermal.
-S~~~guarico~~~Salto La Margarita~~~Cascada~~~Caida agua 90 m destino turismo aventura varias horas caminata cerca Quebrada Guanape.
 F~~~guarico~~~Clima~~~Tropical de sabana, calido, temperatura media 26-30 grados C. Dos estaciones: seca (noviembre-abril) y lluviosa (mayo-octubre). Precipitaciones 1000-1500 mm. San Juan Morros 24-32 grados C.
 F~~~guarico~~~Gastronomia~~~Pisillo guariqueño (carne venado/res/pescado/chiguire salada, secada sol, sofrita) como plato simbolo. Sancocho gallina, mondongo, pastel morrocoy, palometa frita. Dulces: dulce lechosa, arroz leche. Bebidas: carato maíz, chicha criolla, guarapo panela.
 F~~~guarico~~~Museos~~~Casa Cultura Zaraza (pintura, teatro, musica, biblioteca), Carpa Teatro San Juan Morros (800 personas, actividades culturales).
 F~~~guarico~~~Hoteles y Posadas~~~San Juan Morros concentra oferta consolidada centrada aguas termales (spa, hotel con piscinas sulfurosas, jacuzzis). Resto estado oferta limitada hatos turismo rural.
 F~~~guarico~~~Actividad Economica Principal~~~Agricultura (arroz, maíz, sorgo, caña azucar) y ganadería bovina porcina. Sur del estado forma parte Faja Petrolera Orinoco, reservas petroleras estrategicas.
 F~~~guarico~~~Personajes Destacados~~~Romulo Gallegos, escritor célebre (autor Dona Barbara) que da nombre universidad regional UNERG. Aristides Rojas, científico historiador homenajeado Monumento Natural.
+S~~~guarico~~~San Juan de los Morros~~~Capital~~~Llamada por Los Morros (Monumento Natural Aristides Rojas), formaciones rocosas escarpadas. Atractivos: Aguas Termales (manantial sulfuroso 33.5 grados C), Sanjuanote (monumento 20 m altura), Arco Federación La Puerta, balneario embalse Tierra Blanca.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/TOROS_COLEADOS.jpg/960px-TOROS_COLEADOS.jpg
+S~~~guarico~~~Calabozo~~~Ciudad~~~Antigua capital del estado, sede represa Generoso Campilongo (una mas grandes Latinoamérica) que sostiene producción arrocera. Iglesia colonial estilo barroco finales siglo XVIII.~~~https://upload.wikimedia.org/wikipedia/commons/0/02/Catedral_calabozo_venezuela8.jpg
+S~~~guarico~~~Parque Nacional Aguaro-Guariquito~~~Parque~~~Segundo parque nacional mas extenso Venezuela (596000 hectáreas) con sabanas, bosques, ríos y lagunas de gran biodiversidad, al sur del estado.~~~https://upload.wikimedia.org/wikipedia/commons/1/19/Parque_nacional_Aguaro-Guariquito_004.jpg
+S~~~guarico~~~Parque Nacional Guatopo~~~Parque~~~Region montanosa (compartido con Miranda) de bosque tropical humedo entre Santa Teresa del Tuy y Altagracia de Orituco.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Parque_Nacional_Guatopo_Gu%C3%A1rico.jpg/960px-Parque_Nacional_Guatopo_Gu%C3%A1rico.jpg
+S~~~guarico~~~Aguas Termales de Gurumen~~~Balneario~~~Entre poblaciones Ortiz y San Francisco de Cara, con piscinas naturales de origen geotermal.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Reflejo_de_los_Morros.JPG/960px-Reflejo_de_los_Morros.JPG
+S~~~guarico~~~Salto La Margarita~~~Cascada~~~Caida agua 90 m destino turismo aventura varias horas caminata cerca Quebrada Guanape.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/La_Gran_Sabana.jpg/960px-La_Gran_Sabana.jpg
 Z~~~lara~~~Estado Lara~~~Barquisimeto
+I~~~lara~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Vista-desde-Carretera-Quibor-Cubiro-Lara-Venezuela.JPG/960px-Vista-desde-Carretera-Quibor-Cubiro-Lara-Venezuela.JPG
 D~~~lara~~~Lara, en la region centro-occidental, es el cuarto estado mas poblado del pais e importante centro agricola, comercial y musical (conocido como capital musical de Venezuela).~~P~~Combina paisajes semiáridos depresión Barquisimeto con montanas andinas al sur y valles fertiles productores café y vino.
+F~~~lara~~~Clima~~~Templado subtropical variaciones segun altitud: calido semiárido depresión Barquisimeto, mas fresco zonas altas Sanare Humocaro. Barquisimeto célebre atardeceres clima seco.
+F~~~lara~~~Gastronomia~~~Tradicion caprina: mondongo chivo, talkarí chivo, mute larense (entranas chivo), patas grillo (carne mechada frita cabra). Lomo prensado, tostadas caroreñas, queso mano, olleta gallo (sopa origen español). Bebidas: cocuy, licor semeruco.
+F~~~lara~~~Museos~~~Museo Barquisimeto (antiguo hospital colonial, arte, historia, arqueología), Teatro Juares (1905), Museo Arqueológico Quibor.
+F~~~lara~~~Hoteles y Posadas~~~Barquisimeto concentra oferta hotelera negocios (Hotel Trinitarias Suites, Biotel Suites). Sanare, Quibor, valles altos ofrecen posadas rurales agroturismo.
+F~~~lara~~~Actividad Economica Principal~~~Agricultura (caña azucar, café, vid Carora), ganadería bovina caprina, comercio, industria área metropolitana Barquisimeto.
+F~~~lara~~~Personajes Destacados~~~Jacinto Lara, general independentista. Gustavo Dudamel, director orquesta fama mundial nacido Barquisimeto. Alirio Díaz y Rodrigo Riera, guitarristas clásicos renombre internacional. Simon Planas, Ministro Interior, impulsó abolición esclavitud.
 M~~~lara~~~Iribarren~~~Barquisimeto
 M~~~lara~~~Moran~~~El Tocuyo
 M~~~lara~~~Jimenez~~~Quibor
@@ -261,33 +280,23 @@ M~~~lara~~~Palavecino~~~Cabudare
 M~~~lara~~~Andres Eloy Blanco~~~Sanare
 M~~~lara~~~Urdaneta~~~Siquisique
 M~~~lara~~~Simon Planas~~~Sarare
-S~~~lara~~~Barquisimeto~~~Capital~~~Fundada 1552, ciudad de los crepusculos. Obelisco (mas alto Venezuela erigido 1952), Catedral arquitectura moderna, Parque Ayacucho (primer parque Latinoamérica acceso vehicular), escultura La Flor Venezuela. Procesión Divina Pastora 14 enero.
-S~~~lara~~~Carora~~~Historico~~~Casco historico colonial bien conservado, cuna tradición vitivinicola y musica. Ruta del Chivo gastronómica propia zona.
-S~~~lara~~~El Tocuyo~~~Historico~~~Una primeras ciudades fundadas interior Venezuela (1545), brevemente capital Capitanía General. Antiguo Templo Belén (1625), ultimo vestigio Hospitales Reales coloniales.
-S~~~lara~~~Quibor~~~Pueblo~~~Célebre Museo Arqueológico con piezas precolombinas halladas cementerio indígena local. Artesanía tradicional cerámica tejidos.
-S~~~lara~~~Sanare~~~Pueblo~~~Pueblo montana andina con arquitectura colonial, epicentro agroturismo cultivo cafetalero.
-S~~~lara~~~Humocaro Alto y Humocaro Bajo~~~Pueblo~~~Pueblos coloniales montana. Humocaro Bajo con Plaza Bolivar rodeada chaguaramos.
-S~~~lara~~~Parques Nacionales de Lara~~~Parque~~~Yacambú (bosque tropical lluvioso, cabecera cuencas importantes), Dinira (paramo Cendé, montana mas alta Lara 3585 m), Cerro Saroche, Terepaima.
-S~~~lara~~~Cascada del Vino~~~Cascada~~~Caida agua 90 m color rojizo (sulfato hierro rocas) cerca Barbacoa, destino aventura.
-F~~~lara~~~Clima~~~Templado subtropical variaciones segun altitud: calido semiárido depresión Barquisimeto, mas fresco zonas altas Sanare Humocaro. Barquisimeto célebre atardeceres clima seco.
-F~~~lara~~~Gastronomia~~~Tradicion caprina: mondongo chivo, talkarí chivo, mute larense (entranas chivo), patas grillo (carne mechada frita cabra). Lomo prensado, tostadas caroreñas, queso mano, olleta gallo (sopa origen español). Bebidas: cocuy, licor semeruco.
-F~~~lara~~~Museos~~~Museo Barquisimeto (antiguo hospital colonial, arte, historia, arqueología), Teatro Juares (1905), Museo Arqueológico Quibor.
-F~~~lara~~~Hoteles y Posadas~~~Barquisimeto concentra oferta hotelera negocios (Hotel Trinitarias Suites, Biotel Suites). Sanare, Quibor, valles altos ofrecen posadas rurales agroturismo.
-F~~~lara~~~Actividad Economica Principal~~~Agricultura (caña azucar, café, vid Carora), ganadería bovina caprina, comercio, industria área metropolitana Barquisimeto.
-F~~~lara~~~Personajes Destacados~~~Jacinto Lara, general independentista. Gustavo Dudamel, director orquesta fama mundial nacido Barquisimeto. Alirio Díaz y Rodrigo Riera, guitarristas clásicos renombre internacional. Simon Planas, Ministro Interior, impulsó abolición esclavitud.
+S~~~lara~~~Barquisimeto~~~Capital~~~Fundada 1552, ciudad de los crepusculos. Obelisco (mas alto Venezuela erigido 1952), Catedral arquitectura moderna, Parque Ayacucho (primer parque Latinoamérica acceso vehicular), escultura La Flor Venezuela. Procesión Divina Pastora 14 enero.~~~https://upload.wikimedia.org/wikipedia/commons/2/2b/BarquisimetoCollage.png
+S~~~lara~~~Carora~~~Historico~~~Casco historico colonial bien conservado, cuna tradición vitivinicola y musica. Ruta del Chivo gastronómica propia zona.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Iglesia_matriz_de_Carora.jpg/960px-Iglesia_matriz_de_Carora.jpg
+S~~~lara~~~El Tocuyo~~~Historico~~~Una primeras ciudades fundadas interior Venezuela (1545), brevemente capital Capitanía General. Antiguo Templo Belén (1625), ultimo vestigio Hospitales Reales coloniales.~~~https://upload.wikimedia.org/wikipedia/commons/a/a3/Antigua_Torre_de_la_Catedral_El_Tocuyo.jpg
+S~~~lara~~~Quibor~~~Pueblo~~~Célebre Museo Arqueológico con piezas precolombinas halladas cementerio indígena local. Artesanía tradicional cerámica tejidos.~~~https://upload.wikimedia.org/wikipedia/commons/1/11/Quibor_1999_001.jpg
+S~~~lara~~~Sanare~~~Pueblo~~~Pueblo montana andina con arquitectura colonial, epicentro agroturismo cultivo cafetalero.~~~https://upload.wikimedia.org/wikipedia/commons/7/7e/Catedral_de_Sanare.jpg
+S~~~lara~~~Humocaro Alto y Humocaro Bajo~~~Pueblo~~~Pueblos coloniales montana. Humocaro Bajo con Plaza Bolivar rodeada chaguaramos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Venezuela_-_Lara_-_Mor%C3%A1n.svg/960px-Venezuela_-_Lara_-_Mor%C3%A1n.svg.png
+S~~~lara~~~Parques Nacionales de Lara~~~Parque~~~Yacambú (bosque tropical lluvioso, cabecera cuencas importantes), Dinira (paramo Cendé, montana mas alta Lara 3585 m), Cerro Saroche, Terepaima.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Vista-desde-Carretera-Quibor-Cubiro-Lara-Venezuela.JPG/960px-Vista-desde-Carretera-Quibor-Cubiro-Lara-Venezuela.JPG
+S~~~lara~~~Cascada del Vino~~~Cascada~~~Caida agua 90 m color rojizo (sulfato hierro rocas) cerca Barbacoa, destino aventura.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Cascada_del_Vino_2021.jpg/960px-Cascada_del_Vino_2021.jpg
 Z~~~merida~~~Merida~~~Merida
+I~~~merida~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg/960px-Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg
 D~~~merida~~~Merida, en plena Cordillera de los Andes, es uno de los destinos turisticos mas consolidados de Venezuela: alberga el Pico Bolivar (4.978 m, el punto mas alto del pais) y el historico Teleforico de Merida (Mukumbari), el mas alto del mundo.~~P~~Su capital, sede de la Universidad de Los Andes, tiene fuerte vocacion estudiantil y turistica (la industria verde).~~P~~Division politico-territorial: 23 municipios y 86 parroquias. Ciudades principales: Merida (capital), El Vigia, Tovar, Ejido, Lagunillas y Nueva Bolivia.
-S~~~merida~~~Merida~~~Ciudad~~~Asentada a 1.630 m sobre una meseta del valle del rio Chama. Ofrece el Teleforico Mukumbari (12,5 km en cuatro tramos, desde 1.577 m hasta el Pico Espejo a 4.765 m), zoologico, mercado principal y sistemas de transporte turistico.
-S~~~merida~~~Parque Nacional Sierra Nevada~~~Parque~~~Hogar del Pico Bolivar y los picos Humboldt y Bonpland. Punto de partida para el andinismo desde el parque La Mucuy en Tabay.
-S~~~merida~~~Paramo de La Culata~~~Montana~~~Macizo emblematico para turismo de aventura y observacion de frailejones.
-S~~~merida~~~San Rafael de Mucuchies~~~Pueblo~~~Cuna del artista Juan Felix Sanchez, celebre por su arquitectura de piedra y por la raza de perros mucuchies.
-S~~~merida~~~Timotes~~~Pueblo~~~Pueblo andino colonial con identidad propia y actividades de aventura como escalada, espeleologia y canopy.
-S~~~merida~~~Bailadores~~~Pueblo~~~Famoso por sus fresas. Pueblo andino colonial con actividades de aventura.
-S~~~merida~~~La Azulita~~~Pueblo~~~Pueblo andino colonial con identidad propia y actividades de aventura.
-S~~~merida~~~Los Aleros~~~Parque~~~Parque tematico que recrea pueblos andinos historicos.
-S~~~merida~~~Venezuela de Antier~~~Parque~~~Parque tematico que recrea pueblos andinos historicos.
-S~~~merida~~~Ruta del Pico El Aguila~~~Montana~~~La carretera trasandina mas alta del pais (4.118 m), con paradas en el Collado del Condor, Laguna de Mucubaji, observatorio astronomico y capillas de piedra.
-S~~~merida~~~Playa de Palmarito~~~Playa~~~En el sur del lago de Maracaibo, contraste tropical dentro del mismo estado andino.
+F~~~merida~~~Clima~~~El mas variado de Venezuela por enormes diferencias de altitud: desde 27C en Palmarito hasta temperaturas bajo cero en las cumbres. Merida (1.630 m) tiene clima tropical de altura, templado (19-22C). Mejor epoca: temporada seca, noviembre a abril.
+F~~~merida~~~Gastronomia~~~Arepa andina (de harina de trigo), pisca andina (sopa de papa, leche y huevo), pastelitos merideños, trucha de montaña y dulces. Tovar y Bailadores celebre por sus fresas.
+F~~~merida~~~Museos~~~Museo Arqueologico Gonzalo Rincon Gutierrez; Museo Arquidiocesano y Palacio Arzobispal; Museo de Arte Colonial; Museo de Arte Moderno Juan Astorga Anta; Museo Mariano Picon Salas; Santuario de las Reliquias de San Benito en Timotes.
+F~~~merida~~~Hoteles y posadas~~~Merida capital tiene la red hotelera mas grande de Venezuela; pueblos andinos ofrecen posadas de montaña con cabañas y pesca.
+F~~~merida~~~Actividad economica principal~~~Agricultura de altura (fresas, moras, papa, cebolla, ajo, coliflor), ganaderia lechera y turismo.
+F~~~merida~~~Personajes destacados~~~Juan Felix Sanchez (artista y constructor de San Rafael de Mucuchies); Mariano Picon Salas (escritor); Johan Santana (lanzador de Grandes Ligas); Cristobal Mendoza (primer presidente de Venezuela).
 M~~~merida~~~Acevedo~~~Ejido
 M~~~merida~~~Arapachima~~~Arapachima
 M~~~merida~~~Arzobispado~~~Lagunillas
@@ -310,26 +319,28 @@ M~~~merida~~~Sucre~~~Lagunillas
 M~~~merida~~~Tovar~~~Tovar
 M~~~merida~~~Trujillo~~~Trujillo
 M~~~merida~~~Urdaneta~~~Ejido
-F~~~merida~~~Clima~~~El mas variado de Venezuela por enormes diferencias de altitud: desde 27C en Palmarito hasta temperaturas bajo cero en las cumbres. Merida (1.630 m) tiene clima tropical de altura, templado (19-22C). Mejor epoca: temporada seca, noviembre a abril.
-F~~~merida~~~Gastronomia~~~Arepa andina (de harina de trigo), pisca andina (sopa de papa, leche y huevo), pastelitos merideños, trucha de montaña y dulces. Tovar y Bailadores celebre por sus fresas.
-F~~~merida~~~Museos~~~Museo Arqueologico Gonzalo Rincon Gutierrez; Museo Arquidiocesano y Palacio Arzobispal; Museo de Arte Colonial; Museo de Arte Moderno Juan Astorga Anta; Museo Mariano Picon Salas; Santuario de las Reliquias de San Benito en Timotes.
-F~~~merida~~~Hoteles y posadas~~~Merida capital tiene la red hotelera mas grande de Venezuela; pueblos andinos ofrecen posadas de montaña con cabañas y pesca.
-F~~~merida~~~Actividad economica principal~~~Agricultura de altura (fresas, moras, papa, cebolla, ajo, coliflor), ganaderia lechera y turismo.
-F~~~merida~~~Personajes destacados~~~Juan Felix Sanchez (artista y constructor de San Rafael de Mucuchies); Mariano Picon Salas (escritor); Johan Santana (lanzador de Grandes Ligas); Cristobal Mendoza (primer presidente de Venezuela).
+S~~~merida~~~Merida~~~Ciudad~~~Asentada a 1.630 m sobre una meseta del valle del rio Chama. Ofrece el Teleforico Mukumbari (12,5 km en cuatro tramos, desde 1.577 m hasta el Pico Espejo a 4.765 m), zoologico, mercado principal y sistemas de transporte turistico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg/960px-Plaza_Bol%C3%ADvar_de_la_Ciudad_de_M%C3%A9rida.jpg
+S~~~merida~~~Parque Nacional Sierra Nevada~~~Parque~~~Hogar del Pico Bolivar y los picos Humboldt y Bonpland. Punto de partida para el andinismo desde el parque La Mucuy en Tabay.~~~https://upload.wikimedia.org/wikipedia/commons/8/8f/Bol%C3%ADvar_usgs.jpg
+S~~~merida~~~Paramo de La Culata~~~Montana~~~Macizo emblematico para turismo de aventura y observacion de frailejones.~~~https://upload.wikimedia.org/wikipedia/commons/e/ef/P%C3%A1ramo_de_Mucubaj%C3%AD.jpg
+S~~~merida~~~San Rafael de Mucuchies~~~Pueblo~~~Cuna del artista Juan Felix Sanchez, celebre por su arquitectura de piedra y por la raza de perros mucuchies.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Parte_superior_de_la_Capilla_de_piedra.jpg/960px-Parte_superior_de_la_Capilla_de_piedra.jpg
+S~~~merida~~~Timotes~~~Pueblo~~~Pueblo andino colonial con identidad propia y actividades de aventura como escalada, espeleologia y canopy.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~merida~~~Bailadores~~~Pueblo~~~Famoso por sus fresas. Pueblo andino colonial con actividades de aventura.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Bailadores_8.jpg/960px-Bailadores_8.jpg
+S~~~merida~~~La Azulita~~~Pueblo~~~Pueblo andino colonial con identidad propia y actividades de aventura.~~~https://upload.wikimedia.org/wikipedia/commons/3/39/La_azu13.jpg
+S~~~merida~~~Los Aleros~~~Parque~~~Parque tematico que recrea pueblos andinos historicos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Vista_de_Los_Aleros.JPG/960px-Vista_de_Los_Aleros.JPG
+S~~~merida~~~Venezuela de Antier~~~Parque~~~Parque tematico que recrea pueblos andinos historicos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Plaza_Bol%C3%ADvar_en_Ejido_%28Campo_El%C3%ADas%29.jpg/960px-Plaza_Bol%C3%ADvar_en_Ejido_%28Campo_El%C3%ADas%29.jpg
+S~~~merida~~~Ruta del Pico El Aguila~~~Montana~~~La carretera trasandina mas alta del pais (4.118 m), con paradas en el Collado del Condor, Laguna de Mucubaji, observatorio astronomico y capillas de piedra.~~~https://upload.wikimedia.org/wikipedia/commons/0/0f/PicoBolivar2.jpg
+S~~~merida~~~Playa de Palmarito~~~Playa~~~En el sur del lago de Maracaibo, contraste tropical dentro del mismo estado andino.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
 P~~~merida~~~Sierra de La Culata~~~Torondoy, San Cristobal de Torondoy, San Jose de Palmira, Las Virtudes, Santa Apolonia, La Palmita
 P~~~merida~~~Eje Panamericano~~~El Vigia, Nueva Bolivia, Tucani, Arapuey, Santa Elena de Arenales, Mucujepe, El Pinar, Guayabones
 Z~~~miranda~~~Miranda~~~Los Teques
+I~~~miranda~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Miranda_in_Venezuela_%28%2Bclaimed%29.svg/960px-Miranda_in_Venezuela_%28%2Bclaimed%29.svg.png
 D~~~miranda~~~Miranda, en la region centronorte, es el segundo estado mas poblado de Venezuela y forma parte de la Region Capital junto a Caracas.~~P~~Incluye los municipios del Este de Caracas (Chacao, Baruta, El Hatillo, Sucre/Petare) ademas de seis subregiones bien diferenciadas: Altos Mirandinos, Valle de Caracas, Valles del Tuy, Barlovento, laderas de la Cordillera del Litoral y la costa caribeña.~~P~~Division politico-territorial: 21 municipios. Capital: Los Teques. Otras ciudades: Guarenas, Guatire, Charallave, Cua, Santa Teresa del Tuy, San Francisco de Yare, Caucagua, Higuerote y Rio Chico.
-S~~~miranda~~~Los Teques~~~Ciudad~~~A 1.100 m de altitud, con clima fresco. Patrimonio: Iglesia Catedral San Felipe Neri, Complejo Cultural Cecilio Acosta y Museo Cristobal Rojas.
-S~~~miranda~~~Barlovento~~~Costera~~~Region costera de fuerte herencia afrovenezolana, cuna de tradiciones como los Diablos Danzantes. Playas: Buche, Los Totumos, Higuerote, Rio Chico. Cueva Alfredo Jahn con estalagmitas.
-S~~~miranda~~~Higuerote~~~Ciudad~~~La ciudad turistica mas importante del litoral mirandino, con extensa infraestructura hotelera.
-S~~~miranda~~~San Francisco de Yare~~~Pueblo~~~Famoso mundialmente por los Diablos Danzantes de Corpus Christi, festividad religiosa afrovenezolana declarada Patrimonio Cultural.
-S~~~miranda~~~Waraira Repano~~~Parque~~~Parque nacional en la parte norte del estado, compartido con el Distrito Capital.
-S~~~miranda~~~Guatopo~~~Parque~~~Bosque tropical humedo, compartido con Guarico.
-S~~~miranda~~~Macarao~~~Parque~~~Parque nacional del estado.
-S~~~miranda~~~Laguna de Tacarigua~~~Parque~~~Humedal costero de gran valor para observacion de aves, accesible via Higuerote.
-S~~~miranda~~~El Hatillo~~~Historico~~~Casco colonial muy bien conservado en el extremo sureste del area metropolitana de Caracas, con ambiente artesanal y gastronomico.
-S~~~miranda~~~El Jarillo~~~Pueblo~~~Poblado de clima fresco con influencia de cultura alemana, popular para parapente.
+F~~~miranda~~~Clima~~~Muy variado: calido y humedo en Barlovento (20-42C), templado en Altos Mirandinos (18-26C) y tropical en Valle de Caracas. Mejor epoca: diciembre a abril.
+F~~~miranda~~~Gastronomia~~~Asado negro, pabellon criollo, mondongo. En Barlovento pescado frito entero. En El Jarillo salchichas alemanas. En Los Teques golfeados y cachapas con queso.
+F~~~miranda~~~Museos~~~Casa Arturo Michelena; Complejo Cultural Cecilio Acosta; Museo de Arte Popular de Petare; Museo Cristobal Rojas; Casa de las Carretas; Centro de Estudios Latinoamericanos Romulo Gallegos.
+F~~~miranda~~~Hoteles y posadas~~~Barlovento (Higuerote) con mayor concentracion hotelera; Los Teques y Altos Mirandinos ofrecen hoteles de montaña; El Hatillo posadas coloniales.
+F~~~miranda~~~Actividad economica principal~~~Industria y comercio en area metropolitana; agricultura de exportacion en Barlovento (cacao, caña); turismo costero.
+F~~~miranda~~~Personajes destacados~~~Francisco de Miranda (precursor de independencia); cacique Guaicaipuro (lider indigena); Arturo Michelena (pintor celebre).
 M~~~miranda~~~Acevedo~~~Paraquito
 M~~~miranda~~~Andres Bello~~~Guarenas
 M~~~miranda~~~Baruta~~~Baruta
@@ -351,24 +362,27 @@ M~~~miranda~~~Simón Bolivar~~~Tacarigua
 M~~~miranda~~~Sucre~~~Petare
 M~~~miranda~~~Tejada~~~Ocumare del Tuy
 M~~~miranda~~~Urdaneta~~~Rio Chico
-F~~~miranda~~~Clima~~~Muy variado: calido y humedo en Barlovento (20-42C), templado en Altos Mirandinos (18-26C) y tropical en Valle de Caracas. Mejor epoca: diciembre a abril.
-F~~~miranda~~~Gastronomia~~~Asado negro, pabellon criollo, mondongo. En Barlovento pescado frito entero. En El Jarillo salchichas alemanas. En Los Teques golfeados y cachapas con queso.
-F~~~miranda~~~Museos~~~Casa Arturo Michelena; Complejo Cultural Cecilio Acosta; Museo de Arte Popular de Petare; Museo Cristobal Rojas; Casa de las Carretas; Centro de Estudios Latinoamericanos Romulo Gallegos.
-F~~~miranda~~~Hoteles y posadas~~~Barlovento (Higuerote) con mayor concentracion hotelera; Los Teques y Altos Mirandinos ofrecen hoteles de montaña; El Hatillo posadas coloniales.
-F~~~miranda~~~Actividad economica principal~~~Industria y comercio en area metropolitana; agricultura de exportacion en Barlovento (cacao, caña); turismo costero.
-F~~~miranda~~~Personajes destacados~~~Francisco de Miranda (precursor de independencia); cacique Guaicaipuro (lider indigena); Arturo Michelena (pintor celebre).
+S~~~miranda~~~Los Teques~~~Ciudad~~~A 1.100 m de altitud, con clima fresco. Patrimonio: Iglesia Catedral San Felipe Neri, Complejo Cultural Cecilio Acosta y Museo Cristobal Rojas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Los-Teques-2022.jpg/960px-Los-Teques-2022.jpg
+S~~~miranda~~~Barlovento~~~Costera~~~Region costera de fuerte herencia afrovenezolana, cuna de tradiciones como los Diablos Danzantes. Playas: Buche, Los Totumos, Higuerote, Rio Chico. Cueva Alfredo Jahn con estalagmitas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Santuario_Nuestra_Se%C3%B1ora_de_las_Mercedes_-_R%C3%ADo_Chico.jpg/960px-Santuario_Nuestra_Se%C3%B1ora_de_las_Mercedes_-_R%C3%ADo_Chico.jpg
+S~~~miranda~~~Higuerote~~~Ciudad~~~La ciudad turistica mas importante del litoral mirandino, con extensa infraestructura hotelera.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Dawn_in_Puerto_Encantado.jpg/960px-Dawn_in_Puerto_Encantado.jpg
+S~~~miranda~~~San Francisco de Yare~~~Pueblo~~~Famoso mundialmente por los Diablos Danzantes de Corpus Christi, festividad religiosa afrovenezolana declarada Patrimonio Cultural.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~miranda~~~Waraira Repano~~~Parque~~~Parque nacional en la parte norte del estado, compartido con el Distrito Capital.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg/960px-Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg
+S~~~miranda~~~Guatopo~~~Parque~~~Bosque tropical humedo, compartido con Guarico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Parque_Nacional_Guatopo_Gu%C3%A1rico.jpg/960px-Parque_Nacional_Guatopo_Gu%C3%A1rico.jpg
+S~~~miranda~~~Macarao~~~Parque~~~Parque nacional del estado.~~~https://upload.wikimedia.org/wikipedia/commons/5/57/RioMacarao2004-8-27.jpg
+S~~~miranda~~~Laguna de Tacarigua~~~Parque~~~Humedal costero de gran valor para observacion de aves, accesible via Higuerote.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Tacarigua_Lagoon%2C_Miranda_State%2C_Venezuela.JPG/960px-Tacarigua_Lagoon%2C_Miranda_State%2C_Venezuela.JPG
+S~~~miranda~~~El Hatillo~~~Historico~~~Casco colonial muy bien conservado en el extremo sureste del area metropolitana de Caracas, con ambiente artesanal y gastronomico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Iglesia_de_Santa_Rosalia_-_El_Hatillo_2012_000.jpg/960px-Iglesia_de_Santa_Rosalia_-_El_Hatillo_2012_000.jpg
+S~~~miranda~~~El Jarillo~~~Pueblo~~~Poblado de clima fresco con influencia de cultura alemana, popular para parapente.~~~
 P~~~miranda~~~Barlovento~~~Curiepe, Tacarigua de Brion, Panaquire, Tapipa, El Clavo, Cupira, Carenero, San Jose de Rio Chico
 P~~~miranda~~~Valles del Tuy~~~Ocumare del Tuy, La Democracia, Santa Lucia
 Z~~~monagas~~~Monagas~~~Maturin
+I~~~monagas~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Monagas_in_Venezuela_%28%2Bclaimed%29.svg/960px-Monagas_in_Venezuela_%28%2Bclaimed%29.svg.png
 D~~~monagas~~~Monagas, en la region nororiental, combina llanos petroleros con un sector montañoso al norte (Macizo Oriental) donde se encuentra su mayor atractivo turistico: la Cueva del Guacharo.~~P~~Es uno de los estados de mayor crecimiento poblacional del pais gracias a la actividad petrolera.~~P~~Division politico-territorial: 13 municipios: Maturin (capital), Caripe, Acosta, Bolivar, Cedeño, Ezequiel Zamora, Piar, Libertador, Sotillo, Uracoa, Aguasay, Santa Barbara y Punceres.
-S~~~monagas~~~Parque Nacional El Guacharo~~~Parque~~~El gran icono turistico del estado cerca de Caripe. Cueva tallada en roca caliza de mas de 130 millones de años, hogar de miles de guacharos. Recorrido de 1.500 metros con estalactitas, estalagmitas y rio subterraneo. Puntos de interes: Las Puertas de Miraflores (cañon de 250 m); Museo Espeleologico Alejandro Humboldt.
-S~~~monagas~~~Caripe~~~Pueblo~~~Pueblo de montaña a 900 m, cuna del cafe de altura venezolano. Mirador de Caripe, Cerro Negro, Cascada El Chorreron. Cultivo de fresas, orquídeas y flores. Principal centro turistico y hotelero.
-S~~~monagas~~~Maturin~~~Ciudad~~~Capital del estado con casco historico, Catedral Nuestra Señora del Carmen, Teatro Monterrey y Plaza Bolivar.
-S~~~monagas~~~Rio Morichal Largo~~~Rio~~~Aguas oscuras rodeadas de morichales, considerado uno de los destinos de ecoturismo fluvial mas explotados del oriente. Laguna Cujisánica cercana.
-S~~~monagas~~~Delta de Maturin~~~Etnoturismo~~~Comunidades warao en palafitos accesibles en embarcacion, con gastronomia indigena (palmito, pescado morocoto).
-S~~~monagas~~~Aguas termales~~~Balneario~~~Balnearios sulfurosos en Quiriquire y Caripito, y balnearios de rio como Salto Aparicio, La Paila y Maraquero.
-S~~~monagas~~~Barrancas del Orinoco~~~Historico~~~Yacimientos arqueologicos de alfareria indigena de mas de 3.000 años de antiguedad.
-S~~~monagas~~~Caicara de Maturin~~~Pueblo~~~Celebre por el Baile del Mono, festividad tradicional única del oriente venezolano.
+F~~~monagas~~~Clima~~~Calido tropical, temperatura media de 27C en Maturin y Temblador; mas fresco en zona montañosa de Caripe con cultivos de fresas y rosas.
+F~~~monagas~~~Gastronomia~~~Casabe con cabeza de ternera horneada, sancocho de cangrejo de rio, cachapa celebres de El Zamuro, arepa raspada, queso de mano y cuajao maturines. Ron añejo Calazán premiado internacionalmente.
+F~~~monagas~~~Museos~~~Museo Espeleologico Alejandro Humboldt (Parque Nacional); Museo Arqueologico Uyapari (cultura barrancoide); Museo de la Iglesia de San Antonio (Museo Colonial); Museo Mateo Manaure.
+F~~~monagas~~~Hoteles y posadas~~~Maturin con mayor variedad de hoteles; Caripe tiene amplia oferta de posadas, cabañas y chalés de montaña.
+F~~~monagas~~~Actividad economica principal~~~Industria petrolera, agricultura (cafe en Caripe, cacao, caña) y ganaderia bovina y bufalina.
+F~~~monagas~~~Personajes destacados~~~Jose Tadeo y Jose Gregorio Monagas (presidentes de Venezuela); Juvenal Ravelo (artista plastico nativo de Caripito).
 M~~~monagas~~~Acosta~~~San Jose de Buja
 M~~~monagas~~~Aguasay~~~Aguasay
 M~~~monagas~~~Bolivar~~~Caripito
@@ -382,25 +396,24 @@ M~~~monagas~~~Punceres~~~Punceres
 M~~~monagas~~~Santa Barbara~~~Santa Barbara
 M~~~monagas~~~Sotillo~~~Barrancas
 M~~~monagas~~~Uracoa~~~Uracoa
-F~~~monagas~~~Clima~~~Calido tropical, temperatura media de 27C en Maturin y Temblador; mas fresco en zona montañosa de Caripe con cultivos de fresas y rosas.
-F~~~monagas~~~Gastronomia~~~Casabe con cabeza de ternera horneada, sancocho de cangrejo de rio, cachapa celebres de El Zamuro, arepa raspada, queso de mano y cuajao maturines. Ron añejo Calazán premiado internacionalmente.
-F~~~monagas~~~Museos~~~Museo Espeleologico Alejandro Humboldt (Parque Nacional); Museo Arqueologico Uyapari (cultura barrancoide); Museo de la Iglesia de San Antonio (Museo Colonial); Museo Mateo Manaure.
-F~~~monagas~~~Hoteles y posadas~~~Maturin con mayor variedad de hoteles; Caripe tiene amplia oferta de posadas, cabañas y chalés de montaña.
-F~~~monagas~~~Actividad economica principal~~~Industria petrolera, agricultura (cafe en Caripe, cacao, caña) y ganaderia bovina y bufalina.
-F~~~monagas~~~Personajes destacados~~~Jose Tadeo y Jose Gregorio Monagas (presidentes de Venezuela); Juvenal Ravelo (artista plastico nativo de Caripito).
+S~~~monagas~~~Parque Nacional El Guacharo~~~Parque~~~El gran icono turistico del estado cerca de Caripe. Cueva tallada en roca caliza de mas de 130 millones de años, hogar de miles de guacharos. Recorrido de 1.500 metros con estalactitas, estalagmitas y rio subterraneo. Puntos de interes: Las Puertas de Miraflores (cañon de 250 m); Museo Espeleologico Alejandro Humboldt.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Cueva_del_Guacharo.jpg/960px-Cueva_del_Guacharo.jpg
+S~~~monagas~~~Caripe~~~Pueblo~~~Pueblo de montaña a 900 m, cuna del cafe de altura venezolano. Mirador de Caripe, Cerro Negro, Cascada El Chorreron. Cultivo de fresas, orquídeas y flores. Principal centro turistico y hotelero.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Vene_30.jpg/960px-Vene_30.jpg
+S~~~monagas~~~Maturin~~~Ciudad~~~Capital del estado con casco historico, Catedral Nuestra Señora del Carmen, Teatro Monterrey y Plaza Bolivar.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Venezuela_-_Monagas_-_Matur%C3%ADn.svg/960px-Venezuela_-_Monagas_-_Matur%C3%ADn.svg.png
+S~~~monagas~~~Rio Morichal Largo~~~Rio~~~Aguas oscuras rodeadas de morichales, considerado uno de los destinos de ecoturismo fluvial mas explotados del oriente. Laguna Cujisánica cercana.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Iglesia_San_Jose_en_Temblador.jpg/960px-Iglesia_San_Jose_en_Temblador.jpg
+S~~~monagas~~~Delta de Maturin~~~Etnoturismo~~~Comunidades warao en palafitos accesibles en embarcacion, con gastronomia indigena (palmito, pescado morocoto).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Venezuela_-_Monagas_-_Matur%C3%ADn.svg/960px-Venezuela_-_Monagas_-_Matur%C3%ADn.svg.png
+S~~~monagas~~~Aguas termales~~~Balneario~~~Balnearios sulfurosos en Quiriquire y Caripito, y balnearios de rio como Salto Aparicio, La Paila y Maraquero.~~~
+S~~~monagas~~~Barrancas del Orinoco~~~Historico~~~Yacimientos arqueologicos de alfareria indigena de mas de 3.000 años de antiguedad.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~monagas~~~Caicara de Maturin~~~Pueblo~~~Celebre por el Baile del Mono, festividad tradicional única del oriente venezolano.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Iglesia_en_Caicara_de_Maturin.jpg/960px-Iglesia_en_Caicara_de_Maturin.jpg
 P~~~monagas~~~Caripe~~~Teresen, El Guacharo, La Guanota, Sabana de Piedra, San Agustin, Las Delicias, Alto de Los Toros, Periquito
 Z~~~nueva-esparta~~~Nueva Esparta~~~La Asuncion
+I~~~nueva-esparta~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Hotel_Wyndham_Concorde_Resort_Isla_de_Margarita%2C_Porlamar_Nueva_Esparta%2C_Venezuela_10.jpg/960px-Hotel_Wyndham_Concorde_Resort_Isla_de_Margarita%2C_Porlamar_Nueva_Esparta%2C_Venezuela_10.jpg
 D~~~nueva-esparta~~~Nueva Esparta es el único estado insular de Venezuela, compuesto por tres islas caribeñas: Margarita (la principal), Coche y Cubagua.~~P~~Es uno de los destinos turisticos mas iconicos del pais, con playas para todos los gustos, fortificaciones coloniales españolas y regimen de Puerto Libre (exento de impuestos de importacion).~~P~~Division politico-territorial: 11 municipios y 23 parroquias. Ciudades principales: La Asuncion (capital), Porlamar (la mas poblada y centro comercial), Pampatar y Juan Griego.
-S~~~nueva-esparta~~~La Asuncion~~~Capital~~~Con el Castillo de Santa Rosa, Museo Nueva Cadiz y Catedral de Nuestra Señora de La Asuncion (1571, una de las construcciones religiosas mas antiguas de Latinoamerica).
-S~~~nueva-esparta~~~Porlamar~~~Ciudad~~~La ciudad mas grande y dinamica de la isla, centro comercial y de vida nocturna. Iglesia de San Nicolas de Bari, Museo de Arte Contemporaneo Francisco Narvaez, bulevares para compras.
-S~~~nueva-esparta~~~Pampatar~~~Ciudad~~~Con el Castillo de San Carlos de Borromeo y Faro de Punta Ballena (28 m). Centro gastronomico reconocido de la isla.
-S~~~nueva-esparta~~~Juan Griego~~~Puerto~~~Puerto mas septentrional de Venezuela, famoso por sus atardeceres desde el Fortin de La Galera.
-S~~~nueva-esparta~~~Playas principales~~~Playa~~~El Agua, Parguito, Guacuco, El Yaque (referencia mundial de windsurf y kitesurf), Puerto Cruz, Manzanillo, Zaragoza, Punta Arenas y muchas otras (mas de 20 playas).
-S~~~nueva-esparta~~~Parque Nacional Laguna de La Restinga~~~Parque~~~Humedal de manglares y canales navegables en bote, con gran diversidad de aves; cerca de La Asuncion.
-S~~~nueva-esparta~~~Parque Nacional Cerro El Copey~~~Parque~~~La zona montañosa mas alta del estado, con senderismo y clima mas fresco que contrasta con la costa.
-S~~~nueva-esparta~~~El Valle del Espiritu Santo~~~Religioso~~~Considerado la capital religiosa de Oriente, con la Basilica de la Virgen del Valle, patrona espiritual de la isla y pescadores del oriente.
-S~~~nueva-esparta~~~Peninsula de Macanao~~~Montana~~~Macizo occidental de Margarita, de paisaje mas arido y menos desarrollado. Alberga Museo Marino en Boca del Rio.
-S~~~nueva-esparta~~~Islas de Coche y Cubagua~~~Isla~~~Cubagua fue primer asentamiento español en Sudamerica (Nueva Cadiz, hoy ruinas arqueologicas); Coche conserva playas tranquilas.
+F~~~nueva-esparta~~~Clima~~~Semiarido, uno de los mas soleados de Venezuela: Porlamar llueve 66 dias al año (399 mm), temperatura media 27C. Mas humedo en Serranía de El Copey (1.100 mm) y seco en Peninsula de Macanao.
+F~~~nueva-esparta~~~Gastronomia~~~Cocina marinera. Torta o pastel de chucho (pescado, platano, huevo). Sancocho de pescado, pabellon margariteño (con cazon), empanadas de cazon, fosforera (asopado de mariscos) y arroz con chipichipi.
+F~~~nueva-esparta~~~Museos~~~Museo de Arte Contemporaneo Francisco Narvaez (Porlamar, 50 obras); Museo de Nueva Cadiz (La Asuncion); Casa de la Cultura Monseñor Nicolas Eugenio Navarro con piezas precolombinas.
+F~~~nueva-esparta~~~Hoteles y posadas~~~La red hotelera mas grande y variada de Venezuela, desde resorts de cinco estrellas hasta posadas economicas. Concentrada en Porlamar, Pampatar, Playa El Agua y Juan Griego.
+F~~~nueva-esparta~~~Actividad economica principal~~~Turismo (principal fuente de ingresos, impulsada por Puerto Libre) y pesca artesanal y comercio.
+F~~~nueva-esparta~~~Personajes destacados~~~Luisa Caceres de Arismendi (heroína de independencia); Juan Bautista Arismendi (procer independentista); Francisco Narvaez (escultor); Santiago Mariño (general independentista).
 M~~~nueva-esparta~~~Antolin del Campo~~~Antolin del Campo
 M~~~nueva-esparta~~~Arismendi~~~El Limon
 M~~~nueva-esparta~~~Campos~~~Campos
@@ -412,15 +425,26 @@ M~~~nueva-esparta~~~Marcano~~~San Antonio
 M~~~nueva-esparta~~~Marulanda~~~Juangriego
 M~~~nueva-esparta~~~Paez~~~La Asuncion
 M~~~nueva-esparta~~~Tubores~~~Tubores
-F~~~nueva-esparta~~~Clima~~~Semiarido, uno de los mas soleados de Venezuela: Porlamar llueve 66 dias al año (399 mm), temperatura media 27C. Mas humedo en Serranía de El Copey (1.100 mm) y seco en Peninsula de Macanao.
-F~~~nueva-esparta~~~Gastronomia~~~Cocina marinera. Torta o pastel de chucho (pescado, platano, huevo). Sancocho de pescado, pabellon margariteño (con cazon), empanadas de cazon, fosforera (asopado de mariscos) y arroz con chipichipi.
-F~~~nueva-esparta~~~Museos~~~Museo de Arte Contemporaneo Francisco Narvaez (Porlamar, 50 obras); Museo de Nueva Cadiz (La Asuncion); Casa de la Cultura Monseñor Nicolas Eugenio Navarro con piezas precolombinas.
-F~~~nueva-esparta~~~Hoteles y posadas~~~La red hotelera mas grande y variada de Venezuela, desde resorts de cinco estrellas hasta posadas economicas. Concentrada en Porlamar, Pampatar, Playa El Agua y Juan Griego.
-F~~~nueva-esparta~~~Actividad economica principal~~~Turismo (principal fuente de ingresos, impulsada por Puerto Libre) y pesca artesanal y comercio.
-F~~~nueva-esparta~~~Personajes destacados~~~Luisa Caceres de Arismendi (heroína de independencia); Juan Bautista Arismendi (procer independentista); Francisco Narvaez (escultor); Santiago Mariño (general independentista).
+S~~~nueva-esparta~~~La Asuncion~~~Capital~~~Con el Castillo de Santa Rosa, Museo Nueva Cadiz y Catedral de Nuestra Señora de La Asuncion (1571, una de las construcciones religiosas mas antiguas de Latinoamerica).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Castillo_de_Santa_Rosa%2C_La_Asunci%C3%B3n.JPG/960px-Castillo_de_Santa_Rosa%2C_La_Asunci%C3%B3n.JPG
+S~~~nueva-esparta~~~Porlamar~~~Ciudad~~~La ciudad mas grande y dinamica de la isla, centro comercial y de vida nocturna. Iglesia de San Nicolas de Bari, Museo de Arte Contemporaneo Francisco Narvaez, bulevares para compras.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Modern_Architerture_in_Porlamar%2C_Margarita_Island.jpg/960px-Modern_Architerture_in_Porlamar%2C_Margarita_Island.jpg
+S~~~nueva-esparta~~~Pampatar~~~Ciudad~~~Con el Castillo de San Carlos de Borromeo y Faro de Punta Ballena (28 m). Centro gastronomico reconocido de la isla.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Turismo_en_Pampatar_4.jpg/960px-Turismo_en_Pampatar_4.jpg
+S~~~nueva-esparta~~~Juan Griego~~~Puerto~~~Puerto mas septentrional de Venezuela, famoso por sus atardeceres desde el Fortin de La Galera.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Panoramic_of_Juan_Griego_45.jpg/960px-Panoramic_of_Juan_Griego_45.jpg
+S~~~nueva-esparta~~~Playas principales~~~Playa~~~El Agua, Parguito, Guacuco, El Yaque (referencia mundial de windsurf y kitesurf), Puerto Cruz, Manzanillo, Zaragoza, Punta Arenas y muchas otras (mas de 20 playas).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/La_Gran_Sabana.jpg/960px-La_Gran_Sabana.jpg
+S~~~nueva-esparta~~~Parque Nacional Laguna de La Restinga~~~Parque~~~Humedal de manglares y canales navegables en bote, con gran diversidad de aves; cerca de La Asuncion.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Laguna_de_la_Restinga.jpg/960px-Laguna_de_la_Restinga.jpg
+S~~~nueva-esparta~~~Parque Nacional Cerro El Copey~~~Parque~~~La zona montañosa mas alta del estado, con senderismo y clima mas fresco que contrasta con la costa.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/San_Juan_Valley.jpg/960px-San_Juan_Valley.jpg
+S~~~nueva-esparta~~~El Valle del Espiritu Santo~~~Religioso~~~Considerado la capital religiosa de Oriente, con la Basilica de la Virgen del Valle, patrona espiritual de la isla y pescadores del oriente.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Dia_Virgen_del_Valle.jpg/960px-Dia_Virgen_del_Valle.jpg
+S~~~nueva-esparta~~~Peninsula de Macanao~~~Montana~~~Macizo occidental de Margarita, de paisaje mas arido y menos desarrollado. Alberga Museo Marino en Boca del Rio.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Macanao.jpg/960px-Macanao.jpg
+S~~~nueva-esparta~~~Islas de Coche y Cubagua~~~Isla~~~Cubagua fue primer asentamiento español en Sudamerica (Nueva Cadiz, hoy ruinas arqueologicas); Coche conserva playas tranquilas.~~~https://upload.wikimedia.org/wikipedia/commons/2/29/El_Faro_de_Isla_de_cubagua.jpg
 P~~~nueva-esparta~~~Playas y localidades~~~Moreno, La Caracola, El Angel, Varadero, El Humo, Puerto Real, Guayacan, Puerto Viejo, Caribe, La Galera, Arenas, Cardon, La Caranta, La Pared, La Auyama
 Z~~~portuguesa~~~Portuguesa~~~Guanare
+I~~~portuguesa~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Duelo_guanare_mayc.jpg/960px-Duelo_guanare_mayc.jpg
 D~~~portuguesa~~~Portuguesa, en la region centroccidental, es conocida como El Granero de Venezuela por su enorme produccion agricola: arroz, maiz, sorgo, ajonjoli, cana de azucar.~~P~~Su capital, Guanare, es considerada la capital espiritual de Venezuela al ser sede del Santuario Nacional de Nuestra Senora de Coromoto, patrona del pais.
+F~~~portuguesa~~~Clima~~~Relativamente uniforme, calido, con temperaturas entre 24 y 28 grados Celsius. Estacion seca de diciembre a abril y lluviosa de mayo a noviembre.
+F~~~portuguesa~~~Gastronomia~~~Ternera en vara con yuca y guasacaca, cabeza de cachama, pecho caldereado, picadillo (sopa de Guanare), cachapa con queso de mano. Bebida tipica: papelon con limon.
+F~~~portuguesa~~~Museos~~~Museo Ines Mercedes Gomez Alvarez (Guanare, desde 1984), Museo de la Ciudad de Piritu (300+ piezas arqueologicas) y Museo de las Munecas de Piritu.
+F~~~portuguesa~~~Hoteles~~~Guanare y Acarigua-Araure concentran oferta hotelera formal orientada al turismo religioso y de negocios.
+F~~~portuguesa~~~Actividad Economica~~~Agricultura extensiva (arroz, maiz, sorgo, ajonjoli, algodon, cana de azucar), ganaderia bovina y porcina, industria maderera y agroindustrial.
+F~~~portuguesa~~~Personajes Destacados~~~Juan Fernandez de Leon (fundador de Guanare en 1591), el indigena Coromoto (testigo de aparicion mariana), Monsenor Jose Vicente de Unda.
 M~~~portuguesa~~~Guanare~~~Guanare
 M~~~portuguesa~~~Araure~~~Araure
 M~~~portuguesa~~~Paez~~~Acarigua
@@ -435,21 +459,22 @@ M~~~portuguesa~~~Santa Rosalia~~~Santa Rosalia
 M~~~portuguesa~~~Sucre~~~Biscucuy
 M~~~portuguesa~~~Agua Blanca~~~Agua Blanca
 M~~~portuguesa~~~Monsenor Jose Vicente de Unda~~~Chabasquen
-S~~~portuguesa~~~Guanare~~~Capital~~~Capital fundada en 1591, conocida como Atenas de los Llanos. Hogar del Santuario Nacional de Nuestra Senora de Coromoto (segunda aparicion mariana, 1652), Parque Los Samanes y Museo de los Llanos.
-S~~~portuguesa~~~Acarigua-Araure~~~Ciudad~~~Ciudades Gemelas, polos comerciales agroindustriales del estado. Araure conserva la Iglesia San Miguel (siglo XVIII); Acarigua es centro moderno con el Balneario Curpa.
-S~~~portuguesa~~~Turen~~~Pueblo~~~Pueblo conocido como el pueblo dulce de Venezuela, mayor productor de cana de azucar del estado.
-S~~~portuguesa~~~Parque Nacional Terepaima~~~Parque~~~Zona montanosa protegida desde 1992 con nacientes de rios. Ofrece turismo ecologico y abundancia de la orquidea Cattleya.
-S~~~portuguesa~~~Embalse Las Majaguas~~~Balneario~~~Embalse entre municipios San Rafael de Onoto y Agua Blanca. Deportes nauticos, pesca de pavon y area recreativa.
-S~~~portuguesa~~~Chabasquen~~~Pueblo~~~Pueblo productor cafetalero de clima agradable con paisajes de montana propicios para turismo de descanso.
-S~~~portuguesa~~~Guanarito~~~Pueblo~~~Tierra del Silbon (personaje del folclore llanero) con esteros y sabanas ideales para observacion de aves y agroturismo.
-F~~~portuguesa~~~Clima~~~Relativamente uniforme, calido, con temperaturas entre 24 y 28 grados Celsius. Estacion seca de diciembre a abril y lluviosa de mayo a noviembre.
-F~~~portuguesa~~~Gastronomia~~~Ternera en vara con yuca y guasacaca, cabeza de cachama, pecho caldereado, picadillo (sopa de Guanare), cachapa con queso de mano. Bebida tipica: papelon con limon.
-F~~~portuguesa~~~Museos~~~Museo Ines Mercedes Gomez Alvarez (Guanare, desde 1984), Museo de la Ciudad de Piritu (300+ piezas arqueologicas) y Museo de las Munecas de Piritu.
-F~~~portuguesa~~~Hoteles~~~Guanare y Acarigua-Araure concentran oferta hotelera formal orientada al turismo religioso y de negocios.
-F~~~portuguesa~~~Actividad Economica~~~Agricultura extensiva (arroz, maiz, sorgo, ajonjoli, algodon, cana de azucar), ganaderia bovina y porcina, industria maderera y agroindustrial.
-F~~~portuguesa~~~Personajes Destacados~~~Juan Fernandez de Leon (fundador de Guanare en 1591), el indigena Coromoto (testigo de aparicion mariana), Monsenor Jose Vicente de Unda.
+S~~~portuguesa~~~Guanare~~~Capital~~~Capital fundada en 1591, conocida como Atenas de los Llanos. Hogar del Santuario Nacional de Nuestra Senora de Coromoto (segunda aparicion mariana, 1652), Parque Los Samanes y Museo de los Llanos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Santuario_a_la_Virgen_de_Coromoto_-_Guanare%2C_Edo_Portuguesa.jpg/960px-Santuario_a_la_Virgen_de_Coromoto_-_Guanare%2C_Edo_Portuguesa.jpg
+S~~~portuguesa~~~Acarigua-Araure~~~Ciudad~~~Ciudades Gemelas, polos comerciales agroindustriales del estado. Araure conserva la Iglesia San Miguel (siglo XVIII); Acarigua es centro moderno con el Balneario Curpa.~~~https://upload.wikimedia.org/wikipedia/commons/c/ca/Iglesiacatedralnuestrase%C3%B1oradelacortezaacariguaaraureportuguesavenezuela1.png
+S~~~portuguesa~~~Turen~~~Pueblo~~~Pueblo conocido como el pueblo dulce de Venezuela, mayor productor de cana de azucar del estado.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/Venezuela_-_Portuguesa_-_Tur%C3%A9n.svg/960px-Venezuela_-_Portuguesa_-_Tur%C3%A9n.svg.png
+S~~~portuguesa~~~Parque Nacional Terepaima~~~Parque~~~Zona montanosa protegida desde 1992 con nacientes de rios. Ofrece turismo ecologico y abundancia de la orquidea Cattleya.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Balneario_en_el_Parque_Nacional_Terepaima.jpg/960px-Balneario_en_el_Parque_Nacional_Terepaima.jpg
+S~~~portuguesa~~~Embalse Las Majaguas~~~Balneario~~~Embalse entre municipios San Rafael de Onoto y Agua Blanca. Deportes nauticos, pesca de pavon y area recreativa.~~~
+S~~~portuguesa~~~Chabasquen~~~Pueblo~~~Pueblo productor cafetalero de clima agradable con paisajes de montana propicios para turismo de descanso.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~portuguesa~~~Guanarito~~~Pueblo~~~Tierra del Silbon (personaje del folclore llanero) con esteros y sabanas ideales para observacion de aves y agroturismo.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Venezuela_-_Portuguesa_-_Guanarito.svg/960px-Venezuela_-_Portuguesa_-_Guanarito.svg.png
 Z~~~sucre~~~Sucre~~~Cumana
+I~~~sucre~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/GolfodeCariaco.jpg/960px-GolfodeCariaco.jpg
 D~~~sucre~~~Sucre, en el extremo nororiental, fue la primera tierra continental americana tocada por Cristobal Colon. Su capital, Cumana, es la ciudad mas antigua fundada en tierra firme del continente (1515).~~P~~El estado combina el litoral del Parque Nacional Mochima, las peninsulas deserticas de Araya y las verdes montanas de Paria.
+F~~~sucre~~~Clima~~~Tropical seco, calido todo el ano con estacion lluviosa de mayo a noviembre. Mejor epoca para visitar diciembre a mayo.
+F~~~sucre~~~Gastronomia~~~Cocina marinera: corocoro boquita colora (mejor pescado), chorizo carupanero, pabellon oriental, casabe, arepas, cachapas. Dulces: quesillo de pina, bienmesabe de guanabana. Bebida: ron carupanero.
+F~~~sucre~~~Museos~~~Museo Antonio Jose de Sucre (Cumana, dedicado al Mariscal de Ayacucho), Museo Sacro en convento de San Francisco, Casa Ramos Sucre (poeta cumanés).
+F~~~sucre~~~Hoteles~~~Cumana, Carupano y Mochima concentran oferta hotelera formal. Peninsula de Paria tiene posadas de playa rusticas y aisladas.
+F~~~sucre~~~Actividad Economica~~~Pesca (principal estado pesquero del pais, cerca del 50 por ciento de produccion nacional), agricultura (cacao, cafe) y turismo costero.
+F~~~sucre~~~Personajes Destacados~~~Antonio Jose de Sucre (Gran Mariscal de Ayacucho, nacido en Cumana), Andres Eloy Blanco (poeta y politico), Jose Ramos Sucre (poeta modernista).
 M~~~sucre~~~Cumana~~~Cumana
 M~~~sucre~~~Carupano~~~Carupano
 M~~~sucre~~~Guiria~~~Guiria
@@ -457,22 +482,23 @@ M~~~sucre~~~Cariaco~~~Cariaco
 M~~~sucre~~~Cumanacoa~~~Cumanacoa
 M~~~sucre~~~Irapa~~~Irapa
 M~~~sucre~~~Rio Caribe~~~Rio Caribe
-S~~~sucre~~~Cumana~~~Capital~~~Capital, Primogenita del Continente Americano con patrimonio colonial. Castillos San Antonio (siglo XVII) y Santa Maria de la Cabeza, Fuerte Santa Ana, Catedral neoclasica. Playa San Luis.
-S~~~sucre~~~Parque Nacional Mochima~~~Parque~~~Parque Nacional compartido con Anzoategui con playas: Playa Blanca, Las Maritas, Manare, Colorada, Vallecito. Islas: Caracas, Los Muertos, Arapo, Santa Marta.
-S~~~sucre~~~Peninsula de Araya~~~Peninsula~~~Paisaje semideserto con Castillo de Araya (fortaleza colonial) y playas de arena blanca. Acceso por ferry desde Cumana o tierra.
-S~~~sucre~~~Carupano~~~Ciudad~~~Segunda ciudad con casco historico alrededor de Catedral Santa Rosa de Lima. Primer puerto americano con cable submarino, celebre por Carnaval.
-S~~~sucre~~~Peninsula de Paria~~~Peninsula~~~Region montanosa y verde con playas virgenes: Playa Medina (arena blanca, aguas turquesa) y Playa Paria (paisaje dramatico). Parque Nacional.
-S~~~sucre~~~Guiria~~~Ciudad~~~Puerto y ciudad fronteriza con Trinidad y Tobago cercana a importantes reservas de gas.
-S~~~sucre~~~Cariaco~~~Pueblo~~~Pueblo pesquero sobre el Golfo de Cariaco con puerto turistico y gastronomia local.
-S~~~sucre~~~Parques Nacionales Adicionales~~~Parque~~~Parques nacionales: El Guacharo (compartido con Monagas), Turuepa­no, Punterga y Laguna de Patos.
-F~~~sucre~~~Clima~~~Tropical seco, calido todo el ano con estacion lluviosa de mayo a noviembre. Mejor epoca para visitar diciembre a mayo.
-F~~~sucre~~~Gastronomia~~~Cocina marinera: corocoro boquita colora (mejor pescado), chorizo carupanero, pabellon oriental, casabe, arepas, cachapas. Dulces: quesillo de pina, bienmesabe de guanabana. Bebida: ron carupanero.
-F~~~sucre~~~Museos~~~Museo Antonio Jose de Sucre (Cumana, dedicado al Mariscal de Ayacucho), Museo Sacro en convento de San Francisco, Casa Ramos Sucre (poeta cumanés).
-F~~~sucre~~~Hoteles~~~Cumana, Carupano y Mochima concentran oferta hotelera formal. Peninsula de Paria tiene posadas de playa rusticas y aisladas.
-F~~~sucre~~~Actividad Economica~~~Pesca (principal estado pesquero del pais, cerca del 50 por ciento de produccion nacional), agricultura (cacao, cafe) y turismo costero.
-F~~~sucre~~~Personajes Destacados~~~Antonio Jose de Sucre (Gran Mariscal de Ayacucho, nacido en Cumana), Andres Eloy Blanco (poeta y politico), Jose Ramos Sucre (poeta modernista).
+S~~~sucre~~~Cumana~~~Capital~~~Capital, Primogenita del Continente Americano con patrimonio colonial. Castillos San Antonio (siglo XVII) y Santa Maria de la Cabeza, Fuerte Santa Ana, Catedral neoclasica. Playa San Luis.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Bandera_de_la_ciudad_de_Cuman%C3%A1.jpg/960px-Bandera_de_la_ciudad_de_Cuman%C3%A1.jpg
+S~~~sucre~~~Parque Nacional Mochima~~~Parque~~~Parque Nacional compartido con Anzoategui con playas: Playa Blanca, Las Maritas, Manare, Colorada, Vallecito. Islas: Caracas, Los Muertos, Arapo, Santa Marta.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Parque_Nacional_mochima.jpg/960px-Parque_Nacional_mochima.jpg
+S~~~sucre~~~Peninsula de Araya~~~Peninsula~~~Paisaje semideserto con Castillo de Araya (fortaleza colonial) y playas de arena blanca. Acceso por ferry desde Cumana o tierra.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/En_la_peninsula_de_Araya.jpg/960px-En_la_peninsula_de_Araya.jpg
+S~~~sucre~~~Carupano~~~Ciudad~~~Segunda ciudad con casco historico alrededor de Catedral Santa Rosa de Lima. Primer puerto americano con cable submarino, celebre por Carnaval.~~~https://upload.wikimedia.org/wikipedia/commons/8/8f/Car%C3%BApano.jpg
+S~~~sucre~~~Peninsula de Paria~~~Peninsula~~~Region montanosa y verde con playas virgenes: Playa Medina (arena blanca, aguas turquesa) y Playa Paria (paisaje dramatico). Parque Nacional.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Playa_Medina_Peninsula_Paria.jpg/960px-Playa_Medina_Peninsula_Paria.jpg
+S~~~sucre~~~Guiria~~~Ciudad~~~Puerto y ciudad fronteriza con Trinidad y Tobago cercana a importantes reservas de gas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Mapa_Municipio_Valdez.png/960px-Mapa_Municipio_Valdez.png
+S~~~sucre~~~Cariaco~~~Pueblo~~~Pueblo pesquero sobre el Golfo de Cariaco con puerto turistico y gastronomia local.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Venezuela_relief_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_relief_location_map_%28%2Bclaimed%29.svg.png
+S~~~sucre~~~Parques Nacionales Adicionales~~~Parque~~~Parques nacionales: El Guacharo (compartido con Monagas), Turuepa­no, Punterga y Laguna de Patos.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Cinderella_Castle_2013_Wade.jpg/960px-Cinderella_Castle_2013_Wade.jpg
 Z~~~tachira~~~Tachira~~~San Cristobal
+I~~~tachira~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Tachira_in_Venezuela_%28%2Bclaimed%29.svg/960px-Tachira_in_Venezuela_%28%2Bclaimed%29.svg.png
 D~~~tachira~~~Tachira, en el extremo suroccidental andino, es frontera natural con Colombia y el estado mas subdividido del pais (29 municipios). Combina paramos, zonas ganaderas panamericanas y fuerte identidad regional.~~P~~Fue la puerta de entrada de Simon Bolivar durante la Campana Admirable.
+F~~~tachira~~~Clima~~~Muy variado por topografia (300 a 3000 metros): templado en San Cristobal (23-24 grados), frio de paramo en altas, tropical en piedemonte.
+F~~~tachira~~~Gastronomia~~~Hallaca andina (con garbanzos), morcon, chanfaina, mute o mondongo andino, pastel yuca, pisca andina. Dulces: dulce de lechosa. Bebida: chicha andina.
+F~~~tachira~~~Museos~~~Museo Antropologico del Tachira (Hacienda Paramillo desde 1984, 17 salas con hallazgos arqueologicos), Museo de Artes Visuales (MAVET), Museo Jose Ramon Valero.
+F~~~tachira~~~Hoteles~~~Amplia oferta hotelera en San Cristobal y ciudades fronterizas (San Antonio, Capacho, Colon). Pueblos andinos con posadas coordinadas por Asociacion Civil.
+F~~~tachira~~~Actividad Economica~~~Agricultura (cafe, cana de azucar), ganaderia y comercio fronterizo con Colombia. Historicamente produccion petrolera en La Petrolia.
+F~~~tachira~~~Personajes Destacados~~~Siete presidentes de Venezuela nacieron en Tachira: Cipriano Castro, Juan Vicente Gomez, Eleazar Lopez Contreras, Isaias Medina Angarita, Marcos Perez Jimenez, Carlos Andres Perez, Ramon Jose Velasquez.
 M~~~tachira~~~San Cristobal~~~San Cristobal
 M~~~tachira~~~Tariba~~~Tariba
 M~~~tachira~~~Rubio~~~Rubio
@@ -480,62 +506,64 @@ M~~~tachira~~~San Antonio del Tachira~~~San Antonio del Tachira
 M~~~tachira~~~Urena~~~Urena
 M~~~tachira~~~La Fria~~~La Fria
 M~~~tachira~~~La Grita~~~La Grita
-S~~~tachira~~~San Cristobal~~~Capital~~~Capital fundada en 1561 a 825 metros altitud. Palacio Episcopal, Puente Libertador (colgante tipo Eiffel), Museo Diocesano, Casa Steinvorth. Sede Feria Internacional San Sebastian.
-S~~~tachira~~~San Pedro del Rio~~~Pueblo~~~Joya colonial con arquitectura andina, calles empedradas y ambiente costumbrista fotogenico.
-S~~~tachira~~~Peribeca~~~Pueblo~~~Poblado colonial fundado en 1602 con calles empedradas, trapiches de cana y dulceria tradicional (melcochas, alfondoque).
-S~~~tachira~~~La Grita~~~Ciudad~~~Segunda ciudad fundada en 1576, antigua capital provincial, con arquitectura colonial e historia de la Insurreccion de Comuneros de 1781.
-S~~~tachira~~~Rutas de Montana y Paramo~~~Montana~~~Rutas en El Zumbador, Los Rosales, La Negra y Parque Nacional El Tama con paisajes de alta montana y biodiversidad.
-S~~~tachira~~~Rio Chiquito~~~Pueblo~~~Poblado en piedemonte del Parque Nacional El Tama, zona turistica desde 1996 con tradicion cafetalera.
-S~~~tachira~~~La Petrolia del Tachira~~~Historico~~~Sitio del primer pozo petrolero explotado en Venezuela (1878), hoy atractivo turistico e historico.
-S~~~tachira~~~Actividades de Naturaleza~~~Actividad~~~Pesca deportiva y canotaje en rios Uribante, Caparo y Doradas. Gastronomia andina con celebre pan tachirense.
-F~~~tachira~~~Clima~~~Muy variado por topografia (300 a 3000 metros): templado en San Cristobal (23-24 grados), frio de paramo en altas, tropical en piedemonte.
-F~~~tachira~~~Gastronomia~~~Hallaca andina (con garbanzos), morcon, chanfaina, mute o mondongo andino, pastel yuca, pisca andina. Dulces: dulce de lechosa. Bebida: chicha andina.
-F~~~tachira~~~Museos~~~Museo Antropologico del Tachira (Hacienda Paramillo desde 1984, 17 salas con hallazgos arqueologicos), Museo de Artes Visuales (MAVET), Museo Jose Ramon Valero.
-F~~~tachira~~~Hoteles~~~Amplia oferta hotelera en San Cristobal y ciudades fronterizas (San Antonio, Capacho, Colon). Pueblos andinos con posadas coordinadas por Asociacion Civil.
-F~~~tachira~~~Actividad Economica~~~Agricultura (cafe, cana de azucar), ganaderia y comercio fronterizo con Colombia. Historicamente produccion petrolera en La Petrolia.
-F~~~tachira~~~Personajes Destacados~~~Siete presidentes de Venezuela nacieron en Tachira: Cipriano Castro, Juan Vicente Gomez, Eleazar Lopez Contreras, Isaias Medina Angarita, Marcos Perez Jimenez, Carlos Andres Perez, Ramon Jose Velasquez.
+S~~~tachira~~~San Cristobal~~~Capital~~~Capital fundada en 1561 a 825 metros altitud. Palacio Episcopal, Puente Libertador (colgante tipo Eiffel), Museo Diocesano, Casa Steinvorth. Sede Feria Internacional San Sebastian.~~~https://upload.wikimedia.org/wikipedia/commons/0/04/CollageSCB.jpg
+S~~~tachira~~~San Pedro del Rio~~~Pueblo~~~Joya colonial con arquitectura andina, calles empedradas y ambiente costumbrista fotogenico.~~~https://upload.wikimedia.org/wikipedia/commons/0/02/RioSanPedro2004-6-27.jpg
+S~~~tachira~~~Peribeca~~~Pueblo~~~Poblado colonial fundado en 1602 con calles empedradas, trapiches de cana y dulceria tradicional (melcochas, alfondoque).~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Gran_San_Crist%C3%B3bal.png/960px-Gran_San_Crist%C3%B3bal.png
+S~~~tachira~~~La Grita~~~Ciudad~~~Segunda ciudad fundada en 1576, antigua capital provincial, con arquitectura colonial e historia de la Insurreccion de Comuneros de 1781.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Vista_de_parte_alta_de_la_Grita_desde_el_Hotel_Monta%C3%B1a.JPG/960px-Vista_de_parte_alta_de_la_Grita_desde_el_Hotel_Monta%C3%B1a.JPG
+S~~~tachira~~~Rutas de Montana y Paramo~~~Montana~~~Rutas en El Zumbador, Los Rosales, La Negra y Parque Nacional El Tama con paisajes de alta montana y biodiversidad.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/El_Gavilan9.JPG/960px-El_Gavilan9.JPG
+S~~~tachira~~~Rio Chiquito~~~Pueblo~~~Poblado en piedemonte del Parque Nacional El Tama, zona turistica desde 1996 con tradicion cafetalera.~~~https://upload.wikimedia.org/wikipedia/commons/6/6a/Quinimari.jpg
+S~~~tachira~~~La Petrolia del Tachira~~~Historico~~~Sitio del primer pozo petrolero explotado en Venezuela (1878), hoy atractivo turistico e historico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/La_petrolea_2.jpg/960px-La_petrolea_2.jpg
+S~~~tachira~~~Actividades de Naturaleza~~~Actividad~~~Pesca deportiva y canotaje en rios Uribante, Caparo y Doradas. Gastronomia andina con celebre pan tachirense.~~~https://upload.wikimedia.org/wikipedia/commons/8/81/Constitution_of_Venezuela_1999.png
 P~~~tachira~~~Zona Metropolitana San Cristobal~~~Tariba, Palmira, Cordero, Zorca, Tucape, Caneyes
 P~~~tachira~~~Circuito Panamericano~~~La Fria, La Tendida, Coloncito
 P~~~tachira~~~Region Llanera Fronteriza~~~La Pedrera, El Pinal, Abejales
 P~~~tachira~~~Pueblos Costumbristas~~~El Cobre, Pregonero
 Z~~~trujillo~~~Trujillo~~~Trujillo
+I~~~trujillo~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Plaza_Cristobal_Mendoza.jpg/960px-Plaza_Cristobal_Mendoza.jpg
 D~~~trujillo~~~Trujillo, el mas pequeno de los tres estados andinos, es conocido como la Ciudad Portatil por su historia fundacional unica (reubicada 11 veces, cambio de nombre 9 veces antes de 1570).~~P~~Es fuertemente religioso (culto al Dr. Jose Gregorio Hernandez) y alberga el monumento habitable mas alto de America.
-M~~~trujillo~~~Trujillo~~~Trujillo
-M~~~trujillo~~~Valera~~~Valera
-M~~~trujillo~~~Bocono~~~Bocono
-M~~~trujillo~~~Carvajal~~~Carvajal
-S~~~trujillo~~~Trujillo~~~Capital~~~Capital fundada en 1557, conocida como Ciudad de La Paz. Icono: Monumento Virgen de la Paz (46.72 metros, escultura religiosa mas alta del mundo). Catedral (1662), Casa Jacobo Roth (residencia Bolivar), Monumento Armisticio Santa Ana.
-S~~~trujillo~~~Bocono~~~Ciudad~~~Conocido como Jardin de Venezuela, segunda ciudad mas poblada. Iglesia San Miguel (1660), Monumento Natural Teta de Niquitao (4006 metros, oso frontino). Pueblo Niquitao con vino de mora.
-S~~~trujillo~~~La Quebrada~~~Pueblo~~~Pueblo andino pintoresco con cada calle pintada de un color diferente.
-S~~~trujillo~~~Jajo~~~Pueblo~~~Pueblo colonial de montana considerado uno de los mas bellos de los Andes venezolanos.
-S~~~trujillo~~~Isnotu~~~Historico~~~Santuario y capilla del Dr. Jose Gregorio Hernandez, medico en proceso de canonizacion, visitado por miles anualmente.
-S~~~trujillo~~~Betijoque~~~Pueblo~~~Pueblo con Parque Esteban Valera y mirador La Abejita con vistas al Lago de Maracaibo.
-S~~~trujillo~~~Parque El Riecito~~~Parque~~~Zona protectora en convergencia de municipios Trujillo, Urdaneta y Bocono con senderismo y biodiversidad andina.
 F~~~trujillo~~~Clima~~~Tropical de montana muy variable por altitud (20 a 6 grados en general, Monay 35 grados, paramos 4 grados). Capital con clima sabana media 23.5 grados.
 F~~~trujillo~~~Gastronomia~~~Mondongo (panza cochino con garbanzos), queso de paramo ahumado, mojo (huevos revueltos), pizca andina, carabinas. Dulces: curunchete, alfajores. Bebidas: chicha andina, mistela.
 F~~~trujillo~~~Museos~~~Casa de los Tratados en Trujillo (museo historico militar, 1963), Museo de Arte Contemporaneo, Museo Arqueologico Militar de Bocono, Museo de Pedro Sanchez en Jajo.
 F~~~trujillo~~~Hoteles~~~Valera concentra mayor oferta hotelera como centro economico y distribucion turistica. Bocono y pueblos de montana ofrecen posadas rurales.
 F~~~trujillo~~~Actividad Economica~~~Agricultura (cafe, cana de azucar, hortalizas de montana), ganaderia, explotacion petrolera de alto potencial en La Ceiba.
 F~~~trujillo~~~Personajes Destacados~~~Jose Gregorio Hernandez (medico nacido en Isnotu, proceso de canonizacion), Cruz Carrillo (procer independentista), Juan Bautista Araujo (Leon de la Cordillera).
+M~~~trujillo~~~Trujillo~~~Trujillo
+M~~~trujillo~~~Valera~~~Valera
+M~~~trujillo~~~Bocono~~~Bocono
+M~~~trujillo~~~Carvajal~~~Carvajal
+S~~~trujillo~~~Trujillo~~~Capital~~~Capital fundada en 1557, conocida como Ciudad de La Paz. Icono: Monumento Virgen de la Paz (46.72 metros, escultura religiosa mas alta del mundo). Catedral (1662), Casa Jacobo Roth (residencia Bolivar), Monumento Armisticio Santa Ana.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Plaza_Cristobal_Mendoza.jpg/960px-Plaza_Cristobal_Mendoza.jpg
+S~~~trujillo~~~Bocono~~~Ciudad~~~Conocido como Jardin de Venezuela, segunda ciudad mas poblada. Iglesia San Miguel (1660), Monumento Natural Teta de Niquitao (4006 metros, oso frontino). Pueblo Niquitao con vino de mora.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Venezuela_-_Trujillo_-_Bocon%C3%B3.svg/960px-Venezuela_-_Trujillo_-_Bocon%C3%B3.svg.png
+S~~~trujillo~~~La Quebrada~~~Pueblo~~~Pueblo andino pintoresco con cada calle pintada de un color diferente.~~~https://upload.wikimedia.org/wikipedia/commons/7/78/Parroquia_San_Roque-La_Quebrada.jpg
+S~~~trujillo~~~Jajo~~~Pueblo~~~Pueblo colonial de montana considerado uno de los mas bellos de los Andes venezolanos.~~~
+S~~~trujillo~~~Isnotu~~~Historico~~~Santuario y capilla del Dr. Jose Gregorio Hernandez, medico en proceso de canonizacion, visitado por miles anualmente.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Venezuela_adm_location_map_%28%2Bclaimed%29.svg/960px-Venezuela_adm_location_map_%28%2Bclaimed%29.svg.png
+S~~~trujillo~~~Betijoque~~~Pueblo~~~Pueblo con Parque Esteban Valera y mirador La Abejita con vistas al Lago de Maracaibo.~~~https://upload.wikimedia.org/wikipedia/commons/1/15/Betijoque_Trujillo_004.jpg
+S~~~trujillo~~~Parque El Riecito~~~Parque~~~Zona protectora en convergencia de municipios Trujillo, Urdaneta y Bocono con senderismo y biodiversidad andina.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Parque_Nacional_Santos_Luzardo.JPG/960px-Parque_Nacional_Santos_Luzardo.JPG
 P~~~trujillo~~~Pueblos Costumbristas~~~Tostos (viacrucis viviente Semana Santa), San Rafael de Bocono, Cuicas, Chejende, Escuque, Motan, Santa Apolonia, Pamplan
 Z~~~la-guaira~~~La Guaira~~~La Guaira
 D~~~la-guaira~~~La Guaira (llamado Vargas hasta 2019) alberga el principal puerto y aeropuerto de Venezuela, puerta maritima y aerea a Caracas.~~P~~Franja costera entre el Mar Caribe y la Cordillera de la Costa. En 1999 sufrio la Tragedia de Vargas, uno de los desastres naturales mas graves de la historia venezolana.~~P~~Unico municipio (Vargas) con 11 parroquias. Ciudades: La Guaira (capital), Caraballeda, Catia La Mar, Macuto, Naiguata, Maiquetia.
-M~~~la-guaira~~~Vargas~~~La Guaira
-S~~~la-guaira~~~La Guaira~~~Historico~~~Casco historico colonial con Casa Guipuzcoana, Complejo Memorial Cultural Sebastian Francisco de Miranda y callecitas coloniales. Uno de los mejores lugares del mundo para pesca deportiva de marlin y pez vela.
-S~~~la-guaira~~~Litoral Central~~~Playa~~~Unas 32 playas a lo largo de la costa con desarrollo hotelero y clubes de playa. Puntos de interes: Bambu Beach en Playa Coral, Macuto, Caraballeda, Catia La Mar.
-S~~~la-guaira~~~Autopista Caracas-La Guaira~~~Historico~~~Obra de ingenieria inaugurada en 1953, considerada la mas importante de America tras el Canal de Panama. Conecta Caracas con el litoral en 20 minutos.
-S~~~la-guaira~~~Ciudad Vacacional Los Caracas~~~Balneario~~~Complejo recreacional al oriente del estado, cerca de Chuspa.
-S~~~la-guaira~~~Parque Nacional Waraira Repano~~~Parque~~~Vertiente norte con senderismo y despegaderos de parapente cerca de Caraballeda.
-S~~~la-guaira~~~Chichiriviche de la Costa~~~Playa~~~Pueblo costero occidental con playas menos concurridas y buceo.
 F~~~la-guaira~~~Clima~~~Tropical arido y muy calido en la costa (media 26.8 grados C), templado en zonas montanosas.
 F~~~la-guaira~~~Gastronomia~~~Cocina marinera: pescado frito, ceviche, sancocho de pescado, empanadas de mariscos, tostones. Postres: helado y conservas de coco, majarete, jalea de mango.
 F~~~la-guaira~~~Museos~~~Casa Guipuzcoana, Museo Armando Reverón, Museo Arqueologico de Panarigua, Museo de las Piedras Marinas Sonadoras en San Jose de Galipan.
 F~~~la-guaira~~~Hoteles y posadas~~~Oferta concentrada en Macuto y Caraballeda; verificar disponibilidad tras terremoto de junio 2026.
 F~~~la-guaira~~~Actividad economica principal~~~Actividad portuaria y aeroportuaria, turismo costero, agricultura.
 F~~~la-guaira~~~Personajes destacados~~~Jose Maria Vargas (medico y expresidente), Jose Maria Espana, Manuel Gual (proceres independentistas), Armando Reverón (pintor).
+M~~~la-guaira~~~Vargas~~~La Guaira
+S~~~la-guaira~~~La Guaira~~~Historico~~~Casco historico colonial con Casa Guipuzcoana, Complejo Memorial Cultural Sebastian Francisco de Miranda y callecitas coloniales. Uno de los mejores lugares del mundo para pesca deportiva de marlin y pez vela.~~~
+S~~~la-guaira~~~Litoral Central~~~Playa~~~Unas 32 playas a lo largo de la costa con desarrollo hotelero y clubes de playa. Puntos de interes: Bambu Beach en Playa Coral, Macuto, Caraballeda, Catia La Mar.~~~https://upload.wikimedia.org/wikipedia/commons/e/e8/Caribe_y_Caraballeda_Enero_2000_041.jpg
+S~~~la-guaira~~~Autopista Caracas-La Guaira~~~Historico~~~Obra de ingenieria inaugurada en 1953, considerada la mas importante de America tras el Canal de Panama. Conecta Caracas con el litoral en 20 minutos.~~~https://upload.wikimedia.org/wikipedia/commons/c/c1/Autopista_Caracas_-_La_Guaira_dicembre_2000_036.jpg
+S~~~la-guaira~~~Ciudad Vacacional Los Caracas~~~Balneario~~~Complejo recreacional al oriente del estado, cerca de Chuspa.~~~https://upload.wikimedia.org/wikipedia/commons/e/e3/Los_Caracas._Estado_Vargas.jpg
+S~~~la-guaira~~~Parque Nacional Waraira Repano~~~Parque~~~Vertiente norte con senderismo y despegaderos de parapente cerca de Caraballeda.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg/960px-Altamira%2C_La_Castellana_en_Caracas%2C_Venezuela.jpg
+S~~~la-guaira~~~Chichiriviche de la Costa~~~Playa~~~Pueblo costero occidental con playas menos concurridas y buceo.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Chichiriviche_de_Noche.jpg/960px-Chichiriviche_de_Noche.jpg
 P~~~la-guaira~~~Vargas~~~Carayaca, El Junko, Caruao, Carmen de Uria
 Z~~~yaracuy~~~Yaracuy~~~San Felipe
+I~~~yaracuy~~~https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Venezuela_-_Yaracuy_-_Sucre.svg/960px-Venezuela_-_Yaracuy_-_Sucre.svg.png
 D~~~yaracuy~~~Yaracuy en la region centrooccidental es donde terminan los Andes y comienza la Cordillera de la Costa, generando relieve montanoso variado.~~P~~Epicentro del culto sincretico a Maria Lionza, figura mitica venerada como diosa de la naturaleza, expresion religiosa singular del pais.~~P~~14 municipios: San Felipe (capital), Independencia (Yaritagua), Bruzual (Chivacoa), Cocorote, Nirgua, Urachiche, Bolivar (Aroa), Veroes (Farriar), Jose Antonio Paez (Sabana de Parra) y otros.
+F~~~yaracuy~~~Clima~~~Tropical, calido en la mayor parte (media 22-26 grados C), templado en zonas montanosas, subtropical en valles altos de la Sierra de Nirgua.
+F~~~yaracuy~~~Gastronomia~~~Pavito, gallina sudada de herencia inglesa, bollos pelones, falda nirguana, hallacas con quinchoncho, bunuelos de Cocorote, cachapa de maiz yaracuyano.
+F~~~yaracuy~~~Museos~~~Parque Historico-Arqueologico San Felipe El Fuerte (ruinas de ciudad colonial destruida en terremoto de 1812), Museo de la mision capuchina en Parque de la Exotica Flora Tropical Nuestra Senora del Carmen.
+F~~~yaracuy~~~Hoteles y posadas~~~San Felipe y Chivacoa concentran hoteles urbanos; posadas rurales como Granja Momentos integradas a la Ruta Gastronomica de Yaracuy.
+F~~~yaracuy~~~Actividad economica principal~~~Agricultura (primer productor nacional de naranjas, ademas cana de azucar, batata, aguacate, palma aceitera), mineria historica (cobre en Aroa).
+F~~~yaracuy~~~Personajes destacados~~~Cacique Yaracuy, Maria Lionza (figura mitica venerada en Montana de Sorte, central en identidad cultural del estado).
 M~~~yaracuy~~~San Felipe~~~San Felipe
 M~~~yaracuy~~~Independencia~~~Yaritagua
 M~~~yaracuy~~~Bruzual~~~Chivacoa
@@ -545,26 +573,21 @@ M~~~yaracuy~~~Urachiche~~~Urachiche
 M~~~yaracuy~~~Bolivar~~~Aroa
 M~~~yaracuy~~~Veroes~~~Farriar
 M~~~yaracuy~~~Jose Antonio Paez~~~Sabana de Parra
-S~~~yaracuy~~~San Felipe~~~Capital~~~Catedral de San Felipe, Parque de la Exotica Flora Tropical (Mision Nuestra Senora del Carmen), Museo Arqueologico.
-S~~~yaracuy~~~Montana de Sorte~~~Montana~~~Santuario natural del culto a Maria Lionza, venerada como diosa de la naturaleza. Miles de creyentes realizan rituales de sanacion espiritual. Declarada Monumento Natural y Patrimonio Cultural.
-S~~~yaracuy~~~Parque Nacional Yurubi~~~Parque~~~Bosque siempre verde de la Sierra de Aroa con notable biodiversidad. Puntos de interes: mas de 240 especies de mariposas, musaranas y ranas endemicas.
-S~~~yaracuy~~~Nirgua~~~Pueblo~~~Pueblo colonial de montana con Fuerte San Vicente y Casa de la Cultura.
-S~~~yaracuy~~~Yaritagua~~~Ciudad~~~Fundada en 1670, ciudad ferroviaria historica sobre la ruta Barquisimeto-Puerto Cabello.
-S~~~yaracuy~~~Minas de Aroa~~~Historico~~~Antiguas minas de cobre de importancia historica. Puntos de interes: Cementerio de los Ingleses, vestigio de explotacion minera britanica del siglo XIX.
-S~~~yaracuy~~~Embalse Cumaripa~~~Balneario~~~Parque recreacional con balnearios El Buco, El Guarataro, Guayabito y La Toma.
-S~~~yaracuy~~~Aldeas Artesanales~~~Pueblo~~~Pueblos artesanales en Camunare y Guama con produccion local de artesanias.
-F~~~yaracuy~~~Clima~~~Tropical, calido en la mayor parte (media 22-26 grados C), templado en zonas montanosas, subtropical en valles altos de la Sierra de Nirgua.
-F~~~yaracuy~~~Gastronomia~~~Pavito, gallina sudada de herencia inglesa, bollos pelones, falda nirguana, hallacas con quinchoncho, bunuelos de Cocorote, cachapa de maiz yaracuyano.
-F~~~yaracuy~~~Museos~~~Parque Historico-Arqueologico San Felipe El Fuerte (ruinas de ciudad colonial destruida en terremoto de 1812), Museo de la mision capuchina en Parque de la Exotica Flora Tropical Nuestra Senora del Carmen.
-F~~~yaracuy~~~Hoteles y posadas~~~San Felipe y Chivacoa concentran hoteles urbanos; posadas rurales como Granja Momentos integradas a la Ruta Gastronomica de Yaracuy.
-F~~~yaracuy~~~Actividad economica principal~~~Agricultura (primer productor nacional de naranjas, ademas cana de azucar, batata, aguacate, palma aceitera), mineria historica (cobre en Aroa).
-F~~~yaracuy~~~Personajes destacados~~~Cacique Yaracuy, Maria Lionza (figura mitica venerada en Montana de Sorte, central en identidad cultural del estado).
+S~~~yaracuy~~~San Felipe~~~Capital~~~Catedral de San Felipe, Parque de la Exotica Flora Tropical (Mision Nuestra Senora del Carmen), Museo Arqueologico.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Gobernaci%C3%B3n_del_Estado_Yaracuy.JPG/960px-Gobernaci%C3%B3n_del_Estado_Yaracuy.JPG
+S~~~yaracuy~~~Montana de Sorte~~~Montana~~~Santuario natural del culto a Maria Lionza, venerada como diosa de la naturaleza. Miles de creyentes realizan rituales de sanacion espiritual. Declarada Monumento Natural y Patrimonio Cultural.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Cerro_Maria_lionza.jpg/960px-Cerro_Maria_lionza.jpg
+S~~~yaracuy~~~Parque Nacional Yurubi~~~Parque~~~Bosque siempre verde de la Sierra de Aroa con notable biodiversidad. Puntos de interes: mas de 240 especies de mariposas, musaranas y ranas endemicas.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/R%C3%ADo_Yurub%C3%AD.jpg/960px-R%C3%ADo_Yurub%C3%AD.jpg
+S~~~yaracuy~~~Nirgua~~~Pueblo~~~Pueblo colonial de montana con Fuerte San Vicente y Casa de la Cultura.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Venezuela_-_Yaracuy_-_Nirgua.svg/960px-Venezuela_-_Yaracuy_-_Nirgua.svg.png
+S~~~yaracuy~~~Yaritagua~~~Ciudad~~~Fundada en 1670, ciudad ferroviaria historica sobre la ruta Barquisimeto-Puerto Cabello.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Plaza_Bolivar_de_Yaritagua_1.jpg/960px-Plaza_Bolivar_de_Yaritagua_1.jpg
+S~~~yaracuy~~~Minas de Aroa~~~Historico~~~Antiguas minas de cobre de importancia historica. Puntos de interes: Cementerio de los Ingleses, vestigio de explotacion minera britanica del siglo XIX.~~~
+S~~~yaracuy~~~Embalse Cumaripa~~~Balneario~~~Parque recreacional con balnearios El Buco, El Guarataro, Guayabito y La Toma.~~~https://upload.wikimedia.org/wikipedia/commons/f/f8/Entrada_al_Parque_Cumaripa.jpg
+S~~~yaracuy~~~Aldeas Artesanales~~~Pueblo~~~Pueblos artesanales en Camunare y Guama con produccion local de artesanias.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/La_Gran_Sabana.jpg/960px-La_Gran_Sabana.jpg
 P~~~yaracuy~~~San Felipe~~~Guama, Albarico, Farriar
 Z~~~zulia~~~Zulia~~~Maracaibo
+I~~~zulia~~~https://upload.wikimedia.org/wikipedia/commons/8/83/Cant%C3%B3n_Zulia.PNG
 D~~~zulia~~~Zulia es el estado mas poblado de Venezuela, ubicado en el extremo noroccidental.~~P~~Rodea el Lago de Maracaibo, masa de agua mas extensa de Latinoamerica y una de las mayores reservas petroleras mundiales.~~P~~Sede del Relampago del Catatumbo, fenomeno meteorologico unico con tormentas electricas casi continuas (hasta 200 noches anuales, mas de un millon de descargas).~~P~~21 municipios y 110 parroquias. Ciudades principales: Maracaibo (capital, segunda mas poblada del pais), San Francisco, Cabimas, Ciudad Ojeda, Santa Barbara del Zulia.
-S~~~zulia~~~Maracaibo~~~Capital~~~Casco historico de la Calle Carabobo, Basilica de Nuestra Senora del Rosario de Chiquinquira (patrona de los zulianos, celebrada 18 de noviembre), Teatro Baralt, Palacio Legislativo.
-S~~~zulia~~~Relampago del Catatumbo~~~Fenomeno~~~Fenomeno meteorologico unico en el mundo: tormentas electricas casi continuas (hasta 200 noches anuales). Reconocido por Guinness como lugar de mayor densidad de rayos del planeta. Se observa mejor desde pueblo de Ologa o navegando rio Catatumbo.
-S~~~zulia~~~Laguna de Sinamaica~~~Isla~~~Cuna de la cultura indigena anu-paraujana con viviendas palafiticas tradicionales que dieron origen al nombre de Venezuela.
-S~~~zulia~~~Isla y Castillo de San Carlos~~~Historico~~~Fortificacion colonial de 1643 donde el golfo de Venezuela se une al lago, con playas de agua dulce y salada.
-S~~~zulia~~~Sierra de Perija~~~Montana~~~Cordillera fronteriza con Colombia con parques nacionales y comunidades indigenas yukpa y bari. Zona de gran biodiversidad.
+S~~~zulia~~~Maracaibo~~~Capital~~~Casco historico de la Calle Carabobo, Basilica de Nuestra Senora del Rosario de Chiquinquira (patrona de los zulianos, celebrada 18 de noviembre), Teatro Baralt, Palacio Legislativo.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Puente_de_Maracaibo.jpg/960px-Puente_de_Maracaibo.jpg
+S~~~zulia~~~Relampago del Catatumbo~~~Fenomeno~~~Fenomeno meteorologico unico en el mundo: tormentas electricas casi continuas (hasta 200 noches anuales). Reconocido por Guinness como lugar de mayor densidad de rayos del planeta. Se observa mejor desde pueblo de Ologa o navegando rio Catatumbo.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Catatumbo_Lightning_-_Rayo_del_Catatumbo_%2825217861751%29.jpg/960px-Catatumbo_Lightning_-_Rayo_del_Catatumbo_%2825217861751%29.jpg
+S~~~zulia~~~Laguna de Sinamaica~~~Isla~~~Cuna de la cultura indigena anu-paraujana con viviendas palafiticas tradicionales que dieron origen al nombre de Venezuela.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Laguna_de_Sinamaica_Estado_Zulia_Venezuela_%28Guajira_venezolana%29.JPG/960px-Laguna_de_Sinamaica_Estado_Zulia_Venezuela_%28Guajira_venezolana%29.JPG
+S~~~zulia~~~Isla y Castillo de San Carlos~~~Historico~~~Fortificacion colonial de 1643 donde el golfo de Venezuela se une al lago, con playas de agua dulce y salada.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Castillo_San_Carlos_de_Borromeo_%282%29.jpg/960px-Castillo_San_Carlos_de_Borromeo_%282%29.jpg
+S~~~zulia~~~Sierra de Perija~~~Montana~~~Cordillera fronteriza con Colombia con parques nacionales y comunidades indigenas yukpa y bari. Zona de gran biodiversidad.~~~https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Serrania_del_Perija_-_Cerro_Pintao.jpg/960px-Serrania_del_Perija_-_Cerro_Pintao.jpg
 P~~~zulia~~~Maracaibo~~~Los Puertos de Altagracia, Caimare Chico, El Congo, Ologa, Santa Barbara del Zulia

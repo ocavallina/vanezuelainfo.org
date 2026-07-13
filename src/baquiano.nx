@@ -414,9 +414,15 @@ pub fn baquiano_import_ex(wipe: int, load_sites: int) -> int {
                         let sn: String = baq_clean(f[2], 80)
                         let sc: String = baq_clean(f[3], 40)
                         let sd: String = baq_clean(f[4], 900)
+                        var si: String = ""
+                        if f.length() >= 6 { si = baq_clean(f[5], 500) }
                         if sn.length() > 0 {
-                            kv_rpush(h, zone_sites_key(id), sn + "|" + sc + "|" + sd)
+                            var entry: String = sn + "|" + sc + "|" + sd
+                            if si.length() > 0 { entry = entry + "|" + si }
+                            kv_rpush(h, zone_sites_key(id), entry)
                         }
+                    } else if typ == "I" {
+                        kv_set(h, zone_img_key(id), baq_clean(f[2], 500))
                     } else if typ == "P" and f.length() >= 4 {
                         let pm: String = baq_clean(f[2], 80)
                         let pl: String = baq_clean(f[3], 4000)
@@ -436,6 +442,100 @@ pub fn baquiano_import_ex(wipe: int, load_sites: int) -> int {
 // Import estandar (reemplazo total). Usado por el boton "Importar guia" del admin.
 pub fn baquiano_import() -> int {
     return baquiano_import_ex(1, 1)
+}
+
+// Escapa un valor para el seed: quita "~~~" (delimitador de campos) y saltos de linea.
+// Preserva el centinela de parrafos "~~P~~" (no contiene 3 tildes seguidas).
+fn seed_ex(s: String) -> String {
+    return s.replace("~~~", " ").replace("\r", " ").replace("\n", " ")
+}
+
+// Exporta el estado actual de Baquiano al formato del seed, INCLUYENDO imagenes
+// (6o campo de S = imgurl del destino; registro I por zona = portada). Para respaldar.
+pub fn baquiano_export() -> String {
+    let h: int = baq_conn()
+    if h < 0 {
+        return ""
+    }
+    let ids: Array = zones_list_h(h)
+    var sb: StringBuilder = StringBuilder.new()
+    var i: int = 0
+    while i < ids.length() {
+        let id: String = ids[i]
+        let nm: String = kv_get(h, zone_meta_key(id))
+        let cap: String = kv_get(h, zone_capital_key(id))
+        let desc: String = kv_get(h, zone_desc_key(id))
+        let img: String = kv_get(h, zone_img_key(id))
+        sb.append("Z~~~" + id + "~~~" + seed_ex(nm) + "~~~" + seed_ex(cap) + "\n")
+        if img.length() > 0 {
+            sb.append("I~~~" + id + "~~~" + seed_ex(img) + "\n")
+        }
+        if desc.length() > 0 {
+            sb.append("D~~~" + id + "~~~" + seed_ex(desc) + "\n")
+        }
+        let facts: Array = kv_lrange(h, zone_facts_key(id), 0, -1)
+        var j: int = 0
+        while j < facts.length() {
+            let e: String = facts[j]
+            let p: int = e.indexOf("|")
+            if p >= 0 {
+                let a: String = e.substring(0, p)
+                let b: String = e.substring(p + 1, e.length())
+                sb.append("F~~~" + id + "~~~" + seed_ex(a) + "~~~" + seed_ex(b) + "\n")
+            }
+            j = j + 1
+        }
+        let munis: Array = kv_lrange(h, zone_munis_key(id), 0, -1)
+        var m: int = 0
+        while m < munis.length() {
+            let e: String = munis[m]
+            let p: int = e.indexOf("|")
+            if p >= 0 {
+                let a: String = e.substring(0, p)
+                let b: String = e.substring(p + 1, e.length())
+                sb.append("M~~~" + id + "~~~" + seed_ex(a) + "~~~" + seed_ex(b) + "\n")
+            }
+            m = m + 1
+        }
+        let sites: Array = kv_lrange(h, zone_sites_key(id), 0, -1)
+        var s: int = 0
+        while s < sites.length() {
+            let e: String = sites[s]
+            let f4: Array = site_split4(e)
+            let sn: String = f4[0]
+            let sc: String = f4[1]
+            let sd: String = f4[2]
+            let si: String = f4[3]
+            sb.append("S~~~" + id + "~~~" + seed_ex(sn) + "~~~" + seed_ex(sc) + "~~~" + seed_ex(sd) + "~~~" + seed_ex(si) + "\n")
+            s = s + 1
+        }
+        let pobs: Array = kv_lrange(h, zone_poblados_key(id), 0, -1)
+        var pp: int = 0
+        while pp < pobs.length() {
+            let e: String = pobs[pp]
+            let p: int = e.indexOf("|")
+            if p >= 0 {
+                let a: String = e.substring(0, p)
+                let b: String = e.substring(p + 1, e.length())
+                sb.append("P~~~" + id + "~~~" + seed_ex(a) + "~~~" + seed_ex(b) + "\n")
+            }
+            pp = pp + 1
+        }
+        i = i + 1
+    }
+    kv_close(h)
+    return sb.to_string()
+}
+
+// Respalda el estado actual al archivo del seed (sobrevive perdidas de nyx-kv;
+// una "Importar guia" luego restaura TODO, imagenes incluidas). Bytes escritos o -1.
+pub fn baquiano_backup() -> int {
+    let s: String = baquiano_export()
+    if s.length() == 0 {
+        return -1
+    }
+    write_file("content/baquiano-seed.txt", s)
+    return s.length()
 }
 
 // Añade un sitio a una zona. Devuelve "" si OK o el texto del error.

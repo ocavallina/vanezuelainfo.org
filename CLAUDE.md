@@ -399,9 +399,16 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 - **Hoteles/reseñas (gratis)**: enlaces a Google Maps — "Ver en Google Maps (reseñas y
   fotos)" por destino, "Hoteles cerca" por destino y "Hoteles en {estado}" por zona
   (`maps_url`/`hotels_url`, sin API). Places API embebida (de pago) queda de futuro.
-- **Carga inicial**: `content/baquiano-seed.txt` (delim `~~~`, párrafos con centinela
-  `~~P~~`) → `baquiano_import()` (wipe+reload, botón "Importar guía" en el admin). El
-  seed se generó a partir de `content/guia_turistica_venezuela.md` (referencia).
+- **Seed = respaldo COMPLETO** (`content/baquiano-seed.txt`, delim `~~~`, párrafos `~~P~~`):
+  registros Z/D/F/M/S/P **+ imágenes** (6º campo de `S` = imgurl del destino, `I~~~id~~~url` =
+  portada). `baquiano_import()` (wipe+reload) restaura TODO **incluidas las imágenes** sin
+  re-buscar. `baquiano_export()`/`baquiano_backup()` (`write_file`) vuelcan el estado actual
+  al seed. Admin: **"Importar guía"** (restaurar todo) · **"Respaldar al seed"** (guardar el
+  estado, tras editar o buscar imágenes) · **"Restaurar (no destructivo)"** (solo texto).
+  El seed original se generó de `content/guia_turistica_venezuela.md` (referencia).
+- **⚠️ nyx-kv pierde datos** (leak/crash del daemon, incidentes 2026-07-12/13; ver memoria
+  `nyx-language-gotchas.md`): si Baquiano sale vacío/incompleto, **admin → "Importar guía"**
+  lo restaura del seed (con imágenes). Tras editar en admin, **"Respaldar al seed"** + commit.
 - **GOTCHA nyx-kv: el cliente (src/kv.nx) TRUNCA valores que contienen `\n` real** al
   escribir (el SET queda cortado en el primer salto). Por eso `desc` guarda los párrafos
   con el centinela `~~P~~` (no `\n`); `zone_edit` convierte los `\n` del textarea a

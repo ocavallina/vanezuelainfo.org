@@ -320,6 +320,10 @@ fn render_admin_baquiano(csrf: String) -> String {
     sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Restaura textos faltantes del seed SIN borrar sitios ni imagenes. Continuar?');\">")
     sb.append(csrf_input(csrf))
     sb.append("<input type=\"hidden\" name=\"act\" value=\"baquiano_restore\"><button type=\"submit\">Restaurar (no destructivo)</button></form>\n")
+    // Respaldar el estado actual (incl. imágenes) al seed, para sobrevivir pérdidas de nyx-kv.
+    sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Sobrescribe content/baquiano-seed.txt con el estado actual (incluye imagenes). Continuar?');\">")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"baquiano_backup\"><button type=\"submit\">Respaldar al seed</button></form>\n")
     // Buscar imagenes (Wikipedia) en un hilo de fondo
     sb.append("<form method=\"post\" action=\"/admin/baquiano\" class=\"admin-inline\" onsubmit=\"return confirm('Busca imagenes faltantes en Wikipedia (tarda 1-2 min en segundo plano). Continuar?');\">")
     sb.append(csrf_input(csrf))
@@ -516,6 +520,8 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
         baquiano_import()
     } else if act == "baquiano_restore" {
         baquiano_import_ex(0, 0)
+    } else if act == "baquiano_backup" {
+        baquiano_backup()
     } else if act == "fetch_images" {
         baquiano_fetch_start(0)
     } else if act == "fetch_images_force" {
