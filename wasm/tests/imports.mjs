@@ -81,6 +81,8 @@ const FIX_DOLARES = `[
   }
 ]`;
 const FIX_EUROS = `[ { "moneda": "EUR", "fuente": "oficial", "promedio": 728.48086846, "fechaActualizacion": "2026-07-02T00:00:00-04:00" } ]`;
+// Nuevo: respuesta de /api/rates (BCV directo por fecha valor: hoy + prox).
+const FIX_RATES = `{"hoy":{"bcv":639.7029,"eur":728.48086846,"fecha":"2026-07-02"},"prox":{"bcv":645.10,"eur":735.00,"fecha":"2026-07-03"},"bin":734.04}`;
 const FIX_CRIPTOYA = `{"binancep2p":{"ask":734.588,"totalAsk":734.588,"bid":733.5,"totalBid":733.5,"time":1782999810},"okexp2p":{"ask":742}}`;
 const FIX_COP = `{"result":"success","rates":{"CNY":7.16,"COP":3401.617171,"CRC":515.4}}`;
 const FIX_CRIPTO = `{"bitcoin":{"usd":61835},"ethereum":{"usd":1705.37},"tether":{"usd":0.998706}}`;
@@ -121,18 +123,17 @@ export async function afterStart({ exports, nyx }) {
   eq(S(exports.fmt_cop(M("4123.55"))), "4.124", "fmt_cop(4123.55)");
   eq(S(exports.fmt_cop(M("999.2"))), "999", "fmt_cop(999.2)");
 
-  // Fase A: main() leyó #pg="finanzas" y fx_boot(1) registró los 5 fetch
-  eq(fetches.length, 5, "fx_boot: 5 fetches");
-  eq(fetches[0].handler, "fx_on_dolares", "handler dolares");
-  eq(fetches[4].handler, "fx_on_cripto", "handler cripto");
+  // Fase A: main() leyó #pg="finanzas" y fx_boot(1) registró los 4 fetch
+  eq(fetches.length, 4, "fx_boot: 4 fetches");
+  eq(fetches[0].handler, "fx_on_rates", "handler rates (BCV directo)");
+  eq(fetches[3].handler, "fx_on_cripto", "handler cripto");
 
   // Fechas: ISO con offset -04:00 → epoch UTC → local (TZ_MIN=-240) ida y vuelta
   // 2026-07-02T00:00:00-04:00 == 2026-07-02T04:00:00Z; local UTC-4 → 2/7/2026 00:00
 
   // Fase B: disparar los handlers con los fixtures (como haría js_fetch)
-  exports.fx_on_dolares(200n, M(FIX_DOLARES));
+  exports.fx_on_rates(200n, M(FIX_RATES));
   exports.fx_on_criptoya(200n, M(FIX_CRIPTOYA));
-  exports.fx_on_euros(200n, M(FIX_EUROS));
   exports.fx_on_cop(200n, M(FIX_COP));
   const card = texts["#fin-body"], page = texts["#fz-div"];
   if (!card.includes("Dólar BCV") || !card.includes(" Bs 639,70")) throw new Error("FALLO Dólar BCV (scanner con espacios): " + card);
@@ -142,7 +143,10 @@ export async function afterStart({ exports, nyx }) {
   if (!card.includes("USD en COP") || !card.includes("COP 3.402")) throw new Error("FALLO COP: " + card);
   // base=(734.588+733.5)/2=734.044; 1.000 COP = 734.044/3401.617171*1000 = 215,79
   if (!card.includes("1.000 COP") || !card.includes("Bs 215,79")) throw new Error("FALLO 1.000 COP: " + card);
-  if (!card.includes("Actualizado 2/7/2026 00:00")) throw new Error("FALLO fch local: " + card);
+  // BCV directo: fecha valor de hoy + fila/valor de mañana (prox)
+  if (!card.includes("Tasa BCV válida 02/07")) throw new Error("FALLO fecha valor hoy: " + card);
+  if (!card.includes("Dólar BCV mañana") || !card.includes("Bs 645,10")) throw new Error("FALLO BCV mañana: " + card);
+  if (!page.includes("USD oficial mañana") || !page.includes("válido 03/07")) throw new Error("FALLO fz-div mañana: " + page);
   if (!page.includes("USD en Colombia") || !page.includes("COP 3.402")) throw new Error("FALLO fz-div COP: " + page);
   if (!page.includes("Bs 100 = 463 COP")) throw new Error("FALLO peso<->bolivar: " + page);
   console.log("ok finanzas 100% Nyx (fetch propio + scanners JSON + fecha local)");
@@ -155,7 +159,7 @@ export async function afterStart({ exports, nyx }) {
   console.log("ok cripto");
 
   // Respuesta con error de red → status 0 → no rompe ni pisa el estado
-  exports.fx_on_dolares(0n, M(""));
+  exports.fx_on_rates(0n, M(""));
   if (!texts["#fin-body"].includes("Bs 639,70")) throw new Error("FALLO: error de red piso el estado");
   console.log("ok manejo de status!=200");
 

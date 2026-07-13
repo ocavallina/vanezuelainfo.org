@@ -18,6 +18,7 @@ import "src/baquiano"
 import "src/admin"
 import "src/rates"
 import "src/sqldb"
+import "src/bcv"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -93,7 +94,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -147,7 +148,7 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"calc-dir\" value=\"d2b\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"calculadora\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     return html_nocache(200, page_calc("Calculadora de cambio", sb.to_string()))
 }
 
@@ -197,7 +198,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -215,7 +216,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -253,7 +254,7 @@ fn handle_chat(req: Request) -> Response {
     sb.append("</form>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"chat\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
@@ -285,6 +286,12 @@ fn handle_chat_send(req: Request) -> Response {
 // GET /baquiano — indice de zonas de la guia.
 fn handle_baquiano(req: Request) -> Response {
     return html_nocache(200, page_fixed("Baquiano", render_baquiano_index()))
+}
+
+// GET /api/rates — tasas para el front (BCV hoy + próxima con fecha valor, + Binance).
+fn handle_rates(req: Request) -> Response {
+    let h: Array = ["Content-Type", "application/json; charset=utf-8", "Cache-Control", "no-cache"]
+    return Response { status: 200, headers_flat: h, body: rates_api_json() }
 }
 
 // GET /baquiano/{zona} — sitios de una zona.
@@ -323,7 +330,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -378,7 +385,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -447,7 +454,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=16\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=17\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))
@@ -564,6 +571,7 @@ fn setup_routes(app: App) {
     app_get(app, "/api/chat/{room}", handle_chat_room)
     app_post(app, "/api/chat/send", handle_chat_send)
     app_get(app, "/baquiano", handle_baquiano)
+    app_get(app, "/api/rates", handle_rates)
     app_get(app, "/baquiano/{zona}", handle_baquiano_zone)
     app_get(app, "/admin", handle_admin)
     app_post(app, "/admin/login", handle_admin_login)

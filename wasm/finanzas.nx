@@ -16,9 +16,20 @@ fn fz_item(l: String, v: String, s: String) -> String {
 }
 
 // Estado: [0]=bcv [1]=eur [2]=uc [3]=uv [4]=cop [5]=fch (local, ya formateada)
+// bcv/eur son los que APLICAN HOY (fecha valor <= hoy). La calculadora usa estos.
 var fxv: Array = [""]
 // Cripto: [0]=btc [1]=eth [2]=usdt
 var fxc: Array = [""]
+// BCV extra: [0]=fecha valor de HOY (ISO) [1]=bcv MAÑANA [2]=eur MAÑANA [3]=fecha MAÑANA (ISO)
+var fxb: Array = [""]
+
+// ISO "YYYY-MM-DD" -> "dd/mm" (o "" si corto).
+fn iso_ddmm(iso: String) -> String {
+    if iso.length() < 10 {
+        return ""
+    }
+    return iso.substring(8, 10) + "/" + iso.substring(5, 7)
+}
 
 // Pinta la tarjeta de la portada (#fin-body) y/o la página /finanzas (#fz-div);
 // dom_set_html es no-op si el selector no existe, así que la misma fn sirve
@@ -53,16 +64,29 @@ fn fx_paint() {
     if base > 0.0 and copf > 0.0 {
         h = h + fin_row("1.000 COP", "Bs " + fmt_f(base / copf * 1000.0, 2, 2))
     }
-    if fch.length() > 0 {
-        h = h + "<div class=\"fin-meta\">Actualizado " + fch + "</div>"
+    let pbcv: String = fxb[1]
+    if pbcv.length() > 0 {
+        h = h + fin_row("Dólar BCV mañana", "Bs " + fmt_bs(pbcv))
+    }
+    let hoyf: String = fxb[0]
+    if hoyf.length() >= 10 {
+        h = h + "<div class=\"fin-meta\">Tasa BCV válida " + iso_ddmm(hoyf) + "</div>"
     }
     if h.length() == 0 { h = "Cargando…" }
     dom_set_html("#fin-body", h)
 
     // Página /finanzas (divisas)
     var g: String = ""
-    if bcv.length() > 0 { g = g + fz_item("USD oficial (BCV)", "Bs " + fmt_bs(bcv), "") }
-    if eur.length() > 0 { g = g + fz_item("EUR oficial (BCV)", "Bs " + fmt_bs(eur), "") }
+    var vlab: String = ""
+    let hf: String = fxb[0]
+    if hf.length() >= 10 { vlab = "válido " + iso_ddmm(hf) }
+    if bcv.length() > 0 { g = g + fz_item("USD oficial (BCV)", "Bs " + fmt_bs(bcv), vlab) }
+    if eur.length() > 0 { g = g + fz_item("EUR oficial (BCV)", "Bs " + fmt_bs(eur), vlab) }
+    let pb: String = fxb[1]
+    let pe: String = fxb[2]
+    let pf: String = fxb[3]
+    if pb.length() > 0 { g = g + fz_item("USD oficial mañana", "Bs " + fmt_bs(pb), "válido " + iso_ddmm(pf)) }
+    if pe.length() > 0 { g = g + fz_item("EUR oficial mañana", "Bs " + fmt_bs(pe), "válido " + iso_ddmm(pf)) }
     if uc.length() > 0 { g = g + fz_item("USDT compra (P2P)", "Bs " + fmt_bs(uc), "Binance P2P") }
     if uv.length() > 0 { g = g + fz_item("USDT venta (P2P)", "Bs " + fmt_bs(uv), "Binance P2P") }
     if cop.length() > 0 { g = g + fz_item("USD en Colombia", "COP " + fmt_cop(cop), "1 USD") }
@@ -218,26 +242,29 @@ fn calc_copy() {
 
 // Handlers de las respuestas (re-entran desde js_fetch de la pasarela)
 
-#[export_name = "fx_on_dolares"]
-fn fx_on_dolares(status: int, body: String) {
+// Respuesta de /api/rates (mismo origen): BCV directo por fecha valor.
+// {"hoy":{"bcv":..,"eur":..,"fecha":"YYYY-MM-DD"},"prox":{...}?,"bin":..}
+#[export_name = "fx_on_rates"]
+fn fx_on_rates(status: int, body: String) {
     if status != 200 { return }
-    let seg: String = jseg(body, "\"oficial\"")
-    if seg.length() == 0 { return }
-    let v: String = jnum(seg, "promedio")
-    if v.length() > 0 { fxv[0] = v }
-    let f: String = jstr(seg, "fechaActualizacion")
-    if f.length() > 0 { fxv[5] = fmt_dmy_hm(iso_to_epoch(f)) }
-    fx_paint()
-    calc_render()
-}
-
-#[export_name = "fx_on_euros"]
-fn fx_on_euros(status: int, body: String) {
-    if status != 200 { return }
-    let seg: String = jseg(body, "\"oficial\"")
-    if seg.length() == 0 { return }
-    let v: String = jnum(seg, "promedio")
-    if v.length() > 0 { fxv[1] = v }
+    let hoy: String = jseg(body, "\"hoy\"")
+    if hoy.length() > 0 {
+        let bcv: String = jnum(hoy, "bcv")
+        if bcv.length() > 0 { fxv[0] = bcv }
+        let eur: String = jnum(hoy, "eur")
+        if eur.length() > 0 { fxv[1] = eur }
+        fxb[0] = jstr(hoy, "fecha")
+    }
+    let prox: String = jseg(body, "\"prox\"")
+    if prox.length() > 0 {
+        fxb[1] = jnum(prox, "bcv")
+        fxb[2] = jnum(prox, "eur")
+        fxb[3] = jstr(prox, "fecha")
+    } else {
+        fxb[1] = ""
+        fxb[2] = ""
+        fxb[3] = ""
+    }
     fx_paint()
     calc_render()
 }
@@ -285,9 +312,11 @@ fn fx_on_cripto(status: int, body: String) {
 fn fx_boot(con_cripto: int) {
     fxv = ["", "", "", "", "", ""]
     fxc = ["", "", ""]
-    browser_fetch("https://ve.dolarapi.com/v1/dolares", "GET", "", "fx_on_dolares")
+    fxb = ["", "", "", ""]
+    // BCV directo (dólar/euro con fecha valor) vía nuestro servidor; el navegador no
+    // puede pegarle a bcv.org.ve (sin CORS). Binance/COP/cripto siguen directo.
+    browser_fetch("/api/rates", "GET", "", "fx_on_rates")
     browser_fetch("https://criptoya.com/api/USDT/VES/1", "GET", "", "fx_on_criptoya")
-    browser_fetch("https://ve.dolarapi.com/v1/euros", "GET", "", "fx_on_euros")
     browser_fetch("https://open.er-api.com/v6/latest/USD", "GET", "", "fx_on_cop")
     if con_cripto == 1 {
         browser_fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd", "GET", "", "fx_on_cripto")

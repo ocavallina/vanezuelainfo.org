@@ -10,6 +10,7 @@
 
 import "src/sqldb"
 import "src/news"
+import "src/bcv"
 
 // Float -> "entero,frac" (2 decimales, coma) para MOSTRAR. Redondea.
 fn fmt2(v: float) -> String {
@@ -85,15 +86,27 @@ pub fn rates_snapshot() {
     let d: int = db_day()
     let ds: String = int_to_string(d)
 
-    let bd: String = https_get("https://ve.dolarapi.com/v1/dolares")
-    if bd.length() > 0 {
-        let bcv: String = dolarapi_oficial(bd)
-        if bcv.length() > 0 { rate_put(ds, "bcv", bcv) }
-    }
-    let ed: String = https_get("https://ve.dolarapi.com/v1/euros")
-    if ed.length() > 0 {
-        let eur: String = dolarapi_oficial(ed)
-        if eur.length() > 0 { rate_put(ds, "eur", eur) }
+    // BCV DIRECTO (dólar/euro), guardado por FECHA VALOR (day = ordinal de vigencia).
+    // Respaldo a DolarAPI si BCV falla o no parsea (sin fecha valor -> día de hoy).
+    let b: Array = bcv_fetch()
+    let bdolar: String = b[0]
+    let beuro: String = b[1]
+    let bord: int = b[2]
+    if bdolar.length() > 0 and bord > 0 {
+        let os: String = int_to_string(bord)
+        rate_put(os, "bcv", bdolar)
+        if beuro.length() > 0 { rate_put(os, "eur", beuro) }
+    } else {
+        let bd: String = https_get("https://ve.dolarapi.com/v1/dolares")
+        if bd.length() > 0 {
+            let bcv: String = dolarapi_oficial(bd)
+            if bcv.length() > 0 { rate_put(ds, "bcv", bcv) }
+        }
+        let ed: String = https_get("https://ve.dolarapi.com/v1/euros")
+        if ed.length() > 0 {
+            let eur: String = dolarapi_oficial(ed)
+            if eur.length() > 0 { rate_put(ds, "eur", eur) }
+        }
     }
     let cd: String = https_get("https://criptoya.com/api/USDT/VES/1")
     if cd.length() > 0 {
@@ -128,6 +141,101 @@ fn sf(s: String) -> float {
     if s.length() == 0 { return 0.0 }
     if s == "__NULL__" { return 0.0 }
     return string_to_float(s)
+}
+
+// Valor de una tasa para un día (ordinal) exacto. "" si no hay.
+fn rate_on(kind: String, day: int) -> String {
+    if day == 0 {
+        return ""
+    }
+    let rows: Array = sql_rows("SELECT value FROM rates WHERE kind = '" + kind + "' AND day = " + int_to_string(day))
+    if rows.length() < 2 {
+        return ""
+    }
+    let v: String = cell(rows, 1, 0)
+    if v == "__NULL__" {
+        return ""
+    }
+    return v
+}
+
+// Valor más reciente de una tasa (mayor day de los últimos ~8 días). "" si no hay.
+fn rate_latest(kind: String) -> String {
+    let lo: String = int_to_string(db_day() - 8)
+    let rows: Array = sql_rows("SELECT day, value FROM rates WHERE kind = '" + kind + "' AND day > " + lo)
+    var best: int = 0
+    var val: String = ""
+    var i: int = 1
+    while i < rows.length() {
+        let dy: int = string_to_int(cell(rows, i, 0))
+        if dy >= best {
+            best = dy
+            val = cell(rows, i, 1)
+        }
+        i = i + 1
+    }
+    return val
+}
+
+// JSON para GET /api/rates que consume el front (wasm): tasa BCV que aplica HOY
+// (fecha valor <= hoy, la más reciente) y la PRÓXIMA (fecha valor > hoy, si está
+// publicada), cada una con dólar/euro y su fecha; más Binance (bin). Números sin
+// comillas (0 si faltan); fecha entre comillas.
+pub fn rates_api_json() -> String {
+    let today: int = db_day()
+    let lo: String = int_to_string(today - 8)
+    let rows: Array = sql_rows("SELECT day, value FROM rates WHERE kind = 'bcv' AND day > " + lo)
+    var hoy_day: int = 0
+    var hoy_bcv: String = ""
+    var prox_day: int = 0
+    var prox_bcv: String = ""
+    var i: int = 1
+    while i < rows.length() {
+        let dy: int = string_to_int(cell(rows, i, 0))
+        let vv: String = cell(rows, i, 1)
+        if dy <= today {
+            if dy >= hoy_day {
+                hoy_day = dy
+                hoy_bcv = vv
+            }
+        } else {
+            if prox_day == 0 or dy < prox_day {
+                prox_day = dy
+                prox_bcv = vv
+            }
+        }
+        i = i + 1
+    }
+    var hoy_eur: String = rate_on("eur", hoy_day)
+    var prox_eur: String = rate_on("eur", prox_day)
+    if hoy_bcv.length() == 0 { hoy_bcv = "0" }
+    if hoy_eur.length() == 0 { hoy_eur = "0" }
+    let bin: String = rate_latest("bin")
+    var binv: String = bin
+    if binv.length() == 0 { binv = "0" }
+
+    var sb: StringBuilder = StringBuilder.new()
+    sb.append("{\"hoy\":{\"bcv\":")
+    sb.append(hoy_bcv)
+    sb.append(",\"eur\":")
+    sb.append(hoy_eur)
+    sb.append(",\"fecha\":\"")
+    if hoy_day > 0 { sb.append(ord_to_iso(hoy_day)) }
+    sb.append("\"}")
+    if prox_day > 0 and prox_bcv.length() > 0 {
+        if prox_eur.length() == 0 { prox_eur = "0" }
+        sb.append(",\"prox\":{\"bcv\":")
+        sb.append(prox_bcv)
+        sb.append(",\"eur\":")
+        sb.append(prox_eur)
+        sb.append(",\"fecha\":\"")
+        sb.append(ord_to_iso(prox_day))
+        sb.append("\"}")
+    }
+    sb.append(",\"bin\":")
+    sb.append(binv)
+    sb.append("}")
+    return sb.to_string()
 }
 
 // Un mini-gráfico (hasta 14 días) para una tasa (`kind` = literal fijo).

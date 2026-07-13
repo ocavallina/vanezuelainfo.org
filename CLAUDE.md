@@ -91,9 +91,15 @@ src/sqldb.nx     Adaptador sobre nyx-db (SQL en Nyx, EMBEBIDO). ÚNICO módulo q
                  (import "nyx-db/src/*"); expone sql_exec/sql_rows/sql_count/sql_esc/db_day y
                  sqldb_init() (db_load del .ndb + CREATE TABLE + hilo saver + shutdown handler).
                  Guarda: visitas (analítica) y rates (histórico de tasas). Ver gotchas de nyx-db.
-src/rates.nx     Histórico de tasas en nyx-db: rates_snapshot() (fetch server-side DolarAPI/CriptoYa
-                 + upsert en tabla rates) desde el refresher; rates_history_html() (sección de
-                 /finanzas, 3 mini-gráficos 14 días con mín/máx/prom calculados en código).
+src/rates.nx     Tasas en nyx-db: rates_snapshot() (refresher) toma Dólar/Euro BCV de src/bcv.nx
+                 (BCV DIRECTO) y Binance de CriptoYa; guarda en tabla rates POR FECHA VALOR (day =
+                 ordinal de vigencia) con respaldo a DolarAPI si BCV falla. rates_api_json() sirve
+                 GET /api/rates (hoy + próxima con fecha valor + bin) que consume el front.
+                 rate_chart() = mini-gráficos 14 días de /finanzas.
+src/bcv.nx       Lectura DIRECTA de bcv.org.ve (raspa HTML: id=dolar/euro -> strong-tb; coma->punto;
+                 fecha valor del atributo content ISO -> ordinal días). BCV publica ~4pm la tasa del
+                 día hábil SIGUIENTE. Funciona pese al cert TLS roto porque el runtime NO valida
+                 certs (SSL_VERIFY_NONE). Frágil (scraping) -> rates.nx cae a DolarAPI si da vacío.
 src/chat.nx      Chat colectivo CON SALAS: valida/sanea/filtra, guarda/lee por sala en nyx-kv.
                  Parseo de body a mano. Solo el admin crea/borra salas. form_field es pub.
                  chat_ws_handler = handler del upgrade WS (valida sala, delega en src/ws).

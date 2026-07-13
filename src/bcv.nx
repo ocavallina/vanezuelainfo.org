@@ -1,0 +1,115 @@
+// src/bcv.nx — Lectura DIRECTA de las tasas oficiales del BCV (www.bcv.org.ve).
+//
+// BCV no tiene API JSON: se raspa el HTML de la portada. Funciona pese al cert TLS
+// roto de BCV porque el runtime de Nyx no valida certificados (SSL_VERIFY_NONE).
+// La tasa está en <div id="dolar">…<strong class="strong-tb">721,34560000</strong>
+// (coma decimal); la "Fecha Valor" (día de vigencia) viene como atributo ISO:
+//   Fecha Valor: … <span … content="2026-07-13T00:00:00-04:00">…
+// BCV publica ~4pm la tasa con fecha valor del día hábil SIGUIENTE.
+//
+// NOTA: parseo por scan de string a propósito (no std/json; y aquí es HTML). Frágil
+// ante rediseños de BCV — por eso rates.nx cae a DolarAPI si esto devuelve vacío.
+
+import "src/md"
+
+const BCV_URL: String = "https://www.bcv.org.ve/"
+
+// Días desde 1970-01-01 (algoritmo de Howard Hinnant). Igual base que db_day().
+fn days_civil(y: int, m: int, d: int) -> int {
+    var yy: int = y
+    if m <= 2 { yy = yy - 1 }
+    let era: int = yy / 400
+    let yoe: int = yy - era * 400
+    var mp: int = m - 3
+    if m <= 2 { mp = m + 9 }
+    let doy: int = (153 * mp + 2) / 5 + d - 1
+    let doe: int = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+fn pad2(n: int) -> String {
+    if n < 10 {
+        return "0" + int_to_string(n)
+    }
+    return int_to_string(n)
+}
+
+// Inverso de days_civil: ordinal (días desde 1970, positivo) -> "YYYY-MM-DD".
+pub fn ord_to_iso(z0: int) -> String {
+    let z: int = z0 + 719468
+    let era: int = z / 146097
+    let doe: int = z - era * 146097
+    let yoe: int = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    let y0: int = yoe + era * 400
+    let doy: int = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp: int = (5 * doy + 2) / 153
+    let d: int = doy - (153 * mp + 2) / 5 + 1
+    var m: int = mp + 3
+    if mp >= 10 { m = mp - 9 }
+    var y: int = y0
+    if m <= 2 { y = y0 + 1 }
+    return int_to_string(y) + "-" + pad2(m) + "-" + pad2(d)
+}
+
+// Valor numérico dentro de <div id="<id>">…<strong class="strong-tb">VALOR</strong>.
+// Devuelve el número con punto decimal, o "" si no se encuentra.
+fn bcv_strong(html: String, id: String) -> String {
+    let anchor: String = "id=\"" + id + "\""
+    let p: int = html.indexOf(anchor)
+    if p < 0 {
+        return ""
+    }
+    let rest: String = html.substring(p, html.length())
+    let sp: int = rest.indexOf("strong-tb\">")
+    if sp < 0 {
+        return ""
+    }
+    let after: String = rest.substring(sp + 11, rest.length())
+    let lt: int = after.indexOf("<")
+    if lt < 0 {
+        return ""
+    }
+    var val: String = md_trim(after.substring(0, lt))
+    val = val.replace(",", ".")
+    return val
+}
+
+// Ordinal (días desde 1970) de la "Fecha Valor" del recuadro de tasas. 0 si falla.
+fn bcv_fecha_ordinal(html: String) -> int {
+    let p: int = html.indexOf("Fecha Valor")
+    if p < 0 {
+        return 0
+    }
+    let rest: String = html.substring(p, html.length())
+    let cp: int = rest.indexOf("content=\"")
+    if cp < 0 {
+        return 0
+    }
+    let after: String = rest.substring(cp + 9, rest.length())
+    if after.length() < 10 {
+        return 0
+    }
+    let iso: String = after.substring(0, 10)
+    let y: int = string_to_int(iso.substring(0, 4))
+    let mo: int = string_to_int(iso.substring(5, 7))
+    let d: int = string_to_int(iso.substring(8, 10))
+    if y < 2000 or mo < 1 or d < 1 {
+        return 0
+    }
+    return days_civil(y, mo, d)
+}
+
+// Baja y parsea las tasas BCV. Devuelve [dolar, euro, ordinal_fecha_valor]
+// (dolar/euro Strings con "." decimal, ordinal int). Campos vacíos/0 si no parsea.
+pub fn bcv_fetch() -> Array {
+    let html: String = https_get(BCV_URL)
+    if html.length() == 0 {
+        let e: Array = ["", "", 0]
+        return e
+    }
+    let dolar: String = bcv_strong(html, "dolar")
+    let euro: String = bcv_strong(html, "euro")
+    let ord: int = bcv_fecha_ordinal(html)
+    let r: Array = [dolar, euro, ord]
+    return r
+}
