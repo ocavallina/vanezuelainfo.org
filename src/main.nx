@@ -94,7 +94,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -149,10 +149,18 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("<span id=\"calc-to-unit\" class=\"calc-unit\">Bs</span>")
     sb.append("</div>\n")
     sb.append("<div id=\"calc-rate\" class=\"calc-rate\"></div>\n")
+    sb.append("<div class=\"pay-share-row\"><label>Al compartir: <select id=\"pay-sel\" class=\"pay-sel\" aria-label=\"Incluir datos de pago al compartir\"><option value=\"no\">sin datos de pago</option><option value=\"pm\">+ Pago M&oacute;vil</option><option value=\"tr\">+ Transferencia</option><option value=\"both\">+ ambos</option></select></label></div>\n")
     sb.append("</section>\n")
+    sb.append("<details class=\"pay-box\">\n")
+    sb.append("<summary>Mis datos de pago (para compartir)</summary>\n")
+    sb.append("<p class=\"pay-note\">Se guardan solo en este dispositivo; no se env&iacute;an al servidor. Se incluyen al compartir solo si lo eliges arriba.</p>\n")
+    sb.append("<label class=\"pay-lab\">Pago M&oacute;vil<textarea id=\"pay-pm\" class=\"pay-ta\" rows=\"2\" placeholder=\"Banco &middot; Tel&eacute;fono &middot; C&eacute;dula\"></textarea></label>\n")
+    sb.append("<label class=\"pay-lab\">Transferencia<textarea id=\"pay-tr\" class=\"pay-ta\" rows=\"3\" placeholder=\"Banco &middot; N&ordm; de cuenta &middot; Titular &middot; C&eacute;dula/RIF\"></textarea></label>\n")
+    sb.append("<div class=\"pay-actions\"><button id=\"pay-save\" class=\"pay-save\" type=\"button\">Guardar</button><span id=\"pay-status\" class=\"pay-status\"></span></div>\n")
+    sb.append("</details>\n")
     sb.append("<input type=\"hidden\" id=\"calc-dir\" value=\"d2b\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"calculadora\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     return html_nocache(200, page_calc("Calculadora de cambio", sb.to_string()))
 }
 
@@ -202,7 +210,7 @@ fn handle_index(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -220,7 +228,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -258,7 +266,7 @@ fn handle_chat(req: Request) -> Response {
     sb.append("</form>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"chat\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
@@ -334,7 +342,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -389,7 +397,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -458,7 +466,7 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</div>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
     sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=18\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=19\"></script>\n")
     sb.append("<script src=\"/assets/quake.js?v=2\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))

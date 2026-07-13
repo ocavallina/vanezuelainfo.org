@@ -219,16 +219,57 @@ fn calc_line() -> String {
     return fmt_div(sel, amt) + " = " + fmt_f(amt * r, 2, 2) + " Bs"
 }
 
+// Bloque de datos de pago a anexar al compartir, según #pay-sel (no/pm/tr/both) y lo
+// que el usuario tenga guardado en los textarea. "" si no aplica. Los datos viven solo
+// en localStorage del navegador; solo salen aquí si el usuario elige incluirlos.
+fn pay_block() -> String {
+    let sel: String = dom_get_value("#pay-sel")
+    if sel == "no" or sel.length() == 0 {
+        return ""
+    }
+    var out: String = ""
+    if sel == "pm" or sel == "both" {
+        let pm: String = dom_get_value("#pay-pm")
+        if pm.length() > 0 { out = out + "\n\nPago Móvil:\n" + pm }
+    }
+    if sel == "tr" or sel == "both" {
+        let tr: String = dom_get_value("#pay-tr")
+        if tr.length() > 0 { out = out + "\n\nTransferencia:\n" + tr }
+    }
+    return out
+}
+
 // Compartir la conversión actual (Web Share / portapapeles via pasarela). El
 // texto se arma aquí; el enlace lo completa el loader con location.origin.
 #[export_name = "calc_share"]
 fn calc_share() {
     let line: String = calc_line()
-    var txt: String = "Convierte Bolívares y Dólar BCV, Euro BCV o Dólar Binance en"
-    if line.length() > 0 {
-        txt = line + " · Convierte divisas de Venezuela en"
+    if line.length() == 0 {
+        js_share("Convierte Bolívares y Dólar BCV, Euro BCV o Dólar Binance en", "/calculadora")
+        return
+    }
+    var txt: String = line
+    let pay: String = pay_block()
+    if pay.length() > 0 {
+        txt = txt + pay
+    } else {
+        txt = txt + " · Convierte divisas de Venezuela en"
     }
     js_share(txt, "/calculadora")
+}
+
+// Guarda los datos de pago (texto libre) en localStorage. Persisten por navegador.
+#[export_name = "pay_save"]
+fn pay_save() {
+    ls_set("pay_pm", dom_get_value("#pay-pm"))
+    ls_set("pay_tr", dom_get_value("#pay-tr"))
+    dom_set_html("#pay-status", "Guardado &#10003;")
+}
+
+// Persiste la elección de qué incluir al compartir (#pay-sel).
+#[export_name = "pay_save_sel"]
+fn pay_save_sel() {
+    ls_set("pay_sel", dom_get_value("#pay-sel"))
 }
 
 // Copiar solo el resultado al portapapeles (js_copy de la pasarela).
@@ -515,6 +556,15 @@ fn calc_boot() {
     dom_on("#calc-amt", "input", "calc_render")
     dom_on("#calc-rate-sel", "change", "calc_render")
     dom_on("#calc-day", "change", "calc_render")
+    // Datos de pago (localStorage): restaurar + persistir
+    let ppm: String = ls_get("pay_pm")
+    if ppm.length() > 0 { js_set_value("#pay-pm", ppm) }
+    let ptr: String = ls_get("pay_tr")
+    if ptr.length() > 0 { js_set_value("#pay-tr", ptr) }
+    let psel: String = ls_get("pay_sel")
+    if psel.length() > 0 { js_set_value("#pay-sel", psel) }
+    dom_on("#pay-save", "click", "pay_save")
+    dom_on("#pay-sel", "change", "pay_save_sel")
     dom_on("#calc-swap", "click", "calc_swap")
     dom_on("#calc-share", "click", "calc_share")
     dom_on("#calc-copy", "click", "calc_copy")

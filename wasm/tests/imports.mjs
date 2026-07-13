@@ -217,6 +217,22 @@ export async function afterStart({ exports, nyx }) {
   if (!sh.text.includes("63.970,29 Bs") || !sh.text.includes("Convierte")) throw new Error("FALLO calc_share text: " + sh.text);
   console.log("ok calc_share");
 
+  // Datos de pago: al compartir con #pay-sel="pm" se anexa Pago Móvil (sin promo);
+  // con "both" ambos; pay_save persiste en localStorage.
+  values["#pay-pm"] = "Banesco 0134 · 0414-1234567 · V-12345678";
+  values["#pay-tr"] = "Mercantil 0105 · Juan Pérez · V-12345678";
+  values["#pay-sel"] = "pm"; exports.calc_share();
+  const shp = shares[shares.length - 1];
+  if (!shp.text.includes("Pago Móvil:") || !shp.text.includes("0414-1234567")) throw new Error("FALLO calc_share Pago Móvil: " + shp.text);
+  if (shp.text.includes("Transferencia:")) throw new Error("FALLO: transferencia con sel=pm: " + shp.text);
+  values["#pay-sel"] = "both"; exports.calc_share();
+  const shb = shares[shares.length - 1];
+  if (!shb.text.includes("Pago Móvil:") || !shb.text.includes("Transferencia:") || !shb.text.includes("Juan Pérez")) throw new Error("FALLO calc_share ambos: " + shb.text);
+  exports.pay_save();
+  if (store["pay_pm"] !== values["#pay-pm"] || store["pay_tr"] !== values["#pay-tr"]) throw new Error("FALLO pay_save no persistió");
+  values["#pay-sel"] = "no";
+  console.log("ok datos de pago (compartir + persistencia)");
+
   // Copiar: copia solo el resultado formateado (100 Dólar BCV → 63.970,29 Bs)
   exports.calc_copy();
   const cp = copies[copies.length - 1];

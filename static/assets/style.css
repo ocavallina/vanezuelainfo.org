@@ -222,6 +222,16 @@ a { color: var(--enlace); }
 .calc-sels .calc-rate-sel { flex: 1 1 auto; }
 .calc-day-wrap { flex: 0 0 auto; }
 .calc-day-wrap .calc-rate-sel { width: auto; }
+.pay-share-row { margin-top: 10px; font-size: .9rem; color: var(--gris); }
+.pay-sel { font: inherit; padding: 4px 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--tinta); }
+.pay-box { margin-top: 14px; border: 1px solid var(--borde); border-radius: 12px; padding: 10px 14px; background: var(--tarjeta); }
+.pay-box summary { cursor: pointer; font-weight: 700; color: var(--enlace); }
+.pay-note { font-size: .8rem; color: var(--gris); margin: 8px 0; }
+.pay-lab { display: block; font-size: .85rem; font-weight: 600; color: var(--tinta); margin-top: 10px; }
+.pay-ta { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; background: var(--fondo); color: var(--tinta); resize: vertical; box-sizing: border-box; }
+.pay-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.pay-save { padding: 8px 16px; border: 0; border-radius: 8px; background: var(--azul); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.pay-status { font-size: .85rem; color: var(--verde, #1a7f37); font-weight: 700; }
 .calc-unit { flex: 0 0 auto; min-width: 2.2em; text-align: right; font-weight: 700; color: var(--gris); }
 /* Mini-calculadora de expresión */
 .mc-toggle { flex: 0 0 auto; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); font-size: 1.1rem; line-height: 1; padding: 7px 9px; cursor: pointer; }

@@ -10,7 +10,7 @@
 import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=10';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=16')).arrayBuffer();
+  const bytes = await (await fetch('/assets/veninfo.wasm?v=17')).arrayBuffer();
   const dom = domBindings();
   const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref

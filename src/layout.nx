@@ -12,7 +12,7 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append(title)
     sb.append(" — VenezuelaInfo</title>\n")
     sb.append("<meta name=\"description\" content=\"Noticias, informacion y monitoreo sismico de Venezuela.\">\n")
-    sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css?v=63\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css?v=64\">\n")
     // Iconos + PWA
     sb.append("<link rel=\"icon\" href=\"/icon.svg\" type=\"image/svg+xml\">\n")
     sb.append("<link rel=\"icon\" href=\"/icon-192.png\" type=\"image/png\" sizes=\"192x192\">\n")
