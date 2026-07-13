@@ -465,8 +465,14 @@ Sin prioridad estricta; tomar lo que aporte.
 - [ ] **Leaflet con SRI o autoalojado** (hoy unpkg sin integrity ni fallback).
 - [ ] **Robustez WS del gateway** (en el monorepo): locking del SSL del túnel,
       timeout de idle, propagación simétrica del cierre (limitaciones "de piloto").
-- [ ] **Notification API en el chat** (avisar mensajes nuevos con pestaña oculta;
-      viable ya que el WS empuja).
+- [ ] **Notificaciones — dos vías**:
+      - (A) **Notification API local** (avisar mensajes de chat con pestaña oculta; viable YA,
+        el WS empuja; solo con la app/SW viva).
+      - (B) **Web Push real** (app cerrada) — **BLOQUEADO por cripto**: Nyx solo tiene
+        `sha256`/`hmac_sha256`; falta ECDSA/ECDH/AES-GCM/HKDF/CSPRNG para VAPID (RFC 8292) +
+        cifrado (RFC 8291). Requerimiento pasado al monorepo (memoria
+        `nyx-webpush-crypto-handoff.md`). iOS: 16.4+ y PWA instalada. Se retoma cuando NyxLang
+        exponga las primitivas (OpenSSL ya enlazado).
 - [ ] **Más artículos** en `content/articles/` (+ slug en `content/index.txt`).
 
 ## Hecho (hitos)
