@@ -121,25 +121,31 @@ fn cf(s: String) -> float {
     return string_to_float(s)
 }
 
-// Tasa en Bs por 1 unidad de la divisa elegida en el selector.
-// sel ∈ {"bcv" (Dólar BCV), "eur" (Euro BCV), "bin" (Dólar Binance = promedio
-// compra/venta P2P)}. Devuelve 0.0 si aún falta la tasa base.
-fn rate_bs(sel: String) -> float {
-    if sel == "bcv" { return cf(fxv[0]) }
-    if sel == "eur" { return cf(fxv[1]) }
+// Tasa en Bs por 1 unidad de la divisa elegida. sel ∈ {"bcv","eur","bin"}; day ∈
+// {"hoy","man"}: "man" usa la tasa BCV/EUR de MAÑANA (fxb) si está publicada. Binance
+// no tiene fecha valor → siempre en vivo. 0.0 si falta la tasa.
+fn rate_bs(sel: String, day: String) -> float {
     if sel == "bin" {
         let uc: float = cf(fxv[2])
         let uv: float = cf(fxv[3])
         if uc > 0.0 and uv > 0.0 { return (uc + uv) / 2.0 }
         return 0.0
     }
+    if day == "man" {
+        if sel == "bcv" { return cf(fxb[1]) }
+        if sel == "eur" { return cf(fxb[2]) }
+    }
+    if sel == "bcv" { return cf(fxv[0]) }
+    if sel == "eur" { return cf(fxv[1]) }
     return 0.0
 }
 
-// Nombre largo de la tasa (línea "1 X = … Bs").
-fn div_name(sel: String) -> String {
-    if sel == "bcv" { return "Dólar BCV" }
-    if sel == "eur" { return "Euro BCV" }
+// Nombre largo de la tasa (línea "1 X = … Bs"), con sufijo "(mañana)" si aplica.
+fn div_name(sel: String, day: String) -> String {
+    var suf: String = ""
+    if day == "man" and sel != "bin" { suf = " (mañana)" }
+    if sel == "bcv" { return "Dólar BCV" + suf }
+    if sel == "eur" { return "Euro BCV" + suf }
     if sel == "bin" { return "Dólar Binance" }
     return ""
 }
@@ -161,7 +167,8 @@ fn fmt_div(sel: String, v: float) -> String {
 fn calc_render() {
     let sel: String = dom_get_value("#calc-rate-sel")
     let dir: String = dom_get_value("#calc-dir")
-    let r: float = rate_bs(sel)
+    let day: String = dom_get_value("#calc-day")
+    let r: float = rate_bs(sel, day)
     if r <= 0.0 {
         dom_set_html("#calc-result", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
         dom_set_html("#calc-rate", "")
@@ -181,7 +188,7 @@ fn calc_render() {
         dom_set_html("#calc-to-unit", "Bs")
         dom_set_html("#calc-result", fmt_f(amt * r, 2, 2))
     }
-    dom_set_html("#calc-rate", "1 " + div_name(sel) + " = " + fmt_f(r, 2, 2) + " Bs")
+    dom_set_html("#calc-rate", "1 " + div_name(sel, day) + " = " + fmt_f(r, 2, 2) + " Bs")
 }
 
 // Invierte el sentido (divisa↔Bs) y recalcula.
@@ -200,7 +207,8 @@ fn calc_swap() {
 fn calc_line() -> String {
     let sel: String = dom_get_value("#calc-rate-sel")
     let dir: String = dom_get_value("#calc-dir")
-    let r: float = rate_bs(sel)
+    let day: String = dom_get_value("#calc-day")
+    let r: float = rate_bs(sel, day)
     if r <= 0.0 { return "" }
     let amt_s: String = dom_get_value("#calc-amt")
     var amt: float = 0.0
@@ -228,7 +236,8 @@ fn calc_share() {
 fn calc_copy() {
     let sel: String = dom_get_value("#calc-rate-sel")
     let dir: String = dom_get_value("#calc-dir")
-    let r: float = rate_bs(sel)
+    let day: String = dom_get_value("#calc-day")
+    let r: float = rate_bs(sel, day)
     if r <= 0.0 { return }
     let amt_s: String = dom_get_value("#calc-amt")
     var amt: float = 0.0
@@ -264,6 +273,14 @@ fn fx_on_rates(status: int, body: String) {
         fxb[1] = ""
         fxb[2] = ""
         fxb[3] = ""
+    }
+    // Toggle Hoy/Mañana de la calculadora: visible solo si hay tasa de mañana.
+    let pb: String = fxb[1]
+    if pb.length() > 0 {
+        js_remove_attr("#calc-day-wrap", "hidden")
+    } else {
+        js_set_attr("#calc-day-wrap", "hidden", "")
+        js_set_value("#calc-day", "hoy")
     }
     fx_paint()
     calc_render()
@@ -497,6 +514,7 @@ fn mcalc_ins() {
 fn calc_boot() {
     dom_on("#calc-amt", "input", "calc_render")
     dom_on("#calc-rate-sel", "change", "calc_render")
+    dom_on("#calc-day", "change", "calc_render")
     dom_on("#calc-swap", "click", "calc_swap")
     dom_on("#calc-share", "click", "calc_share")
     dom_on("#calc-copy", "click", "calc_copy")

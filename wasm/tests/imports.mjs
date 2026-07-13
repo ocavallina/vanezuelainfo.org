@@ -188,6 +188,14 @@ export async function afterStart({ exports, nyx }) {
   if (texts["#calc-from-unit"] !== "Bs" || texts["#calc-to-unit"] !== "$") throw new Error("FALLO calc unidades b2d: " + texts["#calc-from-unit"] + "/" + texts["#calc-to-unit"]);
   console.log("ok calculadora (bcv/eur/bin en Bs + inverso Bs→divisa + unidades + línea de tasa)");
 
+  // Toggle Hoy/Mañana: "man" usa la tasa BCV de MAÑANA (prox bcv=645,10 del FIX_RATES)
+  values["#calc-rate-sel"] = "bcv"; values["#calc-dir"] = "d2b"; values["#calc-day"] = "man";
+  exports.calc_render();
+  if (texts["#calc-result"] !== "64.510,00") throw new Error("FALLO calc bcv MAÑANA→Bs: " + texts["#calc-result"]);
+  if (!texts["#calc-rate"].includes("1 Dólar BCV (mañana) = 645,10 Bs")) throw new Error("FALLO calc línea mañana: " + texts["#calc-rate"]);
+  values["#calc-day"] = "hoy"; exports.calc_render();
+  console.log("ok calculadora toggle Hoy/Mañana");
+
   // Guard: tasa sin base → "Esperando tasas…" y tasa vacía
   values["#calc-dir"] = "d2b"; values["#calc-rate-sel"] = "zzz"; exports.calc_render();
   if (!texts["#calc-result"].includes("Esperando tasas")) throw new Error("FALLO calc guard: " + texts["#calc-result"]);

@@ -218,6 +218,10 @@ a { color: var(--enlace); }
 .calc-amt { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--tinta); font: inherit; font-size: 1.5rem; font-weight: 700; padding: 8px 2px; outline: none; }
 .calc-result { flex: 1 1 auto; min-width: 0; font-size: 1.5rem; font-weight: 800; color: var(--enlace); padding: 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .calc-rate-sel { display: block; width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--borde); border-radius: 8px; font: inherit; font-weight: 600; background: var(--tarjeta); color: var(--tinta); cursor: pointer; }
+.calc-sels { display: flex; gap: 8px; align-items: flex-start; }
+.calc-sels .calc-rate-sel { flex: 1 1 auto; }
+.calc-day-wrap { flex: 0 0 auto; }
+.calc-day-wrap .calc-rate-sel { width: auto; }
 .calc-unit { flex: 0 0 auto; min-width: 2.2em; text-align: right; font-weight: 700; color: var(--gris); }
 /* Mini-calculadora de expresión */
 .mc-toggle { flex: 0 0 auto; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); font-size: 1.1rem; line-height: 1; padding: 7px 9px; cursor: pointer; }
