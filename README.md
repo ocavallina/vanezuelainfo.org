@@ -37,11 +37,11 @@ tiempo real**. Aplicación web instalable (PWA).
 
 ## Qué ofrece
 
-- 🌎 **Sismos en vivo** — actividad sísmica de Venezuela con filtros, orden, mapa y hora local.
+- 🌎 **Sismos en vivo** — actividad sísmica de Venezuela (FUNVISIS + EMSC) con filtros, orden, mapa y hora local.
 - ⛅ **Clima** — pronóstico completo de cualquier ciudad, con geolocalización.
-- 💱 **Finanzas** — tipos de cambio (Dólar BCV, Euro BCV, Binance), cripto y Bolsa de Caracas, con calculadora.
+- 💱 **Finanzas** — tipos de cambio con **Dólar/Euro BCV directos del BCV** (tasa de hoy y de mañana), Binance, cripto y Bolsa de Caracas; calculadora con datos de pago guardables.
 - 📰 **Noticias** — titulares agregados de medios venezolanos.
-- 🧭 **Baquiano** — guía de sitios de interés por estado y región.
+- 🧭 **Baquiano** — guía turística de los 24 estados (panorama, destinos, datos prácticos) con fotos y enlaces a mapas.
 - 💬 **Chat** — conversación colectiva con salas, en tiempo real.
 
 Todo servido como **PWA instalable**, con tema claro/oscuro y pensado para móvil.

@@ -69,8 +69,12 @@ node /home/admin/NyxLang/examples/browser/run-node.mjs static/assets/veninfo.was
   wasm — fase F planificada), `sw.js`. Sin respaldo JS duplicado: si el wasm no
   carga, las secciones muestran aviso.
 - Librerías client-side por CDN: **Leaflet** (mapas). APIs consumidas por el
-  wasm vía pasarela: **Open-Meteo** (clima/geocoding/AQI), DolarAPI, CriptoYa,
+  wasm vía pasarela: **Open-Meteo** (clima/geocoding/AQI), CriptoYa (Binance P2P),
   er-api, CoinGecko, bigdatacloud (reverse geocode), **Geolocation**, **localStorage**.
+  Las tasas **BCV** las pide el wasm a **nuestro `/api/rates`** (mismo origen; el
+  servidor raspa BCV — BCV no da CORS). Wikipedia (imágenes de Baquiano) también es
+  server-side. La calculadora guarda en **localStorage**: preferencias de filtro y los
+  **datos de pago** del usuario (pago móvil/transferencia).
 
 ### Mapa de archivos
 ```
@@ -120,7 +124,9 @@ wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques d
                  símbolos visibles entre archivos, NO redeclarar). Módulos hermanos en wasm/:
                  common.nx (helpers puros / fechas iso_to_epoch,civil_parts / scanners JSON
                  jnum/jstr/jseg — std/json ya NO trunca floats pero su adopción está diferida) /
-                 finanzas.nx (calculadora + fx_*) / clima.nx / sismos.nx / noticias.nx
+                 finanzas.nx (fx_* + calculadora: tasas de /api/rates con toggle Hoy/Mañana
+                 según fecha valor BCV; datos de pago del usuario en localStorage, anexables al
+                 compartir) / clima.nx / sismos.nx / noticias.nx
                  (rotador+expand) / chat.nx (Fase F: cliente de chat en Nyx, ESCRITO EN FRÍO
                  —compila pero NO enchufado: /chat sigue con chat.js; ver go-live abajo).
                  build-wasm.sh sigue pasando solo FILE=wasm/veninfo.nx.
@@ -419,7 +425,7 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 
 `/` · `/clima` · `/finanzas` · `/noticias` · `/chat` · `WS /ws/chat/{sala}` ·
 `/baquiano` · `/baquiano/{zona}`
-· `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rooms`
+· `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rates` · `/api/rooms`
 · `/api/chat` · `/api/chat/{room}` · `POST /api/chat/send` · `/admin` ·
 `POST /admin/login` · `POST /admin/logout` · `/admin/baquiano` (+POST) ·
 `/admin/salas` (+POST) · `/admin/visitas` (+POST) · `/calculadora` ·
@@ -431,8 +437,14 @@ Sin prioridad estricta; tomar lo que aporte.
 
 - [ ] **Tarjeta "más fuerte" con respaldo a 7 días**: si no hay sismos en 24 h,
       mostrar el más fuerte reciente; resaltar siempre cualquier M ≥ 6.
-- [ ] **`Cache-Control: no-cache` también para `style.css`** (dejar cacheados solo
-      iconos/imágenes) para que los cambios de CSS se vean al instante por el dominio.
+- [x] **Refresco de `style.css` al cambiar** — HECHO vía **versionado `?v=N`** (en
+      `src/layout.nx` + shell del SW); al tocar CSS, subir ese `?v=` (y el `veninfo-vN` del SW).
+- [ ] **Baquiano — expansión**: Places API embebida (reseñas/hoteles de pago, requiere clave
+      Google + facturación); mapa Leaflet por zona; import no destructivo por defecto;
+      contenido más profundo / completar directorio.
+- [ ] **nyx-kv perdió datos bajo GC OOM** (incidente 2026-07-12, ver memoria
+      `nyx-language-gotchas.md`): es del daemon (monorepo). Mitigado con el botón "Restaurar"
+      de Baquiano; el arreglo real va en NyxLang.
 - [ ] **Círculo de precisión "tú estás aquí"** en los mapas (accuracy de geo).
 - [x] **Contador/analítica de visitas** — HECHO: `visits` en **nyx-db (SQL)** vía el
       middleware global + `/admin/visitas` (total/únicos/hoy/7 días/"Lo más visto"/registro).
@@ -493,6 +505,15 @@ conversión bidireccional Bs↔divisa; PWA propia en `/calculadora`).
 tasas graficado en `/finanzas`) viven en SQL (`packages/nyx-db` vendoreado + `src/sqldb.nx`);
 sesiones/chat/baquiano siguen en nyx-kv. Persistencia por snapshot `.ndb`. Bugs de
 nyx-db v0.5.0 sorteados (agregados múltiples sin GROUP BY, `__NULL__`, sin binds → `sql_esc`).
+**Sismos: FUNVISIS + EMSC** (inclusión por geografía, no por nombre; ver sección Sismos).
+**Baquiano → guía turística de los 24 estados** (nyx-kv, editable en admin, seed
+`content/baquiano-seed.txt`) con **imágenes de Wikipedia** (fetch por zona, override manual)
+y **hoteles/reseñas por enlaces a Google Maps**; import no destructivo + botón "Restaurar".
+**Tasas BCV DIRECTAS** (`src/bcv.nx` raspa bcv.org.ve) con **fecha valor** → la calculadora
+muestra Hoy y, cuando BCV publica ~4pm, **Mañana** (toggle); front vía `/api/rates`; respaldo
+DolarAPI. **Calculadora: datos de pago** (pago móvil/transferencia) en localStorage,
+incluibles al compartir. **PWA en iOS**: botón "Instalar app" + hint "Compartir → Añadir a
+inicio" (solo Safari). `style.css` **versionado** (`?v=N`, cache-busting).
 
 ## Verificación rápida
 ```bash
