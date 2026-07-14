@@ -117,7 +117,12 @@ src/admin.nx     Panel admin (/admin): login único de dueño, sesión por cooki
                  También: visit_middleware (INSERT por hit en nyx-db; cuenta por LISTA
                  BLANCA de páginas reales vía visit_counts → excluye sondeos de bots
                  /wp-*, *.php, /.env…) + /admin/visitas (contadores/serie/registro/"Lo
-                 más visto" por SQL sobre la tabla visits).
+                 más visto" por SQL sobre la tabla visits) + /admin/push (contador de
+                 suscripciones + "Enviar prueba" a un tema).
+src/push.nx      Notificaciones Web Push (VAPID RFC 8292 + cifrado RFC 8291) sobre std/webpush.
+                 push_init (claves VAPID en meta + tabla push_subs), push_subscribe/unsubscribe,
+                 push_send_one/push_send_topic, push_worker (hilo 30s: sismos M≥3.5 / tasa BCV
+                 cambiada / chat coalescido, con watermarks en meta), push_chat_mark. Ver sección abajo.
 wasm/veninfo.nx  Root del front Nyx→WASM: cabecera + imports + ambos bloques de externs
                  (pasarela) + main() router por #pg. PARTIDO en módulos (make wasm ya resuelve
                  imports project-relative vía NYX_PROJECT_DIR=$PROJ/wasm; scope global plano →
@@ -435,8 +440,40 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 · `/sismos` · `/sismos/{id}` · `/articulo/{slug}` · `/api/health` · `/api/rates` · `/api/rooms`
 · `/api/chat` · `/api/chat/{room}` · `POST /api/chat/send` · `/admin` ·
 `POST /admin/login` · `POST /admin/logout` · `/admin/baquiano` (+POST) ·
-`/admin/salas` (+POST) · `/admin/visitas` (+POST) · `/calculadora` ·
+`/admin/salas` (+POST) · `/admin/visitas` (+POST) · `POST /admin/noticias` · `POST /admin/push` ·
+`/calculadora` · `GET /api/push/config` · `POST /api/push/subscribe` · `POST /api/push/unsubscribe` ·
 `/manifest.webmanifest` · `/manifest-calc.webmanifest` · `/sw.js` · `/icon*.png|svg` · `/assets/*`
+
+## Notificaciones Web Push (src/push.nx + static/sw.js + JS suelto en src/layout.nx)
+
+- **Cripto entregada por el monorepo** (`std/webpush` + `std/webpushcrypto`, VAPID ES256 + RFC 8291,
+  binary-safe). `src/push.nx` NO reimplementa cripto: llama `vapid_jwt`/`webpush_encrypt`/`webpush_send`.
+- **Claves VAPID**: generadas UNA vez en `push_init()` (`ec_p256_keypair`, 97B = 32 priv ‖ 65 pub),
+  persistidas en `meta` (nyx-db) + respaldo `/home/admin/.veninfo-vapid-key` (0600). Override con env
+  `VENINFO_VAPID_KEY` (base64url del keypair). La pública se sirve en `GET /api/push/config` y **debe ser
+  ESTABLE** (si cambia, todas las suscripciones se invalidan). Verificado que persiste entre reinicios.
+- **Suscripciones en nyx-db** (tabla `push_subs`, NO nyx-kv por inestable): `endpoint|p256dh|auth|topics|
+  created`. `POST /api/push/subscribe` (form-urlencoded, parseado con `form_field`). **Allowlist de host
+  del endpoint anti-SSRF** (fcm.googleapis.com / *.push.services.mozilla.com / web/*.push.apple.com /
+  *.notify.windows.com) — sin ella el server haría POST a hosts arbitrarios. Dedup por endpoint. 404/410
+  del push service → borra la suscripción.
+- **Suscripción por TEMAS (opt-in)**: sismos+tasas ON por defecto, chat OFF. El **chat va coalescido/
+  throttleado** (1 aviso/sala/5 min) para no spamear.
+- **Envío fuera del hilo de request**: hilo `push_worker` (cada 30s) con **watermarks en meta**:
+  `push_wm_sismos` (epoch del último notificado; solo M≥`PUSH_MAG_MIN`=3.5), `push_wm_tasa` (valor BCV
+  previo), `push_chat_dirty:<sala>`/`push_chat_last:<sala>`. `push_chat_mark(sala)` se llama desde
+  `handle_chat_send` (NO desde chat.nx, que evita el ciclo push↔chat).
+- **Cliente = JS suelto en `src/layout.nx`** (la pasarela wasm NO expone `pushManager`/`serviceWorker.
+  ready`): widget `#push-box` **GLOBAL en el pie** (`<footer>` de `page_v`, todas las páginas
+  full_chrome; NO en la Calculadora), revelado solo si el navegador soporta push. Botón `#push-btn`
+  "Activar" + desplegable de temas (`#push-topics-btn` → `#push-topics`, checkboxes sismos/tasas/chat) →
+  permiso + `pushManager.subscribe({applicationServerKey})` + POST. El SW (`static/sw.js`) tiene `push`
+  + `notificationclick`. **iOS: 16.4+ y PWA instalada** (no pestaña Safari).
+- **Verificar sin esperar un sismo**: `/admin` → "Enviar prueba" (POST /admin/push, CSRF) →
+  `push_send_topic(tema,…)`. También muestra el nº de suscripciones.
+- **GOTCHAS que costaron** (ver memoria): `string_to_int("")` **aborta el proceso** (usar `to_int0`);
+  leer un int de un Array NATIVO como String = **SEGV** (el registro de sismos: `rec[8]` epoch es int);
+  `pub` es palabra reservada (no usar de nombre de var).
 
 ## Pendientes / ideas (backlog)
 
@@ -472,14 +509,14 @@ Sin prioridad estricta; tomar lo que aporte.
 - [ ] **Leaflet con SRI o autoalojado** (hoy unpkg sin integrity ni fallback).
 - [ ] **Robustez WS del gateway** (en el monorepo): locking del SSL del túnel,
       timeout de idle, propagación simétrica del cierre (limitaciones "de piloto").
-- [ ] **Notificaciones — dos vías**:
-      - (A) **Notification API local** (avisar mensajes de chat con pestaña oculta; viable YA,
-        el WS empuja; solo con la app/SW viva).
-      - (B) **Web Push real** (app cerrada) — **BLOQUEADO por cripto**: Nyx solo tiene
-        `sha256`/`hmac_sha256`; falta ECDSA/ECDH/AES-GCM/HKDF/CSPRNG para VAPID (RFC 8292) +
-        cifrado (RFC 8291). Requerimiento pasado al monorepo (memoria
-        `nyx-webpush-crypto-handoff.md`). iOS: 16.4+ y PWA instalada. Se retoma cuando NyxLang
-        exponga las primitivas (OpenSSL ya enlazado).
+- [x] **Web Push real (app cerrada)** — HECHO 2026-07-14: el monorepo entregó la cripto
+      (`std/webpush` + `std/webpushcrypto`) y se implementó en `src/push.nx` (VAPID + RFC 8291,
+      avisos de sismos M≥3.5 / tasa BCV / chat coalescido; suscripción por temas; SW con push +
+      notificationclick; "Enviar prueba" en /admin). Ver sección **Notificaciones Web Push** arriba.
+- [ ] **Afinar el payload de la tasa BCV** (hoy muestra el valor REAL crudo de nyx-db, puede tener
+      decimales feos) y **umbral de sismos configurable desde /admin** (hoy const `PUSH_MAG_MIN`).
+- [ ] **Notification API local en foco** (badge con pestaña oculta cuando el WS empuja) — opcional,
+      complementa el push (que es para la app cerrada).
 - [ ] **Más artículos** en `content/articles/` (+ slug en `content/index.txt`).
 
 ## Hecho (hitos)

@@ -3,8 +3,8 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v64';
-const SHELL = ['/', '/calculadora', '/assets/style.css?v=64', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest'];
+const CACHE = 'veninfo-v66';
+const SHELL = ['/', '/calculadora', '/assets/style.css?v=66', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }));
@@ -19,6 +19,35 @@ self.addEventListener('activate', function (e) {
     })
   );
   self.clients.claim();
+});
+
+// Web Push: muestra la notificacion cuando llega un push del servidor.
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = {}; }
+  var title = d.t || 'VenezuelaInfo';
+  var opts = {
+    body: d.b || '',
+    data: { url: d.u || '/' },
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: d.tag || 'veninfo'
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+// Al tocar la notificacion: enfoca una pestana existente o abre la URL.
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var u = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (cs) {
+      for (var i = 0; i < cs.length; i++) {
+        if (cs[i].url.indexOf(u) !== -1 && 'focus' in cs[i]) { return cs[i].focus(); }
+      }
+      return self.clients.openWindow(u);
+    })
+  );
 });
 
 self.addEventListener('fetch', function (e) {

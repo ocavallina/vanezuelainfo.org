@@ -20,6 +20,7 @@ import "src/chat"
 import "src/news"
 import "src/baquiano"
 import "src/sqldb"
+import "src/push"
 
 const SESS_COOKIE: String = "veninfo_admin"
 const SESS_TTL: int = 7200
@@ -248,7 +249,7 @@ pub fn handle_admin_logout(req: Request) -> Response {
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
-fn render_dashboard() -> String {
+fn render_dashboard(csrf: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"admin\">\n")
     sb.append("<div class=\"admin-top\"><h1>Panel</h1>")
@@ -260,6 +261,19 @@ fn render_dashboard() -> String {
     sb.append("<a class=\"admin-tile\" href=\"/admin/visitas\"><span class=\"admin-tile-ico\">&#128202;</span><span>Visitas</span><small>Contador y registro</small></a>\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/noticias\"><span class=\"admin-tile-ico\">&#128240;</span><span>Noticias</span><small>Fuentes RSS</small></a>\n")
     sb.append("</div>\n")
+    // Notificaciones push: contador de suscripciones + envío de prueba (a los suscritos al tema).
+    sb.append("<h2>Notificaciones push</h2>\n")
+    sb.append("<p class=\"lede\">Suscripciones activas: <strong>")
+    sb.append(int_to_string(push_sub_count()))
+    sb.append("</strong>. Envia una notificacion de prueba a quienes activaron el tema elegido.</p>\n")
+    sb.append("<form method=\"post\" action=\"/admin/push\" class=\"admin-form admin-row\">\n")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"test\">\n")
+    sb.append("<select name=\"topic\"><option value=\"sismos\">Sismos</option><option value=\"tasas\">Tasas</option><option value=\"chat\">Chat</option></select>\n")
+    sb.append("<input name=\"title\" placeholder=\"Titulo\" value=\"Prueba\">\n")
+    sb.append("<input name=\"body\" placeholder=\"Texto\" value=\"Notificacion de prueba de VenezuelaInfo\">\n")
+    sb.append("<button type=\"submit\">Enviar prueba</button>\n")
+    sb.append("</form>\n")
     sb.append("<p><a href=\"/\">&larr; Ver el sitio</a></p>\n")
     sb.append("</section>\n")
     return page("Admin", sb.to_string())
@@ -271,7 +285,34 @@ pub fn handle_admin(req: Request) -> Response {
     if csrf.length() == 0 {
         return admin_html(200, render_login(""))
     }
-    return admin_html(200, render_dashboard())
+    return admin_html(200, render_dashboard(csrf))
+}
+
+// POST /admin/push — envia una notificacion de prueba al tema elegido (diagnostico).
+pub fn handle_admin_push_post(req: Request) -> Response {
+    let sid: String = current_sid(req)
+    let csrf: String = lookup_admin_session(sid)
+    if csrf.length() == 0 {
+        return admin_html(403, render_login("Sesion expirada."))
+    }
+    let tok: String = form_field(req.body, "csrf")
+    if tok != csrf {
+        return admin_html(403, render_login("Token invalido."))
+    }
+    var topic: String = form_field(req.body, "topic")
+    if topic != "tasas" and topic != "chat" {
+        topic = "sismos"
+    }
+    var title: String = form_field(req.body, "title")
+    if title.length() == 0 {
+        title = "Prueba"
+    }
+    var body: String = form_field(req.body, "body")
+    if body.length() == 0 {
+        body = "Notificacion de prueba de VenezuelaInfo"
+    }
+    push_send_topic(topic, title, body, "/sismos")
+    return redirect("/admin")
 }
 
 // ── Baquiano (CRUD) ──────────────────────────────────────────────────────────

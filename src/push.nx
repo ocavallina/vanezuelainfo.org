@@ -1,0 +1,379 @@
+// src/push.nx — Notificaciones Web Push (VAPID RFC 8292 + cifrado aes128gcm RFC 8291).
+// Todo el trabajo criptográfico lo hace std/webpush (que el monorepo ya entregó);
+// aquí vive la lógica del proyecto: claves VAPID, tabla de suscripciones (en nyx-db,
+// NO en nyx-kv por su inestabilidad), disparadores (sismos/tasas/chat) y el hilo emisor.
+//
+// Frontera de datos: el body cifrado es BINARIO (bytes NUL) y sobrevive de punta a
+// punta (nyx_string_from_ptr con longitud + Content-Length por str_byte_length +
+// tls_write sobre data->length). Ver notas en el plan/CLAUDE.md.
+
+import "std/webpush"
+import "std/webpushcrypto"
+import "std/base64"
+import "src/sqldb"
+import "src/sismos"
+import "src/chat"
+import "src/md"
+
+// Contacto VAPID (llega a los push services; informativo). Umbral de sismos para
+// notificar. Ventana de coalescencia del chat (s). Respaldo de la clave en disco.
+const VAPID_SUBJECT: String = "mailto:ottaviocavallinaleon@gmail.com"
+const PUSH_MAG_MIN: float = 3.5
+const CHAT_THROTTLE: int = 300
+const VAPID_FILE: String = "/home/admin/.veninfo-vapid-key"
+
+// Claves VAPID raw (32B priv / 65B pub). Patrón holder single-element (el literal
+// global de array multi-elemento no se materializa fiable; se asignan en push_init).
+var __vpriv: Array = [""]
+var __vpub: Array = [""]
+
+// ── Helpers de strings ──────────────────────────────────────────────────────
+fn starts_with(s: String, pre: String) -> bool {
+    let m: int = pre.length()
+    if m > s.length() { return false }
+    return s.substring(0, m) == pre
+}
+
+fn ends_with(s: String, suf: String) -> bool {
+    let n: int = s.length()
+    let m: int = suf.length()
+    if m > n { return false }
+    return s.substring(n - m, n) == suf
+}
+
+// Parseo seguro: string_to_int LANZA runtime error con "" (no devuelve 0). Las
+// filas vacías / NULL de nyx-db y los watermarks ausentes llegan como "" o "__NULL__".
+fn to_int0(s: String) -> int {
+    if s.length() == 0 {
+        return 0
+    }
+    if s == "__NULL__" {
+        return 0
+    }
+    return string_to_int(s)
+}
+
+// Escape mínimo para meter un valor en un JSON de una línea (payload del push).
+fn pjson_esc(s: String) -> String {
+    var out: String = ""
+    let n: int = s.length()
+    var i: int = 0
+    while i < n {
+        let c: String = s.substring(i, i + 1)
+        if c == "\"" {
+            out = out + "\\\""
+        } else if c == "\\" {
+            out = out + "\\\\"
+        } else if c == "\n" or c == "\r" or c == "\t" {
+            out = out + " "
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// ── Tabla meta (watermarks / clave VAPID) ───────────────────────────────────
+fn meta_get(k: String) -> String {
+    let rows: Array = sql_rows("SELECT v FROM meta WHERE k = '" + sql_esc(k) + "'")
+    if rows.length() < 2 {
+        return ""
+    }
+    let row: Array = rows[1]
+    let v: String = row[0]
+    if v == "__NULL__" {
+        return ""
+    }
+    return v
+}
+
+fn meta_set(k: String, v: String) {
+    let ke: String = sql_esc(k)
+    sql_exec("DELETE FROM meta WHERE k = '" + ke + "'")
+    sql_exec("INSERT INTO meta VALUES ('" + ke + "', '" + sql_esc(v) + "')")
+}
+
+// ── Arranque: esquema + claves VAPID (una vez) ──────────────────────────────
+pub fn push_init() {
+    // Idempotente (si ya existe, sql_exec devuelve -1 y se ignora).
+    sql_exec("CREATE TABLE push_subs (endpoint TEXT, p256dh TEXT, auth TEXT, topics TEXT, created INTEGER)")
+
+    // Keypair: override por env > persistido en meta > generar (y persistir + respaldar).
+    var kpb: String = md_trim(getenv("VENINFO_VAPID_KEY"))
+    if kpb.length() == 0 {
+        kpb = meta_get("vapid_kp")
+    }
+    if kpb.length() == 0 {
+        let kp: String = ec_p256_keypair()      // 97 bytes raw (32 priv ‖ 65 pub)
+        kpb = base64url_encode(kp)
+        meta_set("vapid_kp", kpb)
+        write_file(VAPID_FILE, kpb)
+    }
+    let raw: String = base64url_decode(kpb)
+    __vpriv = [raw.substring(0, 32)]
+    __vpub  = [raw.substring(32, 97)]
+}
+
+// Clave pública VAPID en base64url (~87 chars) — para el applicationServerKey del cliente.
+pub fn vapid_pub_b64() -> String {
+    let p: String = __vpub[0]
+    return base64url_encode(p)
+}
+
+// Nº de suscripciones activas (para el panel admin).
+pub fn push_sub_count() -> int {
+    return sql_count("SELECT COUNT(*) FROM push_subs")
+}
+
+// ── Suscripción ─────────────────────────────────────────────────────────────
+// Allowlist de host del endpoint (anti-SSRF: sin esto el server haría POST a hosts arbitrarios).
+fn push_host_ok(endpoint: String) -> bool {
+    if !starts_with(endpoint, "https://") {
+        return false
+    }
+    let rest: String = endpoint.substring(8, endpoint.length())
+    let slash: int = rest.indexOf("/")
+    var host: String = rest
+    if slash > 0 {
+        host = rest.substring(0, slash)
+    }
+    if host == "fcm.googleapis.com" {
+        return true
+    }
+    if ends_with(host, ".push.services.mozilla.com") {
+        return true
+    }
+    if host == "web.push.apple.com" {
+        return true
+    }
+    if ends_with(host, ".push.apple.com") {
+        return true
+    }
+    if ends_with(host, ".notify.windows.com") {
+        return true
+    }
+    return false
+}
+
+// Deja solo los temas conocidos, en CSV.
+fn clean_topics(raw: String) -> String {
+    var out: String = ""
+    let parts: Array = raw.split(",")
+    var i: int = 0
+    while i < parts.length() {
+        let t: String = parts[i]
+        if t == "sismos" or t == "tasas" or t == "chat" {
+            if out.length() > 0 {
+                out = out + ","
+            }
+            out = out + t
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// Guarda (dedup por endpoint) una suscripción. Devuelve "" en éxito o un mensaje corto.
+pub fn push_subscribe(body: String) -> String {
+    let endpoint: String = form_field(body, "endpoint")
+    let p256dh: String = form_field(body, "p256dh")
+    let auth: String = form_field(body, "auth")
+    let topics_raw: String = form_field(body, "topics")
+    if endpoint.length() == 0 or p256dh.length() == 0 or auth.length() == 0 {
+        return "Datos incompletos"
+    }
+    if !push_host_ok(endpoint) {
+        return "Origen no permitido"
+    }
+    let topics: String = clean_topics(topics_raw)
+    if topics.length() == 0 {
+        return "Sin temas"
+    }
+    let ee: String = sql_esc(endpoint)
+    sql_exec("DELETE FROM push_subs WHERE endpoint = '" + ee + "'")
+    sql_exec("INSERT INTO push_subs VALUES ('" + ee + "', '" + sql_esc(p256dh) + "', '" + sql_esc(auth) + "', '" + sql_esc(topics) + "', " + int_to_string(time()) + ")")
+    return ""
+}
+
+pub fn push_unsubscribe(body: String) -> String {
+    let endpoint: String = form_field(body, "endpoint")
+    if endpoint.length() == 0 {
+        return "Datos incompletos"
+    }
+    sql_exec("DELETE FROM push_subs WHERE endpoint = '" + sql_esc(endpoint) + "'")
+    return ""
+}
+
+// ── Envío ───────────────────────────────────────────────────────────────────
+fn audience_of(endpoint: String) -> String {
+    let rest: String = endpoint.substring(8, endpoint.length())   // tras "https://"
+    let slash: int = rest.indexOf("/")
+    var host: String = rest
+    if slash > 0 {
+        host = rest.substring(0, slash)
+    }
+    return "https://" + host
+}
+
+// Envía UN push. Devuelve el código HTTP; borra la suscripción si el push service
+// dice 404/410 (suscripción expirada).
+pub fn push_send_one(endpoint: String, p256dh_b64: String, auth_b64: String, title: String, body: String, url: String) -> int {
+    let priv: String = __vpriv[0]
+    let pubkey: String = __vpub[0]
+    let aud: String = audience_of(endpoint)
+    let jwt: String = vapid_jwt(priv, aud, VAPID_SUBJECT, time() + 43200)
+    let payload: String = "{\"t\":\"" + pjson_esc(title) + "\",\"b\":\"" + pjson_esc(body) + "\",\"u\":\"" + pjson_esc(url) + "\"}"
+    let p256raw: String = base64url_decode(p256dh_b64)
+    let authraw: String = base64url_decode(auth_b64)
+    let enc: String = webpush_encrypt(payload, p256raw, authraw)
+    let resp: Array = webpush_send(endpoint, jwt, pubkey, enc)
+    let code: int = resp[1]
+    if code == 404 or code == 410 {
+        sql_exec("DELETE FROM push_subs WHERE endpoint = '" + sql_esc(endpoint) + "'")
+    }
+    return code
+}
+
+fn topic_in(csv: String, t: String) -> bool {
+    let parts: Array = csv.split(",")
+    var i: int = 0
+    while i < parts.length() {
+        let x: String = parts[i]
+        if x == t {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// Envía un push a todas las suscripciones cuyo `topics` incluya `topic`. Devuelve nº de envíos.
+pub fn push_send_topic(topic: String, title: String, body: String, url: String) -> int {
+    let rows: Array = sql_rows("SELECT endpoint, p256dh, auth, topics FROM push_subs")
+    var sent: int = 0
+    var i: int = 1
+    while i < rows.length() {
+        let row: Array = rows[i]
+        let tp: String = row[3]
+        if topic_in(tp, topic) {
+            let ep: String = row[0]
+            let pd: String = row[1]
+            let au: String = row[2]
+            push_send_one(ep, pd, au, title, body, url)
+            sent = sent + 1
+        }
+        i = i + 1
+    }
+    return sent
+}
+
+// ── Disparadores ────────────────────────────────────────────────────────────
+// Marca una sala con actividad nueva (llamado desde chat_post al publicar).
+pub fn push_chat_mark(room: String) {
+    meta_set("push_chat_dirty:" + room, int_to_string(time()))
+}
+
+// Tasa BCV dólar más reciente (mayor day de los últimos ~8 días). "" si no hay.
+fn push_bcv_latest() -> String {
+    let lo: String = int_to_string(db_day() - 8)
+    let rows: Array = sql_rows("SELECT day, value FROM rates WHERE kind = 'bcv' AND day > " + lo)
+    var best: int = 0
+    var val: String = ""
+    var i: int = 1
+    while i < rows.length() {
+        let row: Array = rows[i]
+        let ds: String = row[0]
+        let dy: int = to_int0(ds)
+        if dy >= best {
+            best = dy
+            let vv: String = row[1]
+            val = vv
+        }
+        i = i + 1
+    }
+    return val
+}
+
+fn push_do_sismos() {
+    let qs: Array = all_quakes()
+    if qs.length() == 0 {
+        return
+    }
+    let top: Array = qs[0]
+    // OJO: el registro es un Array NATIVO; top[8] (epoch) es int (NO String). Leerlo
+    // como String coacciona i64->ptr -> SEGV. (Las filas de nyx-db sí son todas String.)
+    let epoch: int = top[8]
+    let wm: int = to_int0(meta_get("push_wm_sismos"))
+    if epoch <= wm {
+        return
+    }
+    let eps: String = int_to_string(epoch)
+    // Primera vez (wm==0): fija el watermark sin notificar (no avisar de eventos viejos al arrancar).
+    if wm == 0 {
+        meta_set("push_wm_sismos", eps)
+        return
+    }
+    let mags: String = top[6]
+    if mags.length() > 0 {
+        let mag: float = string_to_float(mags)
+        if mag >= PUSH_MAG_MIN {
+            let lugar: String = top[7]
+            push_send_topic("sismos", "Sismo M" + mags + " " + lugar, "Toca para ver detalles", "/sismos")
+        }
+    }
+    meta_set("push_wm_sismos", eps)
+}
+
+fn push_do_tasas() {
+    let val: String = push_bcv_latest()
+    if val.length() == 0 {
+        return
+    }
+    let prev: String = meta_get("push_wm_tasa")
+    if val == prev {
+        return
+    }
+    // Primera vez: fija el valor sin notificar.
+    if prev.length() == 0 {
+        meta_set("push_wm_tasa", val)
+        return
+    }
+    push_send_topic("tasas", "Nueva tasa BCV", "Dolar BCV: Bs " + val, "/finanzas")
+    meta_set("push_wm_tasa", val)
+}
+
+fn push_do_chat() {
+    let rows: Array = sql_rows("SELECT k, v FROM meta")
+    let now: int = time()
+    var i: int = 1
+    while i < rows.length() {
+        let row: Array = rows[i]
+        let k: String = row[0]
+        if starts_with(k, "push_chat_dirty:") {
+            let room: String = k.substring(16, k.length())
+            let lastk: String = "push_chat_last:" + room
+            let last: int = to_int0(meta_get(lastk))
+            if now - last >= CHAT_THROTTLE {
+                push_send_topic("chat", "Nuevos mensajes", "en #" + room, "/chat")
+                meta_set(lastk, int_to_string(now))
+            }
+            // Consumir el flag (si llegan más mensajes se re-marca).
+            sql_exec("DELETE FROM meta WHERE k = '" + sql_esc(k) + "'")
+        }
+        i = i + 1
+    }
+}
+
+// Hilo emisor: fuera del camino de request. Lee cachés ya calientes (all_quakes,
+// tasa BCV) + flags de chat y emite los push. Cada 30 s.
+pub fn push_worker() -> int {
+    var go: bool = true
+    while go {
+        sleep(30000)
+        push_do_sismos()
+        push_do_tasas()
+        push_do_chat()
+    }
+    return 0
+}

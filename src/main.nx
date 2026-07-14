@@ -19,6 +19,7 @@ import "src/admin"
 import "src/rates"
 import "src/sqldb"
 import "src/bcv"
+import "src/push"
 
 // Escapa un valor para un atributo HTML entre comillas dobles.
 fn aesc(s: String) -> String {
@@ -289,6 +290,35 @@ fn handle_chat_room(req: Request) -> Response {
 // POST /api/chat/send — publica un mensaje (body urlencoded: room, nick, texto).
 fn handle_chat_send(req: Request) -> Response {
     let err: String = chat_send_body(req.body)
+    if err.length() == 0 {
+        // Marca la sala para el aviso push (coalescido/throttleado en push_worker).
+        var room: String = form_field(req.body, "room")
+        if room.length() == 0 {
+            room = "general"
+        }
+        push_chat_mark(room)
+        return json_nocache(200, "{\"ok\":true}")
+    }
+    return json_nocache(200, "{\"ok\":false,\"error\":\"" + err + "\"}")
+}
+
+// GET /api/push/config — clave pública VAPID (applicationServerKey del cliente).
+fn handle_push_config(req: Request) -> Response {
+    return json_nocache(200, "{\"key\":\"" + vapid_pub_b64() + "\"}")
+}
+
+// POST /api/push/subscribe — guarda una suscripción (body urlencoded: endpoint, p256dh, auth, topics).
+fn handle_push_subscribe(req: Request) -> Response {
+    let err: String = push_subscribe(req.body)
+    if err.length() == 0 {
+        return json_nocache(200, "{\"ok\":true}")
+    }
+    return json_nocache(200, "{\"ok\":false,\"error\":\"" + err + "\"}")
+}
+
+// POST /api/push/unsubscribe — borra una suscripción (body urlencoded: endpoint).
+fn handle_push_unsubscribe(req: Request) -> Response {
+    let err: String = push_unsubscribe(req.body)
     if err.length() == 0 {
         return json_nocache(200, "{\"ok\":true}")
     }
@@ -561,7 +591,9 @@ fn main() {
     admin_init()
     ws_init()
     sqldb_init()
+    push_init()
     thread_spawn(refresher_worker)
+    thread_spawn(push_worker)
 
     let app: App = app_new()
     setup_routes(app)
@@ -582,6 +614,9 @@ fn setup_routes(app: App) {
     app_get(app, "/api/chat", handle_chat_list)
     app_get(app, "/api/chat/{room}", handle_chat_room)
     app_post(app, "/api/chat/send", handle_chat_send)
+    app_get(app, "/api/push/config", handle_push_config)
+    app_post(app, "/api/push/subscribe", handle_push_subscribe)
+    app_post(app, "/api/push/unsubscribe", handle_push_unsubscribe)
     app_get(app, "/baquiano", handle_baquiano)
     app_get(app, "/api/rates", handle_rates)
     app_get(app, "/baquiano/{zona}", handle_baquiano_zone)
@@ -596,6 +631,7 @@ fn setup_routes(app: App) {
     app_post(app, "/admin/visitas", handle_admin_visitas_post)
     app_get(app, "/admin/noticias", handle_admin_noticias)
     app_post(app, "/admin/noticias", handle_admin_noticias_post)
+    app_post(app, "/admin/push", handle_admin_push_post)
     app_get(app, "/sismos", handle_sismos)
     app_get(app, "/sismos/{id}", handle_quake_detail)
     app_get(app, "/articulo/{slug}", handle_article)
