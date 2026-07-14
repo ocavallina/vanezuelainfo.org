@@ -365,7 +365,10 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   lector de `src/ws.nx` se protege cerrando el fd ante datos que no sean frames de
   cliente (texto enmascarado/close), para no envenenar el pool del gateway.
 - **Moderación**: escape/saneo, topes (nick 24 / texto 280), filtro de groserías,
-  cupo de ritmo **por sala** (`INCR chat:rl:<id>`+`EXPIRE 10`, ~25/10s). Vaciar/borrar
+  cupo de ritmo **por sala** (~25/10s). **OJO**: NO usa `INCR`+`EXPIRE` (nyx-kv puede tener
+  `EXPIRE` roto → deja TTL -1 → contador atascado → "Demasiados mensajes" permanente, incidente
+  2026-07-14). Usa **ventana por timestamp en el valor** `chat:rl:<id>` = `"count|inicio"` con
+  solo GET/SET (ver `chat_post`, src/chat.nx). Vaciar/borrar
   salas se hace desde el **panel admin** (`/admin/salas`). El antiguo
   `POST /api/chat/clear` + `CHAT_ADMIN_KEY` fue **eliminado** (lo reemplaza el panel).
 - **Body POST parseado a mano** (`form_field` en `chat.nx` + `nyx_url_decode` de
@@ -426,7 +429,9 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   `veninfo_admin` (HttpOnly, Secure, SameSite=Strict); estado en `admin:sess:<sid>`
   (`SETEX` TTL 2h) cuyo valor es el **token CSRF** de esa sesión.
 - **Secreto**: `VENINFO_ADMIN_PASSWORD` por systemd drop-in (`deploy/admin.conf.example`).
-  `admin_init()` siembra `admin:pass` al arrancar solo si no existe. Sin secreto y
+  `admin_init()` siembra `admin:pass` al arrancar solo si no existe. **Auto-curación**: se
+  llama TAMBIÉN periódicamente desde `refresher_worker` (tick ~30 min) porque nyx-kv pierde
+  datos (perdió `admin:pass` el 2026-07-14 → login roto); así se re-siembra sola. Sin secreto y
   sin hash previo, el panel queda **cerrado** (login siempre falla). Cambiar clave:
   `DEL admin:pass` (redis-cli con el token veninfo) + re-sembrar.
 - **CSRF**: todos los POST de mutación exigen el campo `csrf` == token de sesión.

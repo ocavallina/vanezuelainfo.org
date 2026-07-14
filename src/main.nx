@@ -573,6 +573,9 @@ fn refresher_worker() -> int {
             rates_snapshot()
             // Retención de visitas (~30 días) en nyx-db.
             sql_exec("DELETE FROM visits WHERE day < " + int_to_string(db_day() - 30))
+            // Auto-curación: si nyx-kv perdió admin:pass (pierde datos bajo carga/reinicio),
+            // re-sembrarla. admin_init es idempotente (solo siembra si falta). Ver CLAUDE.md.
+            admin_init()
         }
     }
     return 0

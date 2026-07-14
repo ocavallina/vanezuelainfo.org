@@ -287,11 +287,31 @@ pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> Strin
         kv_close(h)
         return "Sala no valida"
     }
-    // cupo de ritmo por sala: max ~25 mensajes por ventana de 10s
-    let cnt: int = kv_incr(h, room_rl_key(room))
-    if cnt == 1 {
-        kv_expire(h, room_rl_key(room), 10)
+    // cupo de ritmo por sala: max ~25 mensajes por ventana de 10s. Ventana por
+    // timestamp en el propio valor ("count|inicio") para NO depender de EXPIRE:
+    // nyx-kv puede tener EXPIRE roto (deja TTL -1) y un INCR+EXPIRE dejaría el
+    // contador atascado -> "Demasiados mensajes" permanente. Aquí solo GET/SET.
+    let rlk: String = room_rl_key(room)
+    let now: int = time()
+    var cnt: int = 1
+    var win: String = int_to_string(now)   // inicio de ventana a persistir
+    let raw: String = kv_get(h, rlk)
+    if raw.length() > 0 {
+        let bar: int = raw.indexOf("|")
+        if bar > 0 {
+            let cs: String = raw.substring(0, bar)
+            let ss: String = raw.substring(bar + 1, raw.length())
+            if cs.length() > 0 and ss.length() > 0 {
+                let start: int = string_to_int(ss)
+                if now - start < 10 {
+                    cnt = string_to_int(cs) + 1
+                    win = ss
+                }
+            }
+        }
     }
+    kv_set(h, rlk, int_to_string(cnt) + "|" + win)
+    kv_expire(h, rlk, 600)   // limpieza best-effort; si EXPIRE funciona, la clave se va sola
     if cnt > 25 {
         kv_close(h)
         return "Demasiados mensajes ahora mismo, espera unos segundos"
