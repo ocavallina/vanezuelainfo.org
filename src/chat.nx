@@ -18,6 +18,41 @@ import "src/ws"
 const KV_HOST: String = "127.0.0.1"
 const KV_PORT: int = 6380
 
+// Mutex del cupo de ritmo: el GET->computar->SET de chat_post no es atómico y
+// los 16 workers de nyx-serve son HILOS de este mismo proceso — sin esto, N
+// POSTs paralelos leen el mismo "count|inicio" y el contador subcuenta justo
+// bajo flood. Mismo patrón holder+init que WS_MU (src/ws.nx).
+var CHAT_RL_MU: Map = Map.new()
+var CHAT_RL_READY: int = 0
+
+// Llamar una vez desde main() antes de servir (crea el mutex).
+pub fn chat_init() {
+    if CHAT_RL_READY == 1 {
+        return
+    }
+    CHAT_RL_MU = mutex_new()
+    CHAT_RL_READY = 1
+}
+
+// true si s no está vacío y son solo dígitos. string_to_int ABORTA el proceso
+// con entrada no numérica (runtime/strings.c), y el valor viene de nyx-kv, que
+// ya ha sufrido corrupción/pérdida: nunca parsearlo sin validar.
+fn all_digits(s: String) -> bool {
+    let n: int = s.length()
+    if n == 0 {
+        return false
+    }
+    var i: int = 0
+    while i < n {
+        let c: String = s.substring(i, i + 1)
+        if "0123456789".indexOf(c) < 0 {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
 // Extrae un campo de un body x-www-form-urlencoded y lo decodifica.
 pub fn form_field(body: String, key: String) -> String {
     let pairs: Array = body.split("&")
@@ -290,18 +325,22 @@ pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> Strin
     // cupo de ritmo por sala: max ~25 mensajes por ventana de 10s. Ventana por
     // timestamp en el propio valor ("count|inicio") para NO depender de EXPIRE:
     // nyx-kv puede tener EXPIRE roto (deja TTL -1) y un INCR+EXPIRE dejaría el
-    // contador atascado -> "Demasiados mensajes" permanente. Aquí solo GET/SET.
+    // contador atascado -> "Demasiados mensajes" permanente. GET/SET bajo
+    // CHAT_RL_MU (la atomicidad del INCR se recupera con el mutex: los workers
+    // son hilos de este proceso). Un valor corrupto se descarta (all_digits)
+    // en vez de abortar el proceso con string_to_int.
     let rlk: String = room_rl_key(room)
     let now: int = time()
     var cnt: int = 1
     var win: String = int_to_string(now)   // inicio de ventana a persistir
+    mutex_lock(CHAT_RL_MU)
     let raw: String = kv_get(h, rlk)
     if raw.length() > 0 {
         let bar: int = raw.indexOf("|")
         if bar > 0 {
             let cs: String = raw.substring(0, bar)
             let ss: String = raw.substring(bar + 1, raw.length())
-            if cs.length() > 0 and ss.length() > 0 {
+            if all_digits(cs) and all_digits(ss) {
                 let start: int = string_to_int(ss)
                 if now - start < 10 {
                     cnt = string_to_int(cs) + 1
@@ -312,6 +351,7 @@ pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> Strin
     }
     kv_set(h, rlk, int_to_string(cnt) + "|" + win)
     kv_expire(h, rlk, 600)   // limpieza best-effort; si EXPIRE funciona, la clave se va sola
+    mutex_unlock(CHAT_RL_MU)
     if cnt > 25 {
         kv_close(h)
         return "Demasiados mensajes ahora mismo, espera unos segundos"
@@ -419,14 +459,22 @@ pub fn chat_list_json(room_raw: String) -> String {
     return sb.to_string()
 }
 
-// Recibe el body crudo del POST /api/chat/send, extrae room/nick/texto y publica.
-// Devuelve "" si OK o el texto del error. Sala por defecto: general.
-pub fn chat_send_body(body: String) -> String {
+// Sala EFECTIVA de un body de POST /api/chat/send: default general + el mismo
+// md_trim que aplica chat_post. Único parser de la sala — lo usa también
+// handle_chat_send (main.nx) para push_chat_mark: si divergieran, el push
+// marcaría claves meta fantasma (" general") con throttle propio.
+pub fn chat_body_room(body: String) -> String {
     var room: String = form_field(body, "room")
     if room.length() == 0 {
         room = "general"
     }
+    return md_trim(room)
+}
+
+// Recibe el body crudo del POST /api/chat/send, extrae room/nick/texto y publica.
+// Devuelve "" si OK o el texto del error. Sala por defecto: general.
+pub fn chat_send_body(body: String) -> String {
     let nick: String = form_field(body, "nick")
     let texto: String = form_field(body, "texto")
-    return chat_post(room, nick, texto)
+    return chat_post(chat_body_room(body), nick, texto)
 }

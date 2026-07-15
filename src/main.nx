@@ -125,7 +125,9 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("<span id=\"calc-day-wrap\" class=\"calc-day-wrap\" hidden><select id=\"calc-day\" class=\"calc-rate-sel\" aria-label=\"D&iacute;a de la tasa\"><option value=\"hoy\" selected>Hoy</option><option value=\"man\">Ma&ntilde;ana</option></select></span>")
     sb.append("</div>\n")
     sb.append("<div class=\"calc-panel\">")
-    sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\">")
+    // onfocus+onclick seleccionan el contenido: el "1" inicial queda marcado y
+    // teclear el monto lo reemplaza sin tener que borrarlo (movil y escritorio).
+    sb.append("<input id=\"calc-amt\" class=\"calc-amt\" type=\"number\" step=\"any\" min=\"0\" inputmode=\"decimal\" value=\"1\" aria-label=\"Monto\" onfocus=\"this.select()\" onclick=\"this.select()\">")
     sb.append("<button id=\"mc-toggle\" class=\"mc-toggle\" type=\"button\" aria-label=\"Mini calculadora\" title=\"Calculadora\">&#129518;</button>")
     sb.append("<span id=\"calc-from-unit\" class=\"calc-unit\">$</span>")
     sb.append("</div>\n")
@@ -292,11 +294,9 @@ fn handle_chat_send(req: Request) -> Response {
     let err: String = chat_send_body(req.body)
     if err.length() == 0 {
         // Marca la sala para el aviso push (coalescido/throttleado en push_worker).
-        var room: String = form_field(req.body, "room")
-        if room.length() == 0 {
-            room = "general"
-        }
-        push_chat_mark(room)
+        // chat_body_room = MISMA normalización que usó chat_post (default+trim);
+        // parsear aquí a mano crearía claves meta fantasma con throttle propio.
+        push_chat_mark(chat_body_room(req.body))
         return json_nocache(200, "{\"ok\":true}")
     }
     return json_nocache(200, "{\"ok\":false,\"error\":\"" + err + "\"}")
@@ -593,6 +593,7 @@ fn main() {
     news_init()
     admin_init()
     ws_init()
+    chat_init()
     sqldb_init()
     push_init()
     thread_spawn(refresher_worker)

@@ -12,7 +12,7 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append(title)
     sb.append(" — VenezuelaInfo</title>\n")
     sb.append("<meta name=\"description\" content=\"Noticias, informacion y monitoreo sismico de Venezuela.\">\n")
-    sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css?v=67\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css?v=68\">\n")
     // Iconos + PWA
     sb.append("<link rel=\"icon\" href=\"/icon.svg\" type=\"image/svg+xml\">\n")
     sb.append("<link rel=\"icon\" href=\"/icon-192.png\" type=\"image/png\" sizes=\"192x192\">\n")
@@ -137,14 +137,20 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append("function copiar(){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(U).then(function(){flash('\\u00a1Enlace copiado!');},function(){prompt('Copia el enlace:',U);});return;}\n")
     sb.append("try{var t=document.createElement('textarea');t.value=U;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);flash('\\u00a1Enlace copiado!');}catch(e){prompt('Copia el enlace:',U);}}\n")
     sb.append("sh.addEventListener('click',function(){if(navigator.share){navigator.share(D).catch(function(){});}else{copiar();}});})();\n")
-    // Avisos push: solo en paginas con #push-btn (p.ej. /sismos). Pide permiso,
-    // se suscribe con la clave VAPID del server y envia la suscripcion por POST.
+    // Avisos push: widget GLOBAL en el pie (#push-box, todas las páginas full_chrome).
+    // Pide permiso, se suscribe con la clave VAPID del server y envia la suscripcion
+    // por POST. La elección de temas se PERSISTE en localStorage (push_topics) y se
+    // restaura antes de cualquier auto-resuscripción: sin esto, una suscripción
+    // perdida (rotación del push service) se re-creaba con los 3 temas por defecto,
+    // revirtiendo en silencio lo que el usuario había des-marcado.
     sb.append("(function(){var btn=document.getElementById('push-btn');if(!btn)return;\n")
     sb.append("if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))return;\n")
     sb.append("var box=document.getElementById('push-box');if(box)box.hidden=false;\n")
     sb.append("var st=document.getElementById('push-status');function set(m){if(st)st.textContent=m;}\n")
     sb.append("var tb=document.getElementById('push-topics-btn'),tp=document.getElementById('push-topics');\n")
     sb.append("if(tb&&tp)tb.addEventListener('click',function(){var h=tp.hidden;tp.hidden=!h;tb.setAttribute('aria-expanded',String(h));});\n")
+    sb.append("var IDS={sismos:'push-t-sismos',tasas:'push-t-tasas',chat:'push-t-chat'};\n")
+    sb.append("try{var sv=localStorage.getItem('push_topics');if(sv!==null){for(var k in IDS){var el=document.getElementById(IDS[k]);if(el)el.checked=(','+sv+',').indexOf(','+k+',')>-1;}}}catch(e){}\n")
     sb.append("function b64u(buf){var b=btoa(String.fromCharCode.apply(null,new Uint8Array(buf)));return b.replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');}\n")
     sb.append("function key2arr(s){var p='='.repeat((4-s.length%4)%4);var b=(s+p).replace(/-/g,'+').replace(/_/g,'/');var raw=atob(b);var a=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)a[i]=raw.charCodeAt(i);return a;}\n")
     sb.append("function topics(){var t=[];if(document.getElementById('push-t-sismos').checked)t.push('sismos');if(document.getElementById('push-t-tasas').checked)t.push('tasas');if(document.getElementById('push-t-chat').checked)t.push('chat');return t.join(',');}\n")
@@ -153,18 +159,22 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     // silent=true (auto-suscripcion en arranque cuando el permiso ya esta concedido)
     // no toca #push-status; silent=false (click) muestra los estados como antes.
     sb.append("function doSub(silent){\n")
+    sb.append("  var t=topics();\n")
     sb.append("  if(!silent)set('Suscribiendo\\u2026');\n")
     sb.append("  return navigator.serviceWorker.ready.then(function(reg){\n")
     sb.append("    return fetch('/api/push/config').then(function(r){return r.json();}).then(function(cfg){\n")
     sb.append("      return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key2arr(cfg.key)});\n")
     sb.append("    });\n")
     sb.append("  }).then(function(sub){\n")
-    sb.append("    var body='endpoint='+encodeURIComponent(sub.endpoint)+'&p256dh='+b64u(sub.getKey('p256dh'))+'&auth='+b64u(sub.getKey('auth'))+'&topics='+topics();\n")
+    sb.append("    var body='endpoint='+encodeURIComponent(sub.endpoint)+'&p256dh='+b64u(sub.getKey('p256dh'))+'&auth='+b64u(sub.getKey('auth'))+'&topics='+t;\n")
     sb.append("    return fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});\n")
     sb.append("  }).then(function(r){return r.json();}).then(function(j){\n")
-    sb.append("    if(j&&j.ok){mark();if(!silent)set('Listo');}else if(!silent){set('Error: '+((j&&j.error)||'desconocido'));}\n")
+    sb.append("    if(j&&j.ok){mark();try{localStorage.setItem('push_topics',t);}catch(e){}if(!silent)set('Listo');}else if(!silent){set('Error: '+((j&&j.error)||'desconocido'));}\n")
     sb.append("  });\n")
     sb.append("}\n")
+    // Cambiar un checkbox estando ya suscrito re-envia la suscripcion con los
+    // temas nuevos (dedup por endpoint en el server) y actualiza lo persistido.
+    sb.append("for(var pk in IDS){(function(id){var el=document.getElementById(id);if(el)el.addEventListener('change',function(){if(btn.classList.contains('on'))doSub(true).catch(function(){});});})(IDS[pk]);}\n")
     // Arranque: si ya hay suscripcion, marcar. Si no y el permiso YA esta concedido
     // (otro navegador del equipo, suscripcion perdida), auto-suscribir en silencio.
     sb.append("navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription();}).then(function(sub){\n")

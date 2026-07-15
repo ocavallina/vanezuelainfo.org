@@ -368,7 +368,11 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   cupo de ritmo **por sala** (~25/10s). **OJO**: NO usa `INCR`+`EXPIRE` (nyx-kv puede tener
   `EXPIRE` roto → deja TTL -1 → contador atascado → "Demasiados mensajes" permanente, incidente
   2026-07-14). Usa **ventana por timestamp en el valor** `chat:rl:<id>` = `"count|inicio"` con
-  solo GET/SET (ver `chat_post`, src/chat.nx). Vaciar/borrar
+  GET/SET **bajo el mutex `CHAT_RL_MU`** (los 16 workers son hilos del mismo proceso; sin mutex
+  el read-modify-write subcontaba bajo flood paralelo; `chat_init()` lo crea desde main) +
+  `EXPIRE 600` best-effort (solo limpieza; NO se depende de él). El valor leído de nyx-kv se
+  valida con `all_digits` antes de `string_to_int` (un valor corrupto NO numérico abortaría
+  el proceso: el runtime hace exit(1) también con strings no numéricos, no solo con ""). Vaciar/borrar
   salas se hace desde el **panel admin** (`/admin/salas`). El antiguo
   `POST /api/chat/clear` + `CHAT_ADMIN_KEY` fue **eliminado** (lo reemplaza el panel).
 - **Body POST parseado a mano** (`form_field` en `chat.nx` + `nyx_url_decode` de
@@ -453,21 +457,35 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 
 - **Cripto entregada por el monorepo** (`std/webpush` + `std/webpushcrypto`, VAPID ES256 + RFC 8291,
   binary-safe). `src/push.nx` NO reimplementa cripto: llama `vapid_jwt`/`webpush_encrypt`/`webpush_send`.
-- **Claves VAPID**: generadas UNA vez en `push_init()` (`ec_p256_keypair`, 97B = 32 priv ‖ 65 pub),
-  persistidas en `meta` (nyx-db) + respaldo `/home/admin/.veninfo-vapid-key` (0600). Override con env
-  `VENINFO_VAPID_KEY` (base64url del keypair). La pública se sirve en `GET /api/push/config` y **debe ser
-  ESTABLE** (si cambia, todas las suscripciones se invalidan). Verificado que persiste entre reinicios.
+- **Claves VAPID**: cadena de recuperación en `push_init()`: env `VENINFO_VAPID_KEY` > `meta` (nyx-db)
+  > **respaldo `/home/admin/.veninfo-vapid-key`** (se LEE al arrancar; si meta se perdió con el .ndb,
+  se re-siembra desde el archivo) > generar (`ec_p256_keypair`, 97B = 32 priv ‖ 65 pub) y persistir en
+  ambos. Cada fuente se valida con `vapid_kp_ok` (decodifica a 97B; una clave truncada daría claves
+  basura en silencio). La pública se sirve en `GET /api/push/config` y **debe ser ESTABLE** (si cambia,
+  todas las suscripciones se invalidan).
 - **Suscripciones en nyx-db** (tabla `push_subs`, NO nyx-kv por inestable): `endpoint|p256dh|auth|topics|
   created`. `POST /api/push/subscribe` (form-urlencoded, parseado con `form_field`). **Allowlist de host
   del endpoint anti-SSRF** (fcm.googleapis.com / *.push.services.mozilla.com / web/*.push.apple.com /
   *.notify.windows.com) — sin ella el server haría POST a hosts arbitrarios. Dedup por endpoint. 404/410
-  del push service → borra la suscripción.
-- **Suscripción por TEMAS (opt-in)**: sismos+tasas ON por defecto, chat OFF. El **chat va coalescido/
-  throttleado** (1 aviso/sala/5 min) para no spamear.
+  del push service → borra la suscripción. **OJO: todo lo que toque `endpoint` en SQL usa
+  `sql_esc_n(…, PUSH_EP_MAX=2048)`**, NO `sql_esc` (capa a 256 y los endpoints reales lo superan —
+  WNS ~450+; truncado = suscriptor roto en silencio: el primer envío da 404 y borra la fila).
+- **Suscripción por TEMAS**: los TRES temas ON por defecto (decisión del commit `109166e`; el botón
+  "Activar" sin abrir el desplegable suscribe a sismos+tasas+chat). La elección del usuario se
+  **persiste en localStorage (`push_topics`)** y se restaura al cargar: la auto-resuscripción silenciosa
+  (permiso concedido + suscripción perdida) y el cambio de checkboxes ya suscrito re-POSTean con los
+  temas elegidos, no con los defaults. El **chat va coalescido/throttleado** (1 aviso/sala/5 min); el
+  flag `push_chat_dirty` se consume **SOLO al notificar** (dentro de la ventana se conserva para
+  avisar al expirar; borrarlo antes descartaba mensajes en vez de coalescerlos).
 - **Envío fuera del hilo de request**: hilo `push_worker` (cada 30s) con **watermarks en meta**:
-  `push_wm_sismos` (epoch del último notificado; solo M≥`PUSH_MAG_MIN`=3.5), `push_wm_tasa` (valor BCV
-  previo), `push_chat_dirty:<sala>`/`push_chat_last:<sala>`. `push_chat_mark(sala)` se llama desde
-  `handle_chat_send` (NO desde chat.nx, que evita el ciclo push↔chat).
+  `push_wm_sismos` (epoch del más reciente ya visto; se recorren TODOS los eventos con epoch > wm y se
+  notifica cada M≥`PUSH_MAG_MIN`=3.5 — mirar solo `qs[0]` se tragaba un sismo fuerte tapado por una
+  réplica más reciente del mismo lote), `push_wm_tasa` (valor BCV previo),
+  `push_chat_dirty:<sala>`/`push_chat_last:<sala>`. `push_chat_mark(sala)` se llama desde
+  `handle_chat_send` con `chat_body_room()` (la MISMA normalización default+trim que usa `chat_post`;
+  parsear el body aparte creaba claves meta fantasma con throttle propio). En `push_send_topic` el
+  payload se arma una vez y el **JWT VAPID se cachea por audiencia**; el payload lleva `tag` = tema
+  (el SW lo usa: sin él todas las notificaciones compartían tag y se pisaban entre temas).
 - **Cliente = JS suelto en `src/layout.nx`** (la pasarela wasm NO expone `pushManager`/`serviceWorker.
   ready`): widget `#push-box` **GLOBAL en el pie** (`<footer>` de `page_v`, todas las páginas
   full_chrome; NO en la Calculadora), revelado solo si el navegador soporta push. Botón `#push-btn`
@@ -475,7 +493,9 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   permiso + `pushManager.subscribe({applicationServerKey})` + POST. El SW (`static/sw.js`) tiene `push`
   + `notificationclick`. **iOS: 16.4+ y PWA instalada** (no pestaña Safari).
 - **Verificar sin esperar un sismo**: `/admin` → "Enviar prueba" (POST /admin/push, CSRF) →
-  `push_send_topic(tema,…)`. También muestra el nº de suscripciones.
+  `push_send_test_async(tema,…)` (hilo aparte: los envíos van en serie con hasta ~10s por endpoint
+  colgado; dentro del request daban 502 del gateway → reintento → duplicados). La URL de destino
+  la elige el worker según el tema (/sismos, /finanzas, /chat). También muestra el nº de suscripciones.
 - **GOTCHAS que costaron** (ver memoria): `string_to_int("")` **aborta el proceso** (usar `to_int0`);
   leer un int de un Array NATIVO como String = **SEGV** (el registro de sismos: `rec[8]` epoch es int);
   `pub` es palabra reservada (no usar de nombre de var).

@@ -311,7 +311,10 @@ pub fn handle_admin_push_post(req: Request) -> Response {
     if body.length() == 0 {
         body = "Notificacion de prueba de VenezuelaInfo"
     }
-    push_send_topic(topic, title, body, "/sismos")
+    // En hilo aparte: los envíos van en serie (hasta ~10s por endpoint colgado)
+    // y dentro del request excederían el timeout del gateway (502 -> reintento ->
+    // duplicados). La URL de destino la elige el worker según el tema.
+    push_send_test_async(topic, title, body)
     return redirect("/admin")
 }
 

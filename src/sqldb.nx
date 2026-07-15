@@ -59,12 +59,14 @@ pub fn sql_count(sql: String) -> int {
 }
 
 // Escapa un valor para interpolarlo entre comillas simples en SQL: duplica «'»,
-// quita caracteres de control y corta a `maxb` bytes. Anti-inyección (no hay binds).
-pub fn sql_esc(s: String) -> String {
+// quita caracteres de control y corta a `cap` chars. Anti-inyección (no hay binds).
+// El tope por defecto (sql_esc, 256) NO sirve para endpoints de Web Push (WNS
+// supera rutinariamente los 256 y quedaría truncado en silencio): esos usan
+// sql_esc_n con tope 2048 (src/push.nx).
+pub fn sql_esc_n(s: String, cap: int) -> String {
     var out: String = ""
     let n: int = s.length()
     var i: int = 0
-    let cap: int = 256
     while i < n and out.length() < cap {
         let c: String = s.substring(i, i + 1)
         if c == "'" {
@@ -77,6 +79,10 @@ pub fn sql_esc(s: String) -> String {
         i = i + 1
     }
     return out
+}
+
+pub fn sql_esc(s: String) -> String {
+    return sql_esc_n(s, 256)
 }
 
 // Guarda el snapshot; se llama periódicamente y en el apagado.

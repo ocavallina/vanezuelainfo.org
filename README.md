@@ -43,7 +43,7 @@ tiempo real**. Aplicación web instalable (PWA).
 - 📰 **Noticias** — titulares agregados de medios venezolanos.
 - 🧭 **Baquiano** — guía turística de los 24 estados (panorama, destinos, datos prácticos) con fotos y enlaces a mapas.
 - 💬 **Chat** — conversación colectiva con salas, en tiempo real.
-- 🔔 **Avisos push** — notificaciones (con la app cerrada) de sismos fuertes, cambios de tasa BCV y chat; opt-in por tema desde la página de Sismos.
+- 🔔 **Avisos push** — notificaciones (con la app cerrada) de sismos fuertes, cambios de tasa BCV y chat; activables desde el pie de cualquier página, con selección de temas.
 
 Todo servido como **PWA instalable**, con tema claro/oscuro y pensado para móvil.
 
