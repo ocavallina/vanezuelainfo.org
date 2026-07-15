@@ -36,8 +36,9 @@ pub fn chat_init() {
 
 // true si s no está vacío y son solo dígitos. string_to_int ABORTA el proceso
 // con entrada no numérica (runtime/strings.c), y el valor viene de nyx-kv, que
-// ya ha sufrido corrupción/pérdida: nunca parsearlo sin validar.
-fn all_digits(s: String) -> bool {
+// ya ha sufrido corrupción/pérdida: nunca parsearlo sin validar. pub: también
+// lo usa src/push.nx (tasa_2dec, valores de nyx-db).
+pub fn all_digits(s: String) -> bool {
     let n: int = s.length()
     if n == 0 {
         return false

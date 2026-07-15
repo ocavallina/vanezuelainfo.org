@@ -538,8 +538,8 @@ Sin prioridad estricta; tomar lo que aporte.
       (`std/webpush` + `std/webpushcrypto`) y se implementó en `src/push.nx` (VAPID + RFC 8291,
       avisos de sismos M≥3.5 / tasa BCV / chat coalescido; suscripción por temas; SW con push +
       notificationclick; "Enviar prueba" en /admin). Ver sección **Notificaciones Web Push** arriba.
-- [ ] **Afinar el payload de la tasa BCV** (hoy muestra el valor REAL crudo de nyx-db, puede tener
-      decimales feos) y **umbral de sismos configurable desde /admin** (hoy const `PUSH_MAG_MIN`).
+- [ ] **Umbral de sismos configurable desde /admin** (hoy const `PUSH_MAG_MIN`). (El payload de la
+      tasa BCV ya se afinó: `tasa_2dec` en src/push.nx muestra 2 decimales con coma, 2026-07-15.)
 - [ ] **Notification API local en foco** (badge con pestaña oculta cuando el WS empuja) — opcional,
       complementa el push (que es para la app cerrada).
 - [ ] **Más artículos** en `content/articles/` (+ slug en `content/index.txt`).

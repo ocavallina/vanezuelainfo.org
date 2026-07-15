@@ -434,6 +434,42 @@ fn push_do_sismos() {
     meta_set("push_wm_sismos", int_to_string(newest))
 }
 
+// "108.236400" -> "108,24": 2 decimales con coma (formato del sitio) y redondeo,
+// TODO sobre el string — string_to_float con un valor no numérico de la DB
+// (p.ej. "__NULL__") abortaría el proceso; ante algo raro se devuelve crudo.
+// Solo para MOSTRAR: el watermark push_wm_tasa compara el valor crudo.
+fn tasa_2dec(v: String) -> String {
+    let dot: int = v.indexOf(".")
+    if dot < 0 {
+        if all_digits(v) {
+            return v + ",00"
+        }
+        return v
+    }
+    let whole: String = v.substring(0, dot)
+    var frac: String = v.substring(dot + 1, v.length())
+    if !all_digits(whole) or !all_digits(frac) {
+        return v
+    }
+    while frac.length() < 3 {
+        frac = frac + "0"
+    }
+    var cents: int = string_to_int(frac.substring(0, 2))
+    if "56789".indexOf(frac.substring(2, 3)) >= 0 {
+        cents = cents + 1
+    }
+    var w: int = string_to_int(whole)
+    if cents >= 100 {
+        cents = cents - 100
+        w = w + 1
+    }
+    var fs: String = int_to_string(cents)
+    if cents < 10 {
+        fs = "0" + fs
+    }
+    return int_to_string(w) + "," + fs
+}
+
 fn push_do_tasas() {
     let val: String = push_bcv_latest()
     if val.length() == 0 {
@@ -448,7 +484,7 @@ fn push_do_tasas() {
         meta_set("push_wm_tasa", val)
         return
     }
-    push_send_topic("tasas", "Nueva tasa BCV", "Dolar BCV: Bs " + val, "/finanzas")
+    push_send_topic("tasas", "Nueva tasa BCV", "Dolar BCV: Bs " + tasa_2dec(val), "/finanzas")
     meta_set("push_wm_tasa", val)
 }
 
