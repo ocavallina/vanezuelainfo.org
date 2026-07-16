@@ -605,11 +605,18 @@ fn push_do_sismos() {
             } else {
                 let mags: String = rec[6]
                 let lugar: String = rec[7]
+                // rec[8] es el epoch y es un int NATIVO: hay que leerlo tipado como
+                // int (como String coacciona i64->ptr -> SEGV).
+                let ep: int = rec[8]
+                // El cuerpo lleva la HORA del sismo (antes: "Toca para ver detalles",
+                // que no decía nada). Sin ella, un aviso retenido por el push service
+                // o abierto un rato después no se distingue de uno recién ocurrido.
+                let cuando: String = sismo_hora_txt(ep, now)
                 // tag POR EVENTO: con el tag fijo "sismos" cada aviso reemplazaba al
                 // anterior, así que de un lote solo quedaba visible el ÚLTIMO
                 // entregado — el más viejo, porque se emitía de nuevo a viejo. Un
                 // M6.0 seguido de un premonitor M3.6 se veía como "Sismo M3.6".
-                push_send_topic("sismos", "Sismo M" + mags + " " + lugar, "Toca para ver detalles", "/sismos", "sismo-" + id)
+                push_send_topic("sismos", "Sismo M" + mags + " " + lugar, cuando, "/sismos", "sismo-" + id)
                 push_seen_add(id)
             }
             e = e - 1
@@ -630,6 +637,65 @@ fn push_do_sismos() {
     }
     // Poda del registro de vistos (la ventana de candidatos es de 6 h; 48 h sobra).
     sql_exec("DELETE FROM push_seen WHERE ts < " + int_to_string(now - PUSH_SEEN_KEEP))
+}
+
+// Partes civiles [año, mes, día, hora, min] de un epoch UTC en hora de VENEZUELA.
+// Portado de civil_parts (wasm/common.nx) — mismo algoritmo, ya probado aquí —
+// con UNA diferencia: el wasm usa el offset REAL del navegador (js_tz_offset_min)
+// y aquí es fijo UTC-4. Tiene que serlo: el aviso se arma en el servidor, donde no
+// sabemos la zona del receptor, y el público del sitio está en Venezuela (que no
+// tiene horario de verano, así que -4 vale todo el año). Es la única hora del
+// proyecto que NO se deriva en el cliente.
+fn ve_civil(epoch_utc: int) -> Array {
+    let loc: int = epoch_utc - 14400
+    var z: int = loc / 86400
+    let sod: int = loc % 86400
+    z = z + 719468
+    let era: int = z / 146097
+    let doe: int = z - era * 146097
+    let yoe: int = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    var y: int = yoe + era * 400
+    let doy: int = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    let mp: int = (5 * doy + 2) / 153
+    let d: int = doy - (153 * mp + 2) / 5 + 1
+    var m: int = mp + 3
+    if mp >= 10 {
+        m = mp - 9
+    }
+    if m <= 2 {
+        y = y + 1
+    }
+    let h: int = sod / 3600
+    let mi: int = (sod % 3600) / 60
+    let r: Array = [y, m, d, h, mi]
+    return r
+}
+
+// Cuándo ocurrió el sismo, para el cuerpo del aviso: "Hoy a las 14:35", o
+// "16/07 a las 23:50" si no es del mismo día (la ventana es de 6 h, así que en la
+// práctica solo cruza a ayer, pero el formato con fecha aguanta cualquier ventana).
+//
+// ABSOLUTA y no relativa ("hace 3 min") A PROPÓSITO: el payload se cifra UNA vez
+// al enviarlo, pero el push service lo retiene hasta PUSH_TTL_SISMOS (30 min) si
+// el teléfono está sin red. Un "hace 3 min" que se entrega 25 minutos después
+// MIENTE; "14:35" sigue siendo verdad cuando llegue. (pad2 sale de src/bcv.nx por
+// el scope global plano.)
+fn sismo_hora_txt(epoch_utc: int, now_utc: int) -> String {
+    let e: Array = ve_civil(epoch_utc)
+    let n: Array = ve_civil(now_utc)
+    let eh: int = e[3]
+    let emi: int = e[4]
+    let hm: String = pad2(eh) + ":" + pad2(emi)
+    let ey: int = e[0]
+    let em: int = e[1]
+    let ed: int = e[2]
+    let ny: int = n[0]
+    let nm: int = n[1]
+    let nd: int = n[2]
+    if ey == ny and em == nm and ed == nd {
+        return "Hoy a las " + hm
+    }
+    return pad2(ed) + "/" + pad2(em) + " a las " + hm
 }
 
 // "108.236400" -> "108,24": 2 decimales con coma (formato del sitio) y redondeo,

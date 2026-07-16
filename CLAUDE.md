@@ -552,6 +552,16 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   `push_wm_sismos`**: al desplegar sobre una instalación existente el watermark ya existía pero la
   tabla nacía vacía → se habrían re-notificado de golpe los M≥3.5 de las últimas 6h (mismo caso si
   se pierde el `.ndb`).
+- **El aviso de sismo lleva la HORA** (`sismo_hora_txt` + `ve_civil`, `src/push.nx`): cuerpo
+  "Hoy a las 14:35" (o "15/07 a las 23:00" si no es del mismo día). **ABSOLUTA y no relativa**
+  ("hace 3 min") a propósito: el payload se cifra UNA vez al enviarlo pero el push service lo
+  retiene hasta 30 min si el teléfono está sin red — un "hace 3 min" entregado 25 minutos
+  después MIENTE. **Única hora del proyecto derivada SERVER-SIDE**, con offset FIJO UTC-4: el
+  aviso se arma sin saber la zona del receptor (el resto del sitio la deriva en el cliente con
+  `js_tz_offset_min`; ver la regla "Tiempos en hora LOCAL"). Venezuela no tiene horario de
+  verano, así que -4 vale todo el año. **Al tocarlo: `./tests/hora-check.sh`** (extrae las
+  funciones del propio `src/push.nx` y las compila; cubre los cruces de día/año, que es donde
+  este tipo de código se rompe).
 - **TTL por tema** (`topic_ttl`, `src/push.nx`): cuánto retiene el push service el aviso si el
   teléfono está SIN RED — sismos **30 min**, tasas **6 h**, chat **1 h** (`webpush_send` acepta
   `ttl` desde 2026-07-16; antes era fijo en 24 h y un móvil apagado recibía al reconectar la
