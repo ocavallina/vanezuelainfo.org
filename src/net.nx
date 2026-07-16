@@ -1,22 +1,24 @@
 // src/net.nx — cliente HTTP(S) de salida del sitio. UN solo sitio por el que
 // bajamos datos de terceros (BCV, EMSC, CriptoYa, DolarAPI, RSS de noticias).
 //
-// POR QUÉ NO usamos el builtin https_get: NO desencapsula Transfer-Encoding:
-// chunked. El propio runtime lo admite (NyxLang/runtime/tls.c:22-24):
-//     "Chunked transfer encoding: we do not decode chunk framing. The raw body
-//      bytes (including any chunk-size lines) are returned as-is. This is
-//      sufficient for API responses and JSON payloads."
-// No es suficiente: criptoya.com responde chunked en HTTP/1.1. Mientras la
-// respuesta cabe en UN chunk el marcador queda ANTES del JSON y los parsers lo
-// saltan sin enterarse; en cuanto pasa de un chunk, el marcador cae DENTRO y
-// parte un número por la mitad -> string_to_float aborta el PROCESO. El sitio se
-// cayó así el 2026-07-16 06:32:43 UTC (ver src/num.nx).
+// ORIGEN (2026-07-16): nació porque el builtin `https_get` NO desencapsulaba
+// `Transfer-Encoding: chunked` y devolvía el cuerpo con los marcadores de tamaño
+// DENTRO. criptoya.com y bolsadecaracas.com responden chunked: mientras la
+// respuesta cabía en UN chunk el marcador quedaba ANTES del JSON y los parsers lo
+// saltaban sin enterarse (por eso pasó meses oculto), pero al pasar de un chunk
+// caía DENTRO y partía un número por la mitad -> string_to_float abortaba el
+// PROCESO. El sitio se cayó así el 2026-07-16 06:32:43 UTC (ver src/num.nx).
 //
-// std/http SÍ des-chunkea (http_parse_raw_response mira la cabecera real), así
-// que aquí se usa su camino TLS. Ventajas de paso: tenemos el STATUS (https_get
-// devuelve solo el body: un 403 era indistinguible de éxito) y podemos mandar un
-// User-Agent descriptivo (el builtin manda "Nyx/1.0", que a Wikipedia le vale un
-// bloqueo por ráfaga — ver wiki_get en src/baquiano.nx).
+// ESO YA ESTÁ ARREGLADO EN EL RUNTIME (el mismo día, a raíz de este incidente:
+// read_http_response de tls.c ahora des-chunkea), así que https_get ya no
+// corrompe cuerpos. El módulo SE MANTIENE porque su valor no era solo ese:
+//   - https_get devuelve SOLO el body, sin STATUS: un 403 o un 500 son
+//     indistinguibles de un éxito (se ve "" o basura, y se sirve caché vieja
+//     creyendo que la red falló). net_get mira el status y devuelve "" a propósito.
+//   - https_get no deja mandar cabeceras -> va con "User-Agent: Nyx/1.0", que a la
+//     API de Wikipedia le vale un bloqueo por ráfaga (ver wiki_get, src/baquiano.nx).
+// std/http da las dos cosas. Si el builtin llega a exponer status y cabeceras,
+// este módulo se puede replantear.
 //
 // http_parse_url/http_build_request/http_tls_request/http_get salen de std/http
 // por scope global (lo importa src/main.nx); no hay que importarlo aquí.

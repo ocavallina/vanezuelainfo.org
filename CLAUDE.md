@@ -84,12 +84,13 @@ src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom 
                  metas PWA, registro del service worker.
 src/articles.nx  Portada + render de artículos (server-side desde content/).
 src/md.nx        Renderizador Markdown→HTML propio + html_escape.
-src/num.nx       Parseo numérico SEGURO (is_int_str/is_num_str/to_int0/to_float0). TODO valor de
-                 red/kv/db pasa por aquí: string_to_int/string_to_float ABORTAN el proceso con
-                 entrada no numérica. Ver el gotcha del crash 2026-07-16 abajo.
-src/net.nx       ÚNICO cliente HTTP(S) de salida (net_get). Sustituye a https_get, que NO
-                 desencapsula Transfer-Encoding: chunked — causa del crash 2026-07-16. Usa
-                 std/http (des-chunkea de verdad, da el status y manda UA propio).
+src/num.nx       Parseo numérico SEGURO (to_int0/to_float0). TODO valor de red/kv/db pasa por aquí:
+                 string_to_int/string_to_float ABORTAN el proceso con entrada no numérica. Capa
+                 fina sobre los builtins string_to_int_or/string_to_float_or (que el monorepo
+                 entregó a raíz del crash 2026-07-16). Ver el gotcha abajo.
+src/net.nx       ÚNICO cliente HTTP(S) de salida (net_get), sobre std/http. Nació porque https_get
+                 no des-chunkeaba (causa del crash 2026-07-16, ya arreglado en el runtime); se
+                 mantiene porque el builtin sigue sin dar STATUS ni cabeceras propias (UA).
 src/sismos.nx    Cliente EMSC (net_get), parser FDSN text, all_quakes() (fusión con
                  FUNVISIS + dedup por tiempo+coords), caché, tabla HTML con data-*.
                  sismos_ts() = máx(ts EMSC, ts FUNVISIS) — el "Actualizado" de /sismos.
@@ -157,11 +158,15 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
 
 ## Reglas críticas / gotchas (NO romper)
 
-- **NUNCA parsear un número de fuera sin validar: `string_to_int`/`string_to_float`
-  ABORTAN EL PROCESO** (runtime/strings.c) con entrada no numérica — no devuelven 0 ni
-  fallan de forma atrapable. Como todo el sitio es UN proceso, un solo valor corrupto se
-  lleva el servidor Y los hilos (push, refresher). **Usar SIEMPRE `to_int0`/`to_float0`
-  de `src/num.nx`.** OJO con `""`: también aborta (no solo las strings no numéricas).
+- **NUNCA parsear un número de fuera con `string_to_int`/`string_to_float`: ABORTAN EL
+  PROCESO** (runtime/strings.c) con entrada no numérica — no devuelven 0 ni fallan de
+  forma atrapable. Como todo el sitio es UN proceso, un solo valor corrupto se lleva el
+  servidor Y los hilos (push, refresher). **Usar SIEMPRE `to_int0`/`to_float0` de
+  `src/num.nx`.** OJO con `""`: también aborta (no solo las strings no numéricas).
+  Desde 2026-07-16 el runtime tiene **`string_to_int_or(s, def)` / `string_to_float_or(s,
+  def)`** (builtins entregados a raíz de este incidente), y `src/num.nx` es ya solo una
+  capa fina sobre ellos: se sigue usando el módulo para tener los nombres cortos en un
+  único sitio donde cambiar la política. Los `string_to_*` SIN `_or` siguen abortando.
   - **Incidente 2026-07-16 06:32:43 UTC** (el servicio murió; systemd lo revivió):
     `💥 Runtime Error: String '2\r\n3d1c\r\n1' no es un número válido`. `3d1c` = 15644 =
     **tamaño de chunk hexadecimal**: un marcador de `Transfer-Encoding: chunked` se coló
@@ -170,14 +175,15 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
     que este archivo lo vendía como tal): filtraba `""`/`"__NULL__"` y luego llamaba
     `string_to_int` a pelo. Mismo defecto tenía `sql_count` (`src/sqldb.nx`) y `sf` (`src/rates.nx`).
     Ahora todos delegan en `src/num.nx`, que valida el string COMPLETO.
-- **`https_get` (builtin del runtime) NO desencapsula `Transfer-Encoding: chunked`** —
-  devuelve el body con los marcadores de tamaño DENTRO. El propio `runtime/tls.c:22-24` lo
-  admite ("we do not decode chunk framing… This is sufficient for API responses"): no lo es.
-  **CriptoYa y bolsadecaracas.com responden chunked.** Mientras la respuesta cabe en UN chunk
-  el marcador queda ANTES del cuerpo y los parsers lo saltan sin enterarse (por eso pasó meses
-  desapercibido); en cuanto pasa de un chunk, cae DENTRO y parte un valor por la mitad.
-  **Usar `net_get` (`src/net.nx`), NUNCA `https_get`.** `std/http` sí des-chunkea (por eso
-  `src/funvisis.nx` con `http_get` estaba a salvo). Arreglar el runtime es tarea del monorepo.
+- **Salir a la red SIEMPRE por `net_get` (`src/net.nx`), no por `https_get`.** El motivo
+  original —`https_get` no desencapsulaba `Transfer-Encoding: chunked` y metía los marcadores
+  de tamaño DENTRO del cuerpo (**CriptoYa y bolsadecaracas.com responden chunked**), lo que
+  partió un número y **abortó el proceso el 2026-07-16**— **ya está ARREGLADO en el runtime**
+  (mismo día, a raíz de este incidente: `read_http_response` de tls.c des-chunkea). Pero
+  `net_get` se mantiene por lo otro que el builtin sigue sin dar: el **STATUS** (con
+  `https_get` un 403/500 es indistinguible de un éxito: solo ves "" o basura, y se sirve caché
+  vieja creyendo que falló la red) y **cabeceras propias** (va con `User-Agent: Nyx/1.0`, que a
+  Wikipedia le vale un bloqueo por ráfaga).
 - **NO usar `req.query`**: `req.query.get(...)` devuelve un puntero basura →
   `GC Out of Memory + SEGV` (bug del lenguaje; `req.params.get` SÍ funciona).
   Pasar datos al cliente por **localStorage** y hacer el trabajo client-side.
@@ -546,6 +552,11 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   `push_wm_sismos`**: al desplegar sobre una instalación existente el watermark ya existía pero la
   tabla nacía vacía → se habrían re-notificado de golpe los M≥3.5 de las últimas 6h (mismo caso si
   se pierde el `.ndb`).
+- **TTL por tema** (`topic_ttl`, `src/push.nx`): cuánto retiene el push service el aviso si el
+  teléfono está SIN RED — sismos **30 min**, tasas **6 h**, chat **1 h** (`webpush_send` acepta
+  `ttl` desde 2026-07-16; antes era fijo en 24 h y un móvil apagado recibía al reconectar la
+  tanda entera de avisos viejos como si fueran de ahora). `topic_ttl` acepta el tema y también
+  el tag por evento (`sismo-<id>`).
 - **`tag` = qué reemplaza a qué**: dos notificaciones con el mismo tag NO se apilan, la nueva
   sustituye a la vieja. Tasas/chat mandan el **tema** (solo interesa el último valor); sismos manda
   **`sismo-<id>`, uno por evento** — con el tag fijo `"sismos"` un lote colapsaba en UNA sola
@@ -621,8 +632,10 @@ Sin prioridad estricta; tomar lo que aporte.
 - [ ] **`notificationclick` enfoca sin navegar** (`static/sw.js`): si ya hay una pestaña abierta en
       `/sismos`, la enfoca pero NO la recarga → el usuario ve la lista vieja, sin el sismo del aviso.
       Falta `.navigate(u)` antes del `focus()` (detectado 2026-07-16, fuera del alcance de ese cambio).
-- [ ] **TTL del push fijo en 24h** (`std/webpush.nx:69`, monorepo): un teléfono apagado recibe al
-      reconectar alertas sísmicas rancias como si fueran de ahora. Reportado en `NyxLang/TASKS.md`.
+- [x] **TTL del push** — HECHO 2026-07-16: el monorepo hizo `webpush_send` configurable por llamada
+      y `src/push.nx` manda **TTL por tema** (`topic_ttl`): sismos 30 min, tasas 6 h, chat 1 h. Antes
+      era fijo en 24 h → un teléfono apagado recibía al reconectar la tanda de avisos viejos como si
+      fueran de ahora (y ninguno lleva la hora en el texto).
 - [ ] **Caja de `quake_in_region` muy generosa** (`src/sismos.nx`): el rectángulo lat 0.5..12.9 /
       lon -73.6..-60.5 incluye oriente colombiano, Guyana entera y norte de Brasil — un sismo a
       ~1000 km de Venezuela entra en "Sismos recientes en Venezuela". Y el `minmag=2.5` del fetch no

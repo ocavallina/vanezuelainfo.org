@@ -27,6 +27,33 @@ const VAPID_FILE: String = "/home/admin/.veninfo-vapid-key"
 const PUSH_SISMO_MAXAGE: int = 21600
 const PUSH_SISMO_BURST: int = 5
 const PUSH_SEEN_KEEP: int = 172800
+
+// TTL por tema: cuánto retiene el push service el aviso si el teléfono está SIN
+// RED. Pasa a webpush_send (std/webpush, ttl configurable desde 2026-07-16 —
+// antes fijo en 86400). El default de 24h es malo para nosotros: un teléfono
+// apagado toda la noche recibía al reconectar la tanda entera de avisos viejos
+// como si fueran de ahora, y ninguno lleva la hora en el texto.
+// Cada uno según lo rápido que caduca la noticia:
+//   sismos: 30 min. Pasado ese rato ya te enteraste por otra vía; y un aviso de
+//           un sismo de hace horas solo alarma sin informar.
+//   tasas:  6 h. La tasa BCV sigue vigente el resto del día, así que aguanta más;
+//           pero no 24h, o llegaría cuando ya hay otra publicada.
+//   chat:   1 h. Es solo "hay mensajes nuevos"; más tarde no aporta nada.
+const PUSH_TTL_SISMOS: int = 1800
+const PUSH_TTL_TASAS: int = 21600
+const PUSH_TTL_CHAT: int = 3600
+
+// Acepta tanto el tema ("sismos") como el tag por evento ("sismo-<id>"), que es
+// lo que recibe push_send_one.
+fn topic_ttl(topic: String) -> int {
+    if topic == "sismos" or starts_with(topic, "sismo-") {
+        return PUSH_TTL_SISMOS
+    }
+    if topic == "tasas" {
+        return PUSH_TTL_TASAS
+    }
+    return PUSH_TTL_CHAT
+}
 // Tope de longitud del endpoint (los reales pueden superar los 256 del sql_esc
 // por defecto; WNS llega a ~450+). Se usa con sql_esc_n en TODA query de endpoint.
 const PUSH_EP_MAX: int = 2048
@@ -295,12 +322,12 @@ fn push_payload(title: String, body: String, url: String, tag: String) -> String
 
 // Cifra y envía UN push con un JWT ya firmado. Devuelve el código HTTP; borra la
 // suscripción si el push service dice 404/410 (suscripción expirada).
-fn push_send_raw(endpoint: String, p256dh_b64: String, auth_b64: String, jwt: String, payload: String) -> int {
+fn push_send_raw(endpoint: String, p256dh_b64: String, auth_b64: String, jwt: String, payload: String, ttl: int) -> int {
     let pubkey: String = __vpub[0]
     let p256raw: String = base64url_decode(p256dh_b64)
     let authraw: String = base64url_decode(auth_b64)
     let enc: String = webpush_encrypt(payload, p256raw, authraw)
-    let resp: Array = webpush_send(endpoint, jwt, pubkey, enc)
+    let resp: Array = webpush_send(endpoint, jwt, pubkey, enc, ttl)
     let code: int = resp[1]
     if code == 404 or code == 410 {
         sql_exec("DELETE FROM push_subs WHERE endpoint = '" + sql_esc_n(endpoint, PUSH_EP_MAX) + "'")
@@ -312,7 +339,7 @@ fn push_send_raw(endpoint: String, p256dh_b64: String, auth_b64: String, jwt: St
 pub fn push_send_one(endpoint: String, p256dh_b64: String, auth_b64: String, title: String, body: String, url: String, tag: String) -> int {
     let priv: String = __vpriv[0]
     let jwt: String = vapid_jwt(priv, audience_of(endpoint), VAPID_SUBJECT, time() + 43200)
-    return push_send_raw(endpoint, p256dh_b64, auth_b64, jwt, push_payload(title, body, url, tag))
+    return push_send_raw(endpoint, p256dh_b64, auth_b64, jwt, push_payload(title, body, url, tag), topic_ttl(tag))
 }
 
 fn topic_in(csv: String, t: String) -> bool {
@@ -340,6 +367,7 @@ fn topic_in(csv: String, t: String) -> bool {
 pub fn push_send_topic(topic: String, title: String, body: String, url: String, tag: String) -> String {
     let rows: Array = sql_rows("SELECT endpoint, p256dh, auth, topics FROM push_subs")
     let payload: String = push_payload(title, body, url, tag)
+    let ttl: int = topic_ttl(topic)
     let priv: String = __vpriv[0]
     var auds: Array = []
     var jwts: Array = []
@@ -372,7 +400,7 @@ pub fn push_send_topic(topic: String, title: String, body: String, url: String, 
                 auds.push(aud)
                 jwts.push(jwt)
             }
-            let code: int = push_send_raw(ep, pd, au, jwt, payload)
+            let code: int = push_send_raw(ep, pd, au, jwt, payload, ttl)
             sent = sent + 1
             if code >= 200 and code < 300 {
                 ok = ok + 1
