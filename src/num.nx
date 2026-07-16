@@ -1,0 +1,92 @@
+// src/num.nx — parseo numérico SEGURO de datos que no controlamos (red, nyx-kv,
+// nyx-db). Regla del proyecto: NUNCA llamar string_to_int/string_to_float sobre
+// un valor externo sin validarlo antes.
+//
+// POR QUÉ EXISTE: string_to_int/string_to_float ABORTAN el proceso entero
+// (runtime/strings.c) con entrada no numérica — no devuelven 0 ni lanzan algo
+// atrapable. Como todo el sitio vive en un proceso, un solo valor corrupto se
+// lleva por delante el servidor Y el hilo de push. Ya pasó: el 2026-07-16 a las
+// 06:32:43 UTC el servicio murió con
+//     💥 Runtime Error: String '2\r\n3d1c\r\n1' no es un número válido
+// ("3d1c" = 15644 = tamaño de chunk hexadecimal: un marcador de
+// Transfer-Encoding: chunked se coló dentro de un número porque el builtin
+// https_get no desencapsula el framing — ver src/net.nx).
+//
+// El helper viejo (to_int0 en src/push.nx) NO servía: filtraba "" y "__NULL__"
+// y luego llamaba string_to_int a pelo, así que con "3d1c" abortaba igual.
+// Aquí se valida el string COMPLETO antes de tocar el runtime.
+//
+// Módulo autocontenido a propósito: NO llama a all_digits (src/chat.nx) para no
+// acoplar num->chat. Recordatorio: el scope global es PLANO, no redeclarar estos
+// símbolos en otros módulos.
+
+// true si s es un entero con signo opcional: "-12", "0", "42". Rechaza "", "3.5",
+// "3d1c", "__NULL__", " 7", "1e3".
+pub fn is_int_str(s: String) -> bool {
+    let n: int = s.length()
+    if n == 0 {
+        return false
+    }
+    var i: int = 0
+    if s.substring(0, 1) == "-" {
+        i = 1
+    }
+    var digits: int = 0
+    while i < n {
+        let c: String = s.substring(i, i + 1)
+        if "0123456789".indexOf(c) < 0 {
+            return false
+        }
+        digits = digits + 1
+        i = i + 1
+    }
+    return digits > 0
+}
+
+// true si s es un decimal con signo opcional y como mucho un punto: "-3.5", "10",
+// ".5", "3.". Rechaza "", "3.5.1", "3d1c", "__NULL__", "1e3" (notación
+// científica: ningún feed del sitio la usa y string_to_float no la garantiza).
+pub fn is_num_str(s: String) -> bool {
+    let n: int = s.length()
+    if n == 0 {
+        return false
+    }
+    var i: int = 0
+    if s.substring(0, 1) == "-" {
+        i = 1
+    }
+    var digits: int = 0
+    var dots: int = 0
+    while i < n {
+        let c: String = s.substring(i, i + 1)
+        if c == "." {
+            dots = dots + 1
+            if dots > 1 {
+                return false
+            }
+        } else if "0123456789".indexOf(c) >= 0 {
+            digits = digits + 1
+        } else {
+            return false
+        }
+        i = i + 1
+    }
+    return digits > 0
+}
+
+// Entero de un valor externo, 0 si no es parseable. Sustituye al to_int0 que
+// vivía en src/push.nx (que abortaba con basura no numérica).
+pub fn to_int0(s: String) -> int {
+    if !is_int_str(s) {
+        return 0
+    }
+    return string_to_int(s)
+}
+
+// Float de un valor externo, 0.0 si no es parseable.
+pub fn to_float0(s: String) -> float {
+    if !is_num_str(s) {
+        return 0.0
+    }
+    return string_to_float(s)
+}

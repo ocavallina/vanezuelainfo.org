@@ -84,8 +84,15 @@ src/layout.nx    Shell HTML (head, header, footer). page() y page_fixed() (zoom 
                  metas PWA, registro del service worker.
 src/articles.nx  Portada + render de artículos (server-side desde content/).
 src/md.nx        Renderizador Markdown→HTML propio + html_escape.
-src/sismos.nx    Cliente EMSC (https_get), parser FDSN text, all_quakes() (fusión con
+src/num.nx       Parseo numérico SEGURO (is_int_str/is_num_str/to_int0/to_float0). TODO valor de
+                 red/kv/db pasa por aquí: string_to_int/string_to_float ABORTAN el proceso con
+                 entrada no numérica. Ver el gotcha del crash 2026-07-16 abajo.
+src/net.nx       ÚNICO cliente HTTP(S) de salida (net_get). Sustituye a https_get, que NO
+                 desencapsula Transfer-Encoding: chunked — causa del crash 2026-07-16. Usa
+                 std/http (des-chunkea de verdad, da el status y manda UA propio).
+src/sismos.nx    Cliente EMSC (net_get), parser FDSN text, all_quakes() (fusión con
                  FUNVISIS + dedup por tiempo+coords), caché, tabla HTML con data-*.
+                 sismos_ts() = máx(ts EMSC, ts FUNVISIS) — el "Actualizado" de /sismos.
 src/funvisis.nx  Cliente FUNVISIS (http_get, HTTP plano, feed maravilla.json), mapeo de
                  campos mal nombrados a registros, caché en RAM.
 src/kv.nx        Cliente mínimo RESP2+TLS para nyx-kv (tls_* builtins). Conexión corta por request.
@@ -150,6 +157,27 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
 
 ## Reglas críticas / gotchas (NO romper)
 
+- **NUNCA parsear un número de fuera sin validar: `string_to_int`/`string_to_float`
+  ABORTAN EL PROCESO** (runtime/strings.c) con entrada no numérica — no devuelven 0 ni
+  fallan de forma atrapable. Como todo el sitio es UN proceso, un solo valor corrupto se
+  lleva el servidor Y los hilos (push, refresher). **Usar SIEMPRE `to_int0`/`to_float0`
+  de `src/num.nx`.** OJO con `""`: también aborta (no solo las strings no numéricas).
+  - **Incidente 2026-07-16 06:32:43 UTC** (el servicio murió; systemd lo revivió):
+    `💥 Runtime Error: String '2\r\n3d1c\r\n1' no es un número válido`. `3d1c` = 15644 =
+    **tamaño de chunk hexadecimal**: un marcador de `Transfer-Encoding: chunked` se coló
+    DENTRO de un número (ver el gotcha siguiente). Reproducible: `string_to_float("2\r\n3d1c\r\n1")`.
+  - El viejo `to_int0` de `src/push.nx` **NO era seguro** pese a llamarse "parseo seguro" (y a
+    que este archivo lo vendía como tal): filtraba `""`/`"__NULL__"` y luego llamaba
+    `string_to_int` a pelo. Mismo defecto tenía `sql_count` (`src/sqldb.nx`) y `sf` (`src/rates.nx`).
+    Ahora todos delegan en `src/num.nx`, que valida el string COMPLETO.
+- **`https_get` (builtin del runtime) NO desencapsula `Transfer-Encoding: chunked`** —
+  devuelve el body con los marcadores de tamaño DENTRO. El propio `runtime/tls.c:22-24` lo
+  admite ("we do not decode chunk framing… This is sufficient for API responses"): no lo es.
+  **CriptoYa y bolsadecaracas.com responden chunked.** Mientras la respuesta cabe en UN chunk
+  el marcador queda ANTES del cuerpo y los parsers lo saltan sin enterarse (por eso pasó meses
+  desapercibido); en cuanto pasa de un chunk, cae DENTRO y parte un valor por la mitad.
+  **Usar `net_get` (`src/net.nx`), NUNCA `https_get`.** `std/http` sí des-chunkea (por eso
+  `src/funvisis.nx` con `http_get` estaba a salvo). Arreglar el runtime es tarea del monorepo.
 - **NO usar `req.query`**: `req.query.get(...)` devuelve un puntero basura →
   `GC Out of Memory + SEGV` (bug del lenguaje; `req.params.get` SÍ funciona).
   Pasar datos al cliente por **localStorage** y hacer el trabajo client-side.
@@ -267,14 +295,37 @@ packages/        nyx-serve vendoreado + nyx-db vendoreado (9 módulos del modo e
     este host; en 2026-07 volvió a responder, pero se mantiene EMSC como fuente
     fronteriza/offshore, complementada por FUNVISIS para los locales.)
 - Columnas FDSN: 0 EventID, 1 Time, 2 Lat, 3 Lon, 4 Depth, 9 MagType, 10 Mag, 12 Lugar.
-- **Inclusión por GEOGRAFÍA, no por nombre** (`quake_in_region` en src/sismos.nx): el
-  filtro antiguo `place.indexOf("VENEZUELA")` descartaba ~la mitad de los eventos de
-  la caja (sismos sentidos en Venezuela con etiqueta vecina: NORTHERN COLOMBIA / GULF
-  OF PARIA / TRINIDAD / CARIBBEAN SEA → **causaban "no se registró"**). Ahora se
-  incluye si el nombre contiene VENEZUELA **o** el epicentro cae en la caja ajustada
-  lat 0.5..12.9 / lon -73.6..-60.5 (excluye Barbados/Windward por lon > -60.5). El
-  helper se aplica dentro de `emsc_records()` (única fuente que lo necesita; los
-  eventos FUNVISIS ya vienen todos en tierra); el render consume `all_quakes()`.
+- **Inclusión: nombre O POLÍGONO** (`quake_in_region` + `point_in_ve`, src/sismos.nx).
+  Se incluye si el nombre contiene VENEZUELA (EMSC es la autoridad sobre sus eventos)
+  **o** si el epicentro cae dentro del **polígono Venezuela + ~60 km** (`ve_poly_init`,
+  39 vértices, ray casting). Hacen falta las dos vías: filtrar SOLO por nombre
+  descartaba ~la mitad de los eventos reales (sismos sentidos aquí con etiqueta vecina:
+  NORTHERN COLOMBIA / GULF OF PARIA / TRINIDAD / CARIBBEAN SEA → "no se registró").
+  Se aplica en `emsc_records()` (los eventos FUNVISIS vienen ya de la agencia
+  venezolana); el render y el push consumen `all_quakes()`, así que **lista y alertas
+  comparten criterio**.
+- **POR QUÉ un polígono y no una caja** (2026-07-16): **Venezuela es CÓNCAVA**, así que
+  cualquier rectángulo que la contenga (Zulia al oeste, Delta Amacuro al este) contiene
+  también Bucaramanga, Guyana entera y el norte de Brasil. La caja anterior
+  (lat 0.5..12.9 / lon -73.6..-60.5) no estaba mal calibrada: la herramienta no daba
+  para más. Medido sobre los 211 eventos del feed de ese día, dejaba pasar **65 M≥3.5
+  de Colombia — 48 del nido de Bucaramanga** (~6.75/-73.03, uno de los enjambres más
+  activos del mundo: M4+ a diario a ~116 km de la frontera y profundos, no se sienten
+  aquí), más Grenada/Tobago y un M6.3 en Colombia central a ~700 km. Es decir, ~1/3 de
+  las alertas era ruido de vecinos. Con el polígono: 211 → 132 eventos, 0 del nido.
+- **El criterio es la DISTANCIA, no la nacionalidad**: un M4.9 *colombiano* a ~40 km de
+  San Cristóbal SÍ entra (se siente); el nido de Bucaramanga NO. El polígono incluye
+  las **dependencias federales** (Los Roques, La Orchila, La Blanquilla, Los Testigos),
+  el Golfo de Paria y Trinidad occidental, y la franja costa afuera del norte de Paria
+  (falla de El Pilar). Al norte de Paria la línea es **arbitraria ±15 km** (un OFFSHORE
+  SUCRE y un GRENADA REGION pueden estar a 16 km); ahí decide el atajo por nombre.
+- **Al tocar el polígono: `node tests/poly-check.mjs`** (50 puntos de control; extrae
+  los vértices del propio `src/sismos.nx`, no los duplica). Con un volcado
+  `lat|lon|mag|place` como argumento, además reparte los eventos reales dentro/fuera.
+- **GOTCHA del compilador**: los holders `__ve_lon`/`__ve_lat` se inicializan con `[0]`
+  (int) y NO con `[0.0]`, aunque contengan floats: un literal **float en un array
+  GLOBAL** revienta el codegen (`call void @nyx_array_push(..., i64 0.0)` → clang:
+  "floating point constant invalid for type"). Los floats se asignan en `ve_poly_init()`.
 - Caché del cuerpo crudo en memoria (TTL 3 min, `sismos_ts()`); refresher warmea
   sismos cada 10 min (main.nx; noticias/tasas siguen cada 30 min).
 - El servidor emite la tabla completa (SEO/no-JS) + `<textarea id="s-data" hidden>`
@@ -477,15 +528,31 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   temas elegidos, no con los defaults. El **chat va coalescido/throttleado** (1 aviso/sala/5 min); el
   flag `push_chat_dirty` se consume **SOLO al notificar** (dentro de la ventana se conserva para
   avisar al expirar; borrarlo antes descartaba mensajes en vez de coalescerlos).
-- **Envío fuera del hilo de request**: hilo `push_worker` (cada 30s) con **watermarks en meta**:
-  `push_wm_sismos` (epoch del más reciente ya visto; se recorren TODOS los eventos con epoch > wm y se
-  notifica cada M≥`PUSH_MAG_MIN`=3.5 — mirar solo `qs[0]` se tragaba un sismo fuerte tapado por una
-  réplica más reciente del mismo lote), `push_wm_tasa` (valor BCV previo),
-  `push_chat_dirty:<sala>`/`push_chat_last:<sala>`. `push_chat_mark(sala)` se llama desde
-  `handle_chat_send` con `chat_body_room()` (la MISMA normalización default+trim que usa `chat_post`;
-  parsear el body aparte creaba claves meta fantasma con throttle propio). En `push_send_topic` el
-  payload se arma una vez y el **JWT VAPID se cachea por audiencia**; el payload lleva `tag` = tema
-  (el SW lo usa: sin él todas las notificaciones compartían tag y se pisaban entre temas).
+- **Envío fuera del hilo de request**: hilo `push_worker` (cada 30s). Tasas y chat van por
+  **watermarks en meta** (`push_wm_tasa` = valor BCV previo, `push_chat_dirty:<sala>`/
+  `push_chat_last:<sala>`). `push_chat_mark(sala)` se llama desde `handle_chat_send` con
+  `chat_body_room()` (la MISMA normalización default+trim que usa `chat_post`; parsear el body
+  aparte creaba claves meta fantasma con throttle propio). En `push_send_topic` el payload se
+  arma una vez y el **JWT VAPID se cachea por audiencia**.
+- **Sismos: dedup por ID DE EVENTO (tabla `push_seen(id, ts)`), NO por watermark de tiempo.**
+  `push_wm_sismos` quedó como valor informativo; quien decide es `push_seen`. Un watermark de
+  epoch perdía sismos de dos formas: (1) el epoch tiene granularidad de **minuto** (ni
+  `emsc_iso_epoch` ni `fv_iso_epoch` parsean segundos), así que en un enjambre el segundo evento
+  del mismo minuto caía en `epoch <= wm` **y además cortaba el bucle ahí**; (2) con **dos feeds de
+  latencia distinta**, un evento EMSC reciente subía el watermark por encima de un sismo local que
+  FUNVISIS aún no había publicado → al llegar, descartado PARA SIEMPRE. Ventana de candidatos
+  `PUSH_SISMO_MAXAGE`=6h, tope `PUSH_SISMO_BURST`=5 por tick (los más FUERTES, no los más
+  recientes), poda a 48h. **La siembra inicial se marca con `push_seen_init` en meta, NO con
+  `push_wm_sismos`**: al desplegar sobre una instalación existente el watermark ya existía pero la
+  tabla nacía vacía → se habrían re-notificado de golpe los M≥3.5 de las últimas 6h (mismo caso si
+  se pierde el `.ndb`).
+- **`tag` = qué reemplaza a qué**: dos notificaciones con el mismo tag NO se apilan, la nueva
+  sustituye a la vieja. Tasas/chat mandan el **tema** (solo interesa el último valor); sismos manda
+  **`sismo-<id>`, uno por evento** — con el tag fijo `"sismos"` un lote colapsaba en UNA sola
+  notificación y encima sobrevivía la del sismo **más flojo** (se emitía de nuevo a viejo, y la
+  última entregada gana). El SW pasa **`renotify: true`**: sin él un reemplazo entra MUDO (no suena
+  ni vibra) y un M6.0 podía sustituir a un aviso no leído sin avisar. Se emite de viejo→nuevo para
+  que el más reciente quede arriba en la pila.
 - **Cliente = JS suelto en `src/layout.nx`** (la pasarela wasm NO expone `pushManager`/`serviceWorker.
   ready`): widget `#push-box` **GLOBAL en el pie** (`<footer>` de `page_v`, todas las páginas
   full_chrome; NO en la Calculadora), revelado solo si el navegador soporta push. Botón `#push-btn`
@@ -495,10 +562,19 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
 - **Verificar sin esperar un sismo**: `/admin` → "Enviar prueba" (POST /admin/push, CSRF) →
   `push_send_test_async(tema,…)` (hilo aparte: los envíos van en serie con hasta ~10s por endpoint
   colgado; dentro del request daban 502 del gateway → reintento → duplicados). La URL de destino
-  la elige el worker según el tema (/sismos, /finanzas, /chat). También muestra el nº de suscripciones.
-- **GOTCHAS que costaron** (ver memoria): `string_to_int("")` **aborta el proceso** (usar `to_int0`);
-  leer un int de un Array NATIVO como String = **SEGV** (el registro de sismos: `rec[8]` epoch es int);
-  `pub` es palabra reservada (no usar de nombre de var).
+  la elige el worker según el tema (/sismos, /finanzas, /chat). También muestra el nº de suscripciones
+  y el **resultado de la última prueba** (`push_test_summary`, meta `push_test_result`): el hilo
+  persiste `ok/expiradas/errores + último código` porque el POST ya redirigió cuando terminan los
+  envíos. Antes solo se contaban INTENTOS → 40 envíos correctos y 40 rechazos 403 (clave VAPID mala)
+  se veían idénticos, y la única herramienta de diagnóstico no diagnosticaba nada.
+- **Desmarcar TODOS los temas = baja**: en `push_subscribe` el `DELETE` va PRIMERO e incondicional.
+  Antes el `return "Sin temas"` iba ANTES del DELETE → la fila vieja sobrevivía y **los avisos
+  seguían llegando**; encima el cliente lo llama con `silent=true`, así que no se veía ningún error.
+- **GOTCHAS que costaron** (ver memoria): `string_to_int`/`string_to_float` **abortan el proceso**
+  con CUALQUIER entrada no numérica, `""` incluido (usar `to_int0`/`to_float0` de `src/num.nx` —
+  el viejo `to_int0` de este archivo NO validaba y abortaba igual); leer un int de un Array NATIVO
+  como String = **SEGV** (el registro de sismos: `rec[8]` epoch es int); `pub` es palabra reservada
+  (no usar de nombre de var).
 
 ## Pendientes / ideas (backlog)
 
@@ -542,6 +618,15 @@ Sin prioridad estricta; tomar lo que aporte.
       tasa BCV ya se afinó: `tasa_2dec` en src/push.nx muestra 2 decimales con coma, 2026-07-15.)
 - [ ] **Notification API local en foco** (badge con pestaña oculta cuando el WS empuja) — opcional,
       complementa el push (que es para la app cerrada).
+- [ ] **`notificationclick` enfoca sin navegar** (`static/sw.js`): si ya hay una pestaña abierta en
+      `/sismos`, la enfoca pero NO la recarga → el usuario ve la lista vieja, sin el sismo del aviso.
+      Falta `.navigate(u)` antes del `focus()` (detectado 2026-07-16, fuera del alcance de ese cambio).
+- [ ] **TTL del push fijo en 24h** (`std/webpush.nx:69`, monorepo): un teléfono apagado recibe al
+      reconectar alertas sísmicas rancias como si fueran de ahora. Reportado en `NyxLang/TASKS.md`.
+- [ ] **Caja de `quake_in_region` muy generosa** (`src/sismos.nx`): el rectángulo lat 0.5..12.9 /
+      lon -73.6..-60.5 incluye oriente colombiano, Guyana entera y norte de Brasil — un sismo a
+      ~1000 km de Venezuela entra en "Sismos recientes en Venezuela". Y el `minmag=2.5` del fetch no
+      cuadra con el "magnitud ≥ 2" del lede de `/sismos`.
 - [ ] **Más artículos** en `content/articles/` (+ slug en `content/index.txt`).
 
 ## Hecho (hitos)

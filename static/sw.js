@@ -3,7 +3,7 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v68';
+const CACHE = 'veninfo-v69';
 const SHELL = ['/', '/calculadora', '/assets/style.css?v=68', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest'];
 
 self.addEventListener('install', function (e) {
@@ -22,9 +22,13 @@ self.addEventListener('activate', function (e) {
 });
 
 // Web Push: muestra la notificacion cuando llega un push del servidor.
-// El server manda `tag` = tema (sismos/tasas/chat): asi solo se reemplazan entre
-// si avisos del MISMO tema (con tag unico fijo, una tasa BCV tapaba en silencio
-// una alerta de sismo no leida).
+// `tag` decide que reemplaza a que: dos notificaciones con el mismo tag no se
+// apilan, la nueva sustituye a la vieja. El server manda el TEMA en tasas/chat
+// (solo interesa el ultimo valor) y un tag POR EVENTO en sismos ("sismo-<id>"),
+// porque cada sismo es una noticia distinta: con tag compartido, de un lote solo
+// sobrevivia una notificacion.
+// renotify: sin el, un reemplazo entra MUDO (no suena ni vibra) — un M6.0 que
+// sustituia a un aviso no leido pasaba desapercibido. Exige tag, que siempre va.
 self.addEventListener('push', function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = {}; }
@@ -34,7 +38,8 @@ self.addEventListener('push', function (e) {
     data: { url: d.u || '/' },
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: d.tag || 'veninfo'
+    tag: d.tag || 'veninfo',
+    renotify: true
   };
   e.waitUntil(self.registration.showNotification(title, opts));
 });

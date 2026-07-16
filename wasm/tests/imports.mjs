@@ -409,6 +409,18 @@ export async function afterStart({ exports, nyx }) {
   eq(texts["#s-updated"], "Actualizado 08:35", "s-updated local");
   console.log("ok sismos_boot (textarea + epoch/hora local derivados en Nyx)");
 
+  // Epoch 0 (ninguna fuente ha descargado todavia): NO pintar "Actualizado".
+  // Antes pasaba el length()>0 y civil_parts(0) escribia la hora del epoch 0
+  // ("Actualizado 20:00", de 1969) sobre una pagina que si tenia datos.
+  delete texts["#s-updated"];
+  values["#s-upd-epoch"] = "0";
+  exports.sismos_boot();
+  if (texts["#s-updated"] !== undefined) {
+    throw new Error("FALLO: con s-upd-epoch=0 no debe escribirse #s-updated, se escribio: " + texts["#s-updated"]);
+  }
+  console.log("ok s-updated vacio con epoch 0 (sin fecha de 1969)");
+  values["#s-upd-epoch"] = "1783082100";
+
   // Fase E: expand de noticias (news_toggle vía #n-sel + nth-child)
   toggles.length = 0;
   values["#n-sel"] = "3";

@@ -1,0 +1,59 @@
+// src/net.nx — cliente HTTP(S) de salida del sitio. UN solo sitio por el que
+// bajamos datos de terceros (BCV, EMSC, CriptoYa, DolarAPI, RSS de noticias).
+//
+// POR QUÉ NO usamos el builtin https_get: NO desencapsula Transfer-Encoding:
+// chunked. El propio runtime lo admite (NyxLang/runtime/tls.c:22-24):
+//     "Chunked transfer encoding: we do not decode chunk framing. The raw body
+//      bytes (including any chunk-size lines) are returned as-is. This is
+//      sufficient for API responses and JSON payloads."
+// No es suficiente: criptoya.com responde chunked en HTTP/1.1. Mientras la
+// respuesta cabe en UN chunk el marcador queda ANTES del JSON y los parsers lo
+// saltan sin enterarse; en cuanto pasa de un chunk, el marcador cae DENTRO y
+// parte un número por la mitad -> string_to_float aborta el PROCESO. El sitio se
+// cayó así el 2026-07-16 06:32:43 UTC (ver src/num.nx).
+//
+// std/http SÍ des-chunkea (http_parse_raw_response mira la cabecera real), así
+// que aquí se usa su camino TLS. Ventajas de paso: tenemos el STATUS (https_get
+// devuelve solo el body: un 403 era indistinguible de éxito) y podemos mandar un
+// User-Agent descriptivo (el builtin manda "Nyx/1.0", que a Wikipedia le vale un
+// bloqueo por ráfaga — ver wiki_get en src/baquiano.nx).
+//
+// http_parse_url/http_build_request/http_tls_request/http_get salen de std/http
+// por scope global (lo importa src/main.nx); no hay que importarlo aquí.
+//
+// OJO: NO desactiva la validación de certificados — es que nunca estuvo activa.
+// tls_connect y https_get comparten el mismo get_ssl_ctx() con SSL_VERIFY_NONE
+// (runtime/tls.c:74), así que el cert roto de bcv.org.ve sigue funcionando igual.
+
+const NET_UA: String = "venezuelainfo.org/1.0 (+https://venezuelainfo.org)"
+
+// Body de una respuesta de std/http, "" si el status no es 2xx (o si la conexión
+// falló: http_tls_request devuelve status -1). Todos los llamadores ya tratan ""
+// como fallo y conservan su caché, así que no hay que cambiar su lógica.
+fn net_resp_body(resp: Array) -> String {
+    let status: int = resp[1]
+    if status < 200 or status >= 300 {
+        return ""
+    }
+    let body: String = resp[3]
+    return body
+}
+
+// GET de una URL externa. Devuelve el body YA des-chunkeado, o "" ante fallo.
+// Sustituye a https_get en todo el proyecto.
+pub fn net_get(url: String) -> String {
+    let parsed: Array = http_parse_url(url)
+    let secure: int = parsed[4]
+    if secure == 1 {
+        let host: String = parsed[1]
+        let port: int = parsed[2]
+        let path: String = parsed[3]
+        let hd: Array = ["User-Agent", NET_UA, "Accept", "*/*"]
+        let req: String = http_build_request("GET", host, path, hd, "")
+        let resp: Array = http_tls_request(host, port, req)
+        return net_resp_body(resp)
+    }
+    // HTTP plano: http_get de std/http ya des-chunkea por su cuenta
+    // (http_read_chunked_fd). Es el camino que usa src/funvisis.nx.
+    return net_resp_body(http_get(url))
+}

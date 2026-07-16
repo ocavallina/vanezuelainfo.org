@@ -26,6 +26,125 @@ const CACHE_TTL: int = 180
 pub fn sismos_init() {
     __emsc_body = [""]
     __emsc_ts = [0]
+    ve_poly_init()
+}
+
+// ── Polígono de Venezuela + ~60 km de margen ────────────────────────────────
+// Sustituye a la caja lat 0.5..12.9 / lon -73.6..-60.5. POR QUÉ no una caja:
+// Venezuela es CÓNCAVA, así que cualquier rectángulo que la contenga (Zulia al
+// oeste, Delta Amacuro al este) contiene también el nido de Bucaramanga, Guyana
+// entera y el norte de Brasil. No era una caja mal calibrada: la herramienta no
+// daba para más. Medido sobre los 211 eventos del feed del 2026-07-16, la caja
+// dejaba pasar 65 eventos M≥3.5 de Colombia — 48 de ellos del nido de
+// Bucaramanga (~6.75/-73.03), que produce M4+ a diario a ~116 km de la frontera
+// y a gran profundidad (no se sienten aquí) — más Grenada, Tobago y un M6.3 en
+// Colombia central a ~700 km. Con esto el criterio es la DISTANCIA, no la
+// nacionalidad: un M4.9 colombiano pegado a Cúcuta (~40 km de San Cristóbal) SÍ
+// entra, y el nido de Bucaramanga NO.
+//
+// Los vértices son la frontera real desplazada ~0.55° (~60 km) hacia afuera, e
+// incluyen las dependencias federales (Los Roques, La Orchila, La Blanquilla,
+// Los Testigos) y la franja costa afuera donde está la falla de El Pilar.
+// Calibrado contra 49 puntos de control (49/49) — ver el bloque de tests.
+// OJO: al norte de Paria la transición Venezuela→Grenada es gradual y la línea
+// es necesariamente arbitraria (±15 km); ahí manda el atajo por nombre de abajo.
+//
+// Holders: un literal de array global multi-elemento NO se materializa fiable
+// (gotcha del proyecto) — se llenan en sismos_init().
+// OJO: el literal va con 0 (int) y NO con 0.0, aunque el contenido real sea float:
+// un literal FLOAT en un array GLOBAL revienta el codegen del compilador — emite
+// `call void @nyx_array_push(..., i64 0.0)` (i64 con constante float) y clang aborta
+// con "floating point constant invalid for type". El contenido float se asigna en
+// ve_poly_init(), donde sí funciona.
+var __ve_lon: Array = [0]
+var __ve_lat: Array = [0]
+
+fn ve_push(lons: Array, lats: Array, lon: float, lat: float) {
+    lons.push(lon)
+    lats.push(lat)
+}
+
+fn ve_poly_init() {
+    let lons: Array = []
+    let lats: Array = []
+    // Caribe (norte), de oeste a este
+    ve_push(lons, lats, -72.05, 12.05)   // mar al NO de la Guajira (Castilletes -71.35/11.83)
+    ve_push(lons, lats, -71.20, 12.55)
+    ve_push(lons, lats, -70.00, 12.75)   // norte de Paraguaná (cabo San Román 12.19)
+    ve_push(lons, lats, -69.30, 12.10)
+    ve_push(lons, lats, -68.20, 11.60)   // frente a Falcón (deja fuera Curazao/Bonaire, a >60 km)
+    ve_push(lons, lats, -67.20, 12.00)   // sube para cubrir Los Roques
+    ve_push(lons, lats, -66.00, 12.05)   // Los Roques (11.85/-66.75) / La Orchila
+    ve_push(lons, lats, -64.30, 12.10)   // La Blanquilla (11.85/-64.60)
+    ve_push(lons, lats, -63.10, 11.95)   // Los Testigos (11.37/-63.10)
+    ve_push(lons, lats, -62.15, 11.50)   // mar al N de Paria (falla de El Pilar)
+    ve_push(lons, lats, -61.30, 11.20)   // NE: Trinidad occidental (a ~15 km de Paria); Grenada fuera
+    ve_push(lons, lats, -60.85, 10.55)   // Trinidad centro
+    ve_push(lons, lats, -60.45, 9.90)    // SE de Trinidad
+    ve_push(lons, lats, -60.00, 9.30)    // Atlántico frente al Delta
+    // Frontera con Guyana (este)
+    ve_push(lons, lats, -59.28, 8.60)    // Punta Playa (-59.83/8.55)
+    ve_push(lons, lats, -59.85, 7.40)
+    ve_push(lons, lats, -59.95, 6.30)
+    ve_push(lons, lats, -60.20, 5.00)    // Roraima (-60.75/5.20)
+    // Frontera con Brasil (sur), de este a oeste
+    ve_push(lons, lats, -60.75, 4.00)    // Santa Elena de Uairén (-61.10/4.60)
+    ve_push(lons, lats, -62.00, 3.35)
+    ve_push(lons, lats, -63.50, 1.70)
+    ve_push(lons, lats, -64.60, 1.15)
+    ve_push(lons, lats, -65.60, 0.55)
+    ve_push(lons, lats, -66.60, 0.60)    // Piedra del Cocuy (-66.85/1.20)
+    // Frontera con Colombia (oeste), de sur a norte
+    ve_push(lons, lats, -67.45, 1.50)
+    ve_push(lons, lats, -67.70, 2.60)
+    ve_push(lons, lats, -68.30, 4.05)    // San Fernando de Atabapo (-67.70/4.05)
+    ve_push(lons, lats, -68.42, 5.20)
+    ve_push(lons, lats, -68.10, 6.30)    // Puerto Carreño (-67.48/6.19)
+    ve_push(lons, lats, -69.20, 5.65)    // el Meta hacia el oeste
+    ve_push(lons, lats, -70.20, 5.60)
+    ve_push(lons, lats, -71.00, 6.45)    // río Arauca
+    ve_push(lons, lats, -71.60, 6.85)
+    ve_push(lons, lats, -72.35, 6.95)    // SO del Táchira
+    ve_push(lons, lats, -72.95, 7.85)    // Cúcuta (-72.50/7.89) — ZONA CRÍTICA: el nido de
+                                         // Bucaramanga (-73.03/6.75) debe quedar FUERA
+    ve_push(lons, lats, -73.05, 8.60)
+    ve_push(lons, lats, -73.45, 9.60)    // Sierra de Perijá (-72.90)
+    ve_push(lons, lats, -73.45, 10.60)
+    ve_push(lons, lats, -72.95, 11.15)
+    __ve_lon = lons
+    __ve_lat = lats
+}
+
+// Ray casting estándar: cuenta cruces de una semirrecta hacia el oeste.
+pub fn point_in_ve(lat: float, lon: float) -> bool {
+    let xs: Array = __ve_lon
+    let ys: Array = __ve_lat
+    let n: int = xs.length()
+    // Sin polígono cargado NO filtramos (mejor de más que tragarse todos los
+    // sismos en silencio si sismos_init no llegó a correr).
+    if n < 3 {
+        return true
+    }
+    var ins: bool = false
+    var i: int = 0
+    var j: int = n - 1
+    while i < n {
+        let xi: float = xs[i]
+        let yi: float = ys[i]
+        let xj: float = xs[j]
+        let yj: float = ys[j]
+        let a: bool = yi > lat
+        let b: bool = yj > lat
+        if a != b {
+            let xint: float = (xj - xi) * (lat - yi) / (yj - yi) + xi
+            if lon < xint {
+                ins = !ins
+            }
+        }
+        j = i
+        i = i + 1
+    }
+    return ins
 }
 
 fn emsc_url() -> String {
@@ -46,7 +165,7 @@ fn emsc_body() -> String {
     let last: int = __emsc_ts[0]
     var body: String = __emsc_body[0]
     if body.length() == 0 or now - last > CACHE_TTL {
-        let fresh: String = https_get(emsc_url())
+        let fresh: String = net_get(emsc_url())
         if fresh.length() > 0 {
             __emsc_body[0] = fresh
             __emsc_ts[0] = now
@@ -56,31 +175,45 @@ fn emsc_body() -> String {
     return body
 }
 
-// Epoch (segundos) de la ultima descarga exitosa.
+// Epoch (segundos) de la ultima descarga exitosa, mirando las DOS fuentes: la
+// tabla sale de all_quakes() (FUNVISIS + EMSC), asi que quedarse solo con el ts de
+// EMSC mentia — con EMSC caido y FUNVISIS respondiendo, la pagina tenia datos
+// frescos pero devolvia 0, y el front pintaba la hora del epoch 0 ("Actualizado
+// 20:00", de 1969). Se devuelve el mas reciente de los dos; 0 solo si no hay ninguno.
 pub fn sismos_ts() -> int {
-    return __emsc_ts[0]
+    let e: int = __emsc_ts[0]
+    let f: int = funvisis_ts()
+    if f > e {
+        return f
+    }
+    return e
 }
 
 fn attr_escape(s: String) -> String {
     return html_escape(s).replace("\"", "&quot;")
 }
 
-// ¿El evento pertenece a Venezuela (o su zona fronteriza sentida)?
-// NO basta con que la etiqueta de EMSC diga "VENEZUELA": muchos sismos sentidos
-// en Venezuela llevan etiqueta del país/región vecina (NORTHERN COLOMBIA, el nido
-// de Bucaramanga; GULF OF PARIA / TRINIDAD; CARIBBEAN SEA). Por eso, además del
-// nombre, aceptamos por GEOGRAFÍA: epicentro dentro de una caja ajustada a
-// Venezuela + margen fronterizo. Excluye Barbados/Windward lejanos (lon > -60.5).
+// ¿El evento es de Venezuela (o de su franja fronteriza, donde SÍ se siente)?
+// Dos vías, y las dos hacen falta:
+//  1. La etiqueta de EMSC dice VENEZUELA -> pase directo. Es la autoridad sobre
+//     sus propios eventos, y resuelve limpiamente la franja costa afuera del
+//     norte de Paria, donde la línea geográfica es arbitraria (un OFFSHORE SUCRE
+//     y un GRENADA REGION pueden estar a 16 km uno de otro).
+//  2. Si no, GEOGRAFÍA: epicentro dentro del polígono Venezuela + ~60 km. Hace
+//     falta porque muchos sismos sentidos aquí llevan etiqueta vecina (NORTHERN
+//     COLOMBIA, GULF OF PARIA, TRINIDAD, CARIBBEAN SEA); filtrar solo por nombre
+//     descartaba ~la mitad de los eventos reales.
+// Ver ve_poly_init() para por qué es un polígono y no una caja.
 fn quake_in_region(lat_s: String, lon_s: String, place: String) -> bool {
     if place.indexOf("VENEZUELA") >= 0 {
         return true
     }
-    let lat: float = string_to_float(lat_s)
-    let lon: float = string_to_float(lon_s)
-    if lat >= 0.5 and lat <= 12.9 and lon >= -73.6 and lon <= -60.5 {
-        return true
-    }
-    return false
+    // to_float0 (src/num.nx), NO string_to_float: lat/lon vienen del feed y un
+    // valor corrupto abortaría el proceso. Basura -> 0.0 -> (0,0) cae en el golfo
+    // de Guinea, fuera del polígono -> el evento se descarta, que es lo que queremos.
+    let lat: float = to_float0(lat_s)
+    let lon: float = to_float0(lon_s)
+    return point_in_ve(lat, lon)
 }
 
 // Epoch UTC de un ISO EMSC "2026-07-07T08:41:38.68Z" (siempre Z/UTC). 0 si corto.
@@ -88,11 +221,17 @@ fn emsc_iso_epoch(iso: String) -> int {
     if iso.length() < 16 {
         return 0
     }
-    let y: int = string_to_int(iso.substring(0, 4))
-    let mo: int = string_to_int(iso.substring(5, 7))
-    let d: int = string_to_int(iso.substring(8, 10))
-    let h: int = string_to_int(iso.substring(11, 13))
-    let mi: int = string_to_int(iso.substring(14, 16))
+    // to_int0 (src/num.nx), NO string_to_int: el ISO viene del feed y un campo
+    // corrupto abortaría el proceso.
+    let y: int = to_int0(iso.substring(0, 4))
+    let mo: int = to_int0(iso.substring(5, 7))
+    let d: int = to_int0(iso.substring(8, 10))
+    let h: int = to_int0(iso.substring(11, 13))
+    let mi: int = to_int0(iso.substring(14, 16))
+    // Fecha no plausible (campo corrupto) -> 0: el llamador ya descarta el epoch 0.
+    if y < 2000 or mo < 1 or d < 1 {
+        return 0
+    }
     return fv_days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60
 }
 

@@ -21,6 +21,12 @@ const VAPID_SUBJECT: String = "mailto:ottaviocavallinaleon@gmail.com"
 const PUSH_MAG_MIN: float = 3.5
 const CHAT_THROTTLE: int = 300
 const VAPID_FILE: String = "/home/admin/.veninfo-vapid-key"
+// Sismos: solo se consideran eventos de las últimas 6 h (los feeds pueden publicar
+// tarde; más allá de eso el aviso ya no es noticia). Tope por tick para no vaciar
+// la batería en un enjambre. Retención del registro de ya-notificados.
+const PUSH_SISMO_MAXAGE: int = 21600
+const PUSH_SISMO_BURST: int = 5
+const PUSH_SEEN_KEEP: int = 172800
 // Tope de longitud del endpoint (los reales pueden superar los 256 del sql_esc
 // por defecto; WNS llega a ~450+). Se usa con sql_esc_n en TODA query de endpoint.
 const PUSH_EP_MAX: int = 2048
@@ -44,17 +50,10 @@ fn ends_with(s: String, suf: String) -> bool {
     return s.substring(n - m, n) == suf
 }
 
-// Parseo seguro: string_to_int LANZA runtime error con "" (no devuelve 0). Las
-// filas vacías / NULL de nyx-db y los watermarks ausentes llegan como "" o "__NULL__".
-fn to_int0(s: String) -> int {
-    if s.length() == 0 {
-        return 0
-    }
-    if s == "__NULL__" {
-        return 0
-    }
-    return string_to_int(s)
-}
+// to_int0 vivía aquí y NO era seguro (filtraba "" y "__NULL__" y luego llamaba
+// string_to_int a pelo -> abortaba con basura tipo "3d1c"). Ahora está en
+// src/num.nx, validado de verdad, junto a to_float0. Scope global plano: se usa
+// igual, sin importar nada.
 
 // Escape mínimo para meter un valor en un JSON de una línea (payload del push).
 fn pjson_esc(s: String) -> String {
@@ -112,6 +111,11 @@ fn vapid_kp_ok(kpb: String) -> bool {
 pub fn push_init() {
     // Idempotente (si ya existe, sql_exec devuelve -1 y se ignora).
     sql_exec("CREATE TABLE push_subs (endpoint TEXT, p256dh TEXT, auth TEXT, topics TEXT, created INTEGER)")
+    // Sismos ya notificados, por ID de evento. En TABLA y no en meta a propósito:
+    // meta_set escribe con sql_esc, que CAPA a 256 chars (src/sqldb.nx) — una lista
+    // de ids se truncaría en silencio a la docena de eventos y volveríamos a avisar
+    // de sismos viejos. Se poda por tick (PUSH_SEEN_KEEP).
+    sql_exec("CREATE TABLE push_seen (id TEXT, ts INTEGER)")
 
     // Keypair: env > meta (nyx-db) > respaldo en disco > generar. Cada fuente se
     // VALIDA (vapid_kp_ok) antes de usarse. El respaldo existe justamente para
@@ -148,6 +152,33 @@ pub fn vapid_pub_b64() -> String {
 // Nº de suscripciones activas (para el panel admin).
 pub fn push_sub_count() -> int {
     return sql_count("SELECT COUNT(*) FROM push_subs")
+}
+
+// Resumen legible de la última "Enviar prueba" (lo persiste push_test_worker desde
+// su hilo: el POST /admin/push ya ha redirigido cuando terminan los envíos). "" si
+// nunca se lanzó ninguna. Sin esto, la única herramienta de diagnóstico del push no
+// diagnosticaba nada: 40 envíos correctos y 40 rechazos 403 se veían idénticos.
+pub fn push_test_summary() -> String {
+    let raw: String = meta_get("push_test_result")
+    let p: Array = raw.split("|")
+    if p.length() < 7 {
+        return ""
+    }
+    let ts: String = p[0]
+    let topic: String = p[1]
+    let sent: String = p[2]
+    let ok: String = p[3]
+    let gone: String = p[4]
+    let err: String = p[5]
+    let last: String = p[6]
+    var s: String = "Ultima prueba (" + topic + ") hace " + rel_txt(time() - to_int0(ts)) + ": " + sent + " enviados, " + ok + " OK"
+    if to_int0(gone) > 0 {
+        s = s + ", " + gone + " expiradas (borradas)"
+    }
+    if to_int0(err) > 0 {
+        s = s + ", " + err + " con error (ultimo codigo " + last + ")"
+    }
+    return s
 }
 
 // ── Suscripción ─────────────────────────────────────────────────────────────
@@ -218,11 +249,17 @@ pub fn push_subscribe(body: String) -> String {
         return "Origen no permitido"
     }
     let topics: String = clean_topics(topics_raw)
-    if topics.length() == 0 {
-        return "Sin temas"
-    }
     let ee: String = sql_esc_n(endpoint, PUSH_EP_MAX)
+    // El DELETE va PRIMERO e incondicional. Antes el `return "Sin temas"` estaba
+    // ANTES del DELETE: quien desmarcaba todos los temas dejaba viva la fila vieja
+    // (con los 3 temas) y SEGUÍA recibiendo avisos. Encima el cliente lo llama con
+    // silent=true (src/layout.nx), así que ni veía el error: desmarcabas todo, no
+    // pasaba nada visible, y los sismos seguían sonando.
     sql_exec("DELETE FROM push_subs WHERE endpoint = '" + ee + "'")
+    // Sin temas = baja voluntaria, no error: el DELETE de arriba ya la efectuó.
+    if topics.length() == 0 {
+        return ""
+    }
     sql_exec("INSERT INTO push_subs VALUES ('" + ee + "', '" + sql_esc(p256dh) + "', '" + sql_esc(auth) + "', '" + sql_esc(topics) + "', " + int_to_string(time()) + ")")
     return ""
 }
@@ -247,9 +284,11 @@ fn audience_of(endpoint: String) -> String {
     return "https://" + host
 }
 
-// Payload JSON del push. `tag` = tema: el SW lo usa como tag de la notificación
-// para que solo se REEMPLACEN entre sí avisos del mismo tema (sin él, todas caían
-// en el tag fijo 'veninfo' y una tasa BCV podía tapar una alerta de sismo no leída).
+// Payload JSON del push. `tag` decide QUÉ REEMPLAZA A QUÉ en el sistema: dos
+// notificaciones con el mismo tag no se apilan, la nueva sustituye a la vieja.
+// Por tema (tasas/chat) es lo que queremos: solo interesa el último valor. Por
+// evento (sismos: tag "sismo-<id>") también, porque cada sismo es una noticia
+// distinta y con tag compartido el lote entero colapsaba en UNA sola notificación.
 fn push_payload(title: String, body: String, url: String, tag: String) -> String {
     return "{\"t\":\"" + pjson_esc(title) + "\",\"b\":\"" + pjson_esc(body) + "\",\"u\":\"" + pjson_esc(url) + "\",\"tag\":\"" + pjson_esc(tag) + "\"}"
 }
@@ -289,17 +328,26 @@ fn topic_in(csv: String, t: String) -> bool {
     return false
 }
 
-// Envía un push a todas las suscripciones cuyo `topics` incluya `topic`. Devuelve nº de envíos.
+// Envía un push a todas las suscripciones cuyo `topics` incluya `topic`.
+// `tag` = tag de la notificación (ver push_payload): normalmente el propio tema,
+// pero sismos manda uno POR EVENTO para que no se tapen entre sí.
 // El payload se arma UNA vez y el JWT VAPID se cachea POR AUDIENCIA (la firma ECDSA
 // solo depende del host; casi todos los endpoints comparten fcm.googleapis.com) —
 // solo el cifrado (webpush_encrypt) es inherentemente por-suscriptor.
-pub fn push_send_topic(topic: String, title: String, body: String, url: String) -> int {
+//
+// Devuelve un resumen "sent|ok|gone|err|last" (antes: solo el nº de INTENTOS, que
+// no distinguía 40 envíos correctos de 40 rechazos 403 por clave VAPID mala).
+pub fn push_send_topic(topic: String, title: String, body: String, url: String, tag: String) -> String {
     let rows: Array = sql_rows("SELECT endpoint, p256dh, auth, topics FROM push_subs")
-    let payload: String = push_payload(title, body, url, topic)
+    let payload: String = push_payload(title, body, url, tag)
     let priv: String = __vpriv[0]
     var auds: Array = []
     var jwts: Array = []
     var sent: int = 0
+    var ok: int = 0
+    var gone: int = 0
+    var err: int = 0
+    var last: int = 0
     var i: int = 1
     while i < rows.length() {
         let row: Array = rows[i]
@@ -324,12 +372,20 @@ pub fn push_send_topic(topic: String, title: String, body: String, url: String) 
                 auds.push(aud)
                 jwts.push(jwt)
             }
-            push_send_raw(ep, pd, au, jwt, payload)
+            let code: int = push_send_raw(ep, pd, au, jwt, payload)
             sent = sent + 1
+            if code >= 200 and code < 300 {
+                ok = ok + 1
+            } else if code == 404 or code == 410 {
+                gone = gone + 1          // suscripción expirada: push_send_raw ya la borró
+            } else {
+                err = err + 1
+                last = code              // -1 = fallo de conexión TLS
+            }
         }
         i = i + 1
     }
-    return sent
+    return int_to_string(sent) + "|" + int_to_string(ok) + "|" + int_to_string(gone) + "|" + int_to_string(err) + "|" + int_to_string(last)
 }
 
 // ── Prueba desde /admin (fuera del hilo de request) ─────────────────────────
@@ -351,7 +407,12 @@ fn push_test_worker() -> int {
     if topic == "chat" {
         url = "/chat"
     }
-    push_send_topic(topic, title, body, url)
+    // El tema como tag: dos pruebas seguidas del mismo tema se reemplazan (con
+    // renotify en el SW, la segunda vuelve a sonar). El resultado se PERSISTE porque
+    // esto corre en un hilo aparte y el POST /admin/push ya redirigió: sin esto,
+    // "Enviar prueba" no podía distinguir 40 envíos correctos de 40 errores 403.
+    let res: String = push_send_topic(topic, title, body, url, topic)
+    meta_set("push_test_result", int_to_string(time()) + "|" + topic + "|" + res)
     return 0
 }
 
@@ -389,49 +450,158 @@ fn push_bcv_latest() -> String {
     return val
 }
 
+// ¿Ya avisamos de este evento? Un solo agregado (nyx-db devuelve NULL si se
+// combinan varios sin GROUP BY — ver CLAUDE.md).
+fn push_seen_has(id: String) -> bool {
+    return sql_count("SELECT COUNT(*) FROM push_seen WHERE id = '" + sql_esc(id) + "'") > 0
+}
+
+fn push_seen_add(id: String) {
+    sql_exec("INSERT INTO push_seen VALUES ('" + sql_esc(id) + "', " + int_to_string(time()) + ")")
+}
+
+// Selection sort de registros por magnitud desc (in-place). Lotes diminutos.
+fn push_sort_by_mag_desc(recs: Array) {
+    var i: int = 0
+    let n: int = recs.length()
+    while i < n {
+        var best: int = i
+        var j: int = i + 1
+        while j < n {
+            let rj: Array = recs[j]
+            let rb: Array = recs[best]
+            let mj: String = rj[6]
+            let mb: String = rb[6]
+            if to_float0(mj) > to_float0(mb) {
+                best = j
+            }
+            j = j + 1
+        }
+        if best != i {
+            let tmp: Array = recs[i]
+            recs[i] = recs[best]
+            recs[best] = tmp
+        }
+        i = i + 1
+    }
+}
+
+// Avisos de sismos. Dedup por ID DE EVENTO (tabla push_seen), no por watermark de
+// tiempo. El watermark solo sobrevive como marca de "primer arranque".
+//
+// POR QUÉ NO un watermark de epoch (el diseño anterior perdía sismos de dos formas):
+//  1. El epoch tiene granularidad de MINUTO (ni emsc_iso_epoch ni fv_iso_epoch
+//     parsean segundos). Dos eventos del mismo minuto compartían epoch, así que el
+//     corte `epoch <= wm` descartaba el segundo Y ADEMÁS cortaba el bucle ahí. Los
+//     enjambres de réplicas producen justo eso.
+//  2. Un solo watermark sobre DOS feeds con latencias distintas: EMSC publica rápido
+//     y FUNVISIS tarda minutos. Un evento EMSC reciente subía el watermark por encima
+//     del epoch de un sismo local que FUNVISIS aún no había publicado -> cuando por
+//     fin llegaba, `epoch <= wm` lo descartaba PARA SIEMPRE.
+// Con dedup por id ambos casos se avisan: lo que decide es si ya lo notificamos.
 fn push_do_sismos() {
     let qs: Array = all_quakes()
     if qs.length() == 0 {
         return
     }
-    let top: Array = qs[0]
-    // OJO: el registro es un Array NATIVO; top[8] (epoch) es int (NO String). Leerlo
-    // como String coacciona i64->ptr -> SEGV. (Las filas de nyx-db sí son todas String.)
-    let newest: int = top[8]
-    let wm: int = to_int0(meta_get("push_wm_sismos"))
-    if newest <= wm {
-        return
-    }
-    // Primera vez (wm==0): fija el watermark sin notificar (no avisar de eventos viejos al arrancar).
-    if wm == 0 {
-        meta_set("push_wm_sismos", int_to_string(newest))
-        return
-    }
-    // Recorrer TODOS los eventos nuevos (epoch > wm), no solo qs[0]: los feeds se
-    // refrescan por lotes (TTL 3 min) y lo normal es que un refresh traiga varios
-    // eventos de golpe — p.ej. un M5+ seguido de una réplica menor MÁS reciente.
-    // Mirando solo qs[0], la réplica avanzaba el watermark y el sismo fuerte
-    // quedaba sin notificar PARA SIEMPRE. qs viene ordenado por epoch desc.
+    let now: int = time()
+    let cutoff: int = now - PUSH_SISMO_MAXAGE
+    // Primera vuelta CON ESTE REGISTRO: sembrar sin notificar, para no volcar el
+    // feed entero encima del usuario. La marca es propia de push_seen y NO el
+    // watermark viejo: al desplegar esto sobre una instalación existente, el
+    // watermark YA existía pero la tabla push_seen nacía vacía -> se habrían
+    // re-notificado de golpe todos los M>=3.5 de las últimas 6 h. Mismo caso si se
+    // pierde el .ndb (ya ha pasado) y la tabla vuelve a empezar de cero.
+    let first: bool = to_int0(meta_get("push_seen_init")) == 0
+
+    // Candidatos: recientes, con magnitud suficiente y no avisados. El filtro de
+    // magnitud va ANTES del lookup en la tabla (comparar floats es más barato que
+    // una query por evento).
+    var cand: Array = []
     var i: int = 0
-    var go: bool = true
-    while go and i < qs.length() {
+    while i < qs.length() {
         let rec: Array = qs[i]
+        // OJO: el registro es un Array NATIVO; rec[8] (epoch) es int (NO String).
+        // Leerlo como String coacciona i64->ptr -> SEGV. (Las filas de nyx-db sí
+        // son todas String.)
         let epoch: int = rec[8]
-        if epoch <= wm {
-            go = false
-        } else {
+        if epoch >= cutoff {
             let mags: String = rec[6]
-            if mags.length() > 0 {
-                let mag: float = string_to_float(mags)
-                if mag >= PUSH_MAG_MIN {
-                    let lugar: String = rec[7]
-                    push_send_topic("sismos", "Sismo M" + mags + " " + lugar, "Toca para ver detalles", "/sismos")
+            // to_float0 (src/num.nx), NO string_to_float: la magnitud sale del feed
+            // (en FUNVISIS, del campo "phone" de una plantilla mal nombrada) y un
+            // valor raro abortaba el proceso ENTERO — matando el sitio y este mismo
+            // hilo de avisos.
+            let mag: float = to_float0(mags)
+            if mag >= PUSH_MAG_MIN {
+                let id: String = rec[0]
+                if !push_seen_has(id) {
+                    cand.push(rec)
                 }
             }
-            i = i + 1
+        }
+        i = i + 1
+    }
+
+    if cand.length() > 0 {
+        // Tope anti-enjambre: si califican demasiados, avisar de los más FUERTES (en
+        // un enjambre el que importa es el mayor, no el último) y dar por vistos el
+        // resto para no arrastrarlos tick tras tick.
+        if cand.length() > PUSH_SISMO_BURST {
+            push_sort_by_mag_desc(cand)
+            var k: int = PUSH_SISMO_BURST
+            while k < cand.length() {
+                let rec: Array = cand[k]
+                let id: String = rec[0]
+                push_seen_add(id)
+                k = k + 1
+            }
+            let top: Array = []
+            var t: int = 0
+            while t < PUSH_SISMO_BURST {
+                top.push(cand[t])
+                t = t + 1
+            }
+            cand = top
+        }
+        // Emitir del más VIEJO al más NUEVO: así el más reciente queda ARRIBA en la
+        // pila de notificaciones del sistema. (qs viene ordenado por epoch desc, y
+        // push_sort_by_mag_desc puede haberlo revuelto, así que se reordena por
+        // epoch desc y se recorre al revés.)
+        sort_recs_desc(cand)
+        var e: int = cand.length() - 1
+        while e >= 0 {
+            let rec: Array = cand[e]
+            let id: String = rec[0]
+            if first {
+                push_seen_add(id)
+            } else {
+                let mags: String = rec[6]
+                let lugar: String = rec[7]
+                // tag POR EVENTO: con el tag fijo "sismos" cada aviso reemplazaba al
+                // anterior, así que de un lote solo quedaba visible el ÚLTIMO
+                // entregado — el más viejo, porque se emitía de nuevo a viejo. Un
+                // M6.0 seguido de un premonitor M3.6 se veía como "Sismo M3.6".
+                push_send_topic("sismos", "Sismo M" + mags + " " + lugar, "Toca para ver detalles", "/sismos", "sismo-" + id)
+                push_seen_add(id)
+            }
+            e = e - 1
         }
     }
-    meta_set("push_wm_sismos", int_to_string(newest))
+
+    // Marca de siembra: se pone SIEMPRE al final de la primera vuelta, aunque no
+    // hubiera candidatos (si no, el primer sismo real seguiría viéndose como
+    // "primera vez" y se sembraría en vez de notificarse).
+    if first {
+        meta_set("push_seen_init", int_to_string(now))
+    }
+    // Watermark: ya solo es informativo (deja de decidir qué se notifica).
+    let top0: Array = qs[0]
+    let newest: int = top0[8]
+    if newest > 0 {
+        meta_set("push_wm_sismos", int_to_string(newest))
+    }
+    // Poda del registro de vistos (la ventana de candidatos es de 6 h; 48 h sobra).
+    sql_exec("DELETE FROM push_seen WHERE ts < " + int_to_string(now - PUSH_SEEN_KEEP))
 }
 
 // "108.236400" -> "108,24": 2 decimales con coma (formato del sitio) y redondeo,
@@ -484,7 +654,7 @@ fn push_do_tasas() {
         meta_set("push_wm_tasa", val)
         return
     }
-    push_send_topic("tasas", "Nueva tasa BCV", "Dolar BCV: Bs " + tasa_2dec(val), "/finanzas")
+    push_send_topic("tasas", "Nueva tasa BCV", "Dolar BCV: Bs " + tasa_2dec(val), "/finanzas", "tasas")
     meta_set("push_wm_tasa", val)
 }
 
@@ -500,7 +670,7 @@ fn push_do_chat() {
             let lastk: String = "push_chat_last:" + room
             let last: int = to_int0(meta_get(lastk))
             if now - last >= CHAT_THROTTLE {
-                push_send_topic("chat", "Nuevos mensajes", "en #" + room, "/chat")
+                push_send_topic("chat", "Nuevos mensajes", "en #" + room, "/chat", "chat")
                 meta_set(lastk, int_to_string(now))
                 // Consumir el flag SOLO al notificar. Dentro de la ventana se
                 // CONSERVA para coalescer: el aviso sale cuando expire el throttle.

@@ -97,18 +97,18 @@ pub fn rates_snapshot() {
         rate_put(os, "bcv", bdolar)
         if beuro.length() > 0 { rate_put(os, "eur", beuro) }
     } else {
-        let bd: String = https_get("https://ve.dolarapi.com/v1/dolares")
+        let bd: String = net_get("https://ve.dolarapi.com/v1/dolares")
         if bd.length() > 0 {
             let bcv: String = dolarapi_oficial(bd)
             if bcv.length() > 0 { rate_put(ds, "bcv", bcv) }
         }
-        let ed: String = https_get("https://ve.dolarapi.com/v1/euros")
+        let ed: String = net_get("https://ve.dolarapi.com/v1/euros")
         if ed.length() > 0 {
             let eur: String = dolarapi_oficial(ed)
             if eur.length() > 0 { rate_put(ds, "eur", eur) }
         }
     }
-    let cd: String = https_get("https://criptoya.com/api/USDT/VES/1")
+    let cd: String = net_get("https://criptoya.com/api/USDT/VES/1")
     if cd.length() > 0 {
         let seg0: int = cd.indexOf("\"binancep2p\"")
         if seg0 >= 0 {
@@ -116,7 +116,10 @@ pub fn rates_snapshot() {
             let ask: String = rt_num(seg, "ask")
             let bid: String = rt_num(seg, "bid")
             if ask.length() > 0 and bid.length() > 0 {
-                let avg: float = (string_to_float(ask) + string_to_float(bid)) / 2.0
+                // to_float0 (src/num.nx), NO string_to_float: viene de CriptoYa,
+                // que responde chunked (ver src/net.nx) — un valor partido por un
+                // marcador de chunk abortaba el proceso.
+                let avg: float = (to_float0(ask) + to_float0(bid)) / 2.0
                 rate_put(ds, "bin", dec2(avg))
             }
         }
@@ -137,10 +140,10 @@ fn cell(rows: Array, i: int, j: int) -> String {
 }
 
 // Parseo seguro: nyx-db devuelve "__NULL__" para NULL (p.ej. agregado vacío).
+// Delega en to_float0 (src/num.nx), que valida el string COMPLETO: comprobar
+// solo ""/"__NULL__" no bastaba (cualquier otra basura abortaba el proceso).
 fn sf(s: String) -> float {
-    if s.length() == 0 { return 0.0 }
-    if s == "__NULL__" { return 0.0 }
-    return string_to_float(s)
+    return to_float0(s)
 }
 
 // Valor de una tasa para un día (ordinal) exacto. "" si no hay.

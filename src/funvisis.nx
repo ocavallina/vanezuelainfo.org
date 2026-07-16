@@ -27,6 +27,13 @@ pub fn funvisis_init() {
     __fv_ts = [0]
 }
 
+// Epoch (segundos) de la ultima descarga exitosa de FUNVISIS. 0 si nunca hubo.
+// Lo usa sismos_ts() para el "Actualizado" de /sismos: mirar solo el timestamp de
+// EMSC mentia cuando EMSC estaba caido pero FUNVISIS respondia.
+pub fn funvisis_ts() -> int {
+    return __fv_ts[0]
+}
+
 // Cuerpo JSON cacheado; descarga por HTTP plano si vacio/vencido. Nunca revienta:
 // ante fallo (status != 200 o body vacio) conserva lo cacheado (o "").
 fn funvisis_body() -> String {
@@ -96,7 +103,10 @@ fn fv_iso_epoch(fecha: String, hora: String) -> Array {
         mi = m0
     }
     let iso: String = yy + "-" + mo + "-" + dd + "T" + hh + ":" + mi + ":00-04:00"
-    let ep: int = fv_days_from_civil(string_to_int(yy), string_to_int(mo), string_to_int(dd)) * 86400 + string_to_int(hh) * 3600 + string_to_int(mi) * 60 + 14400
+    // to_int0 (src/num.nx), NO string_to_int: los campos salen de una plantilla de
+    // FUNVISIS con nombres mal puestos (ver cabecera); basura aquí abortaría el
+    // proceso. El llamador ya descarta el registro si el ISO no cuadra.
+    let ep: int = fv_days_from_civil(to_int0(yy), to_int0(mo), to_int0(dd)) * 86400 + to_int0(hh) * 3600 + to_int0(mi) * 60 + 14400
     let r: Array = [iso, ep]
     return r
 }
@@ -127,8 +137,8 @@ pub fn funvisis_records() -> Array {
             let ie: Array = fv_iso_epoch(fecha, hora)
             let iso: String = ie[0]
             let epoch: int = ie[1]
-            let latx: int = float_to_int(string_to_float(lat) * 100.0)
-            let lonx: int = float_to_int(string_to_float(lon) * 100.0)
+            let latx: int = float_to_int(to_float0(lat) * 100.0)
+            let lonx: int = float_to_int(to_float0(lon) * 100.0)
             if iso.length() > 0 {
                 let id: String = "fv-" + int_to_string(epoch) + "-" + int_to_string(latx) + "-" + int_to_string(lonx)
                 let rec: Array = [id, iso, lat, lon, depth, "ML", mag, place, epoch]

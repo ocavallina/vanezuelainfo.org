@@ -274,6 +274,14 @@ fn render_dashboard(csrf: String) -> String {
     sb.append("<input name=\"body\" placeholder=\"Texto\" value=\"Notificacion de prueba de VenezuelaInfo\">\n")
     sb.append("<button type=\"submit\">Enviar prueba</button>\n")
     sb.append("</form>\n")
+    // Resultado de la última prueba (la escribe el hilo emisor: cuando este POST
+    // redirige, los envíos aún no han terminado).
+    let tres: String = push_test_summary()
+    if tres.length() > 0 {
+        sb.append("<p class=\"lede\">")
+        sb.append(aesc(tres))
+        sb.append("</p>\n")
+    }
     sb.append("<p><a href=\"/\">&larr; Ver el sitio</a></p>\n")
     sb.append("</section>\n")
     return page("Admin", sb.to_string())

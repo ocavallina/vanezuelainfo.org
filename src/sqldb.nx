@@ -53,9 +53,9 @@ pub fn sql_count(sql: String) -> int {
     }
     let row: Array = rows[1]
     let v: String = row[0]
-    if v.length() == 0 { return 0 }
-    if v == "__NULL__" { return 0 }
-    return string_to_int(v)
+    // to_int0 (src/num.nx) valida el string COMPLETO: comprobar solo ""/"__NULL__"
+    // no basta — cualquier otra basura llegaba a string_to_int y ABORTABA el proceso.
+    return to_int0(v)
 }
 
 // Escapa un valor para interpolarlo entre comillas simples en SQL: duplica «'»,

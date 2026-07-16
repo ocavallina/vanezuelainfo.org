@@ -453,7 +453,13 @@ fn s_finish_load() {
 
     // Listeners (por NOMBRE de export; re-entran a este módulo)
     dom_on("#f-mag", "change", "s_refiltrar")
+    // #f-text va con `change` A PROPÓSITO (el wasm NO tiene GC: con `input` cada
+    // tecla dispararía un render y filtraría ~120 KB). Pero `change` en un
+    // <input type=text> solo salta al PERDER EL FOCO, así que en móvil había que
+    // cerrar el teclado para ver el filtro aplicado. js_on_enter cubre el hueco:
+    // Enter filtra ya, sin renders por tecla.
     dom_on("#f-text", "change", "s_refiltrar")
+    js_on_enter("#f-text", "s_refiltrar")
     dom_on("#f-orden", "change", "s_refiltrar")
     dom_on("#f-dist", "change", "s_refiltrar")
     dom_on("#p-prev", "click", "s_prev")
@@ -530,9 +536,11 @@ fn sismos_boot() {
         i = i + 1
     }
     s_finish_load()
-    // "Actualizado HH:MM" (hora local) desde el epoch de la última descarga
+    // "Actualizado HH:MM" (hora local) desde el epoch de la última descarga.
+    // El "0" hay que descartarlo explícitamente: pasa el length() > 0 y
+    // civil_parts(0) pinta la hora del epoch 0 -> "Actualizado 20:00" (1969).
     let ue: String = dom_get_value("#s-upd-epoch")
-    if ue.length() > 0 {
+    if ue.length() > 0 and ue != "0" {
         let up: Array = civil_parts(float_to_int(string_to_float(ue))).split("|")
         let uh: String = up[3]
         let um: String = up[4]

@@ -541,7 +541,7 @@ fn parse_feed(xml: String, source: String, out: Array, cap: int) {
 }
 
 fn fetch_into(out: Array, url: String, source: String) {
-    let xml: String = https_get(url)
+    let xml: String = net_get(url)
     if xml.length() > 0 {
         parse_feed(xml, source, out, 15)
     }
@@ -733,7 +733,7 @@ pub fn news_rotator_html() -> String {
 // ---- Bolsa de Caracas (comunicados + IBC) via RSS de bolsadecaracas.com ----
 fn bvc_refresh() {
     var items: Array = []
-    let xml: String = https_get("https://www.bolsadecaracas.com/feed/")
+    let xml: String = net_get("https://www.bolsadecaracas.com/feed/")
     if xml.length() > 0 {
         parse_feed(xml, "BVC", items, 20)
     }

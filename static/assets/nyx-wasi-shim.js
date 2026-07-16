@@ -223,6 +223,19 @@ export function domBindings(doc) {
     // accesores js_ev_* de std/dom leen de acá (handoff #3a: Event sin
     // closures ni marshalling de objetos).
     const ref = { exports: null, currentEvent: null };
+    // Tabla de handles (Task 2 del framework VDOM): un `int` Nyx identifica
+    // un nodo DOM sin cruzar selectores CSS por el FFI. handles[0]=null a
+    // propósito — el índice 0 es el handle "nulo" (nodo no encontrado).
+    // Cada nodo recibe UN SOLO handle estable (memoizado en __nyxHandle) así
+    // dom_child_at/dom_query_handle devuelven el mismo entero para el mismo
+    // nodo en llamadas repetidas.
+    const handles = [null];
+    const put = (n) => { handles.push(n); return handles.length - 1; };
+    const handleOf = (n) => {
+        if (n == null) return 0;
+        if (n.__nyxHandle === undefined) n.__nyxHandle = put(n);
+        return n.__nyxHandle;
+    };
     const imports = (nyx) => ({
         js_dom_set_text(selPtr, textPtr) {
             const el = d.querySelector(nyx.readString(selPtr));
@@ -339,14 +352,104 @@ export function domBindings(doc) {
             // pairPtr queda vivo post-main (GC=calloc nunca libera en wasm)
             const el = d.querySelector(sel);
             if (!el) return;
-            el.addEventListener(event, (ev) => {
+            // dedupe por (nodo, evento): sin esto cada llamada (p.ej. re-bind de
+            // diff_handlers en cada update() del VDOM) AGREGA otro listener en vez
+            // de reemplazar el anterior — un handler terminaría disparando N veces
+            // tras N updates. Mismo mecanismo que js_dom_on_h.
+            el.__nyxHandlers = el.__nyxHandlers || {};
+            if (el.__nyxHandlers[event]) {
+                el.removeEventListener(event, el.__nyxHandlers[event]);
+            }
+            const cb = (ev) => {
                 ref.currentEvent = ev || null;
                 try { nyx.callClosure(pairPtr); }
                 finally {
                     ref.currentEvent = null;
                     if (ref.afterEvent) ref.afterEvent();
                 }
-            });
+            };
+            el.__nyxHandlers[event] = cb;
+            el.addEventListener(event, cb);
+        },
+        // — Creación/composición de nodos POR HANDLE (Task 2, framework VDOM) —
+        // std/dom.nx: dom_create/dom_append/dom_child_at/... El handle es un
+        // índice en `handles` (int Nyx = i64 → BigInt en la frontera wasm).
+        js_dom_create(tagPtr) {
+            const el = d.createElement(nyx.readString(tagPtr));
+            return BigInt(put(el));
+        },
+        js_dom_create_text(sPtr) {
+            const t = d.createTextNode(nyx.readString(sPtr));
+            return BigInt(put(t));
+        },
+        js_dom_append(parentH, childH) {
+            const p = handles[Number(parentH)];
+            const c = handles[Number(childH)];
+            if (p && c && p.appendChild) p.appendChild(c);
+        },
+        js_dom_remove_at(parentH, idx) {
+            const p = handles[Number(parentH)];
+            if (!p || !p.childNodes) return;
+            const node = p.childNodes[Number(idx)];
+            if (node && node.remove) node.remove();
+        },
+        js_dom_replace(parentH, newH, oldH) {
+            const p = handles[Number(parentH)];
+            const n = handles[Number(newH)];
+            const o = handles[Number(oldH)];
+            if (p && n && o && p.replaceChild) p.replaceChild(n, o);
+        },
+        js_dom_insert_before(parentH, newH, refH) {
+            const p = handles[Number(parentH)];
+            const n = handles[Number(newH)];
+            const r = handles[Number(refH)];
+            if (p && n && p.insertBefore) p.insertBefore(n, r || null);
+        },
+        js_dom_child_at(parentH, idx) {
+            const p = handles[Number(parentH)];
+            if (!p || !p.childNodes) return 0n;
+            const node = p.childNodes[Number(idx)];
+            return node ? BigInt(handleOf(node)) : 0n;
+        },
+        js_dom_set_text_h(h, sPtr) {
+            const n = handles[Number(h)];
+            if (n) n.textContent = nyx.readString(sPtr);
+        },
+        js_dom_set_attr_h(h, kPtr, vPtr) {
+            const n = handles[Number(h)];
+            if (n && n.setAttribute) n.setAttribute(nyx.readString(kPtr), nyx.readString(vPtr));
+        },
+        js_dom_remove_attr_h(h, kPtr) {
+            const n = handles[Number(h)];
+            if (n && n.removeAttribute) n.removeAttribute(nyx.readString(kPtr));
+        },
+        js_dom_query_handle(selPtr) {
+            const el = d.querySelector(nyx.readString(selPtr));
+            return el ? BigInt(handleOf(el)) : 0n;
+        },
+        js_dom_on_h(hPtr, eventPtr, pairPtr) {
+            const n = handles[Number(hPtr)];
+            const event = nyx.readString(eventPtr);
+            if (!n || !n.addEventListener) return;
+            // dedupe por (nodo, evento): `diff_handlers` (std/vdom.nx) re-emite
+            // SetHandler en CADA update() aunque el handler no haya cambiado —
+            // sin esto cada update() agregaría otro listener y un click dispararía
+            // N veces tras N updates. Guardamos el callback actual por evento y lo
+            // reemplazamos en vez de apilarlo.
+            n.__nyxHandlers = n.__nyxHandlers || {};
+            if (n.__nyxHandlers[event]) {
+                n.removeEventListener(event, n.__nyxHandlers[event]);
+            }
+            const cb = (ev) => {
+                ref.currentEvent = ev || null;
+                try { nyx.callClosure(pairPtr); }
+                finally {
+                    ref.currentEvent = null;
+                    if (ref.afterEvent) ref.afterEvent();
+                }
+            };
+            n.__nyxHandlers[event] = cb;
+            n.addEventListener(event, cb);
         },
     });
     return { imports, ref };
