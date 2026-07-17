@@ -403,11 +403,17 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   `LRANGE -50 -1`. Formato `ts|nick|texto` (nick/texto saneados sin `|`). **Token
   dedicado** (NO admin) en `/home/admin/.veninfo-chat-token` (0600) o env
   `NYXKV_CHAT_TOKEN`; `TOKEN_CREATE veninfo enterprise 0` (namespace `veninfo::`).
-- **Sin TTL forzado**: el TTL de 24h del daemon **solo aplica al plan `free`**
-  (`auth_force_ttl` devuelve false para `enterprise`, ver
-  `nyx-kv-stack/.../auth.nx`). El token `veninfo` es enterprise → las claves
-  (`chat:*`, `baq:*`, `admin:*`) **persisten indefinidamente** (no ponerles `EXPIRE`
-  salvo rate-limit y sesiones). La app no pone `EXPIRE` en `chat:msgs`.
+- **Sin TTL forzado (arreglado 2026-07-17, ANTES roto)**: el TTL de 24h del daemon debe aplicar
+  **solo al plan `free`** (`auth_force_ttl` devuelve false para pro/enterprise). El token `veninfo`
+  es enterprise, así que `chat:*`/`baq:*`/`admin:*` deben persistir. **PERO durante meses NO fue
+  así**: `auth_force_ttl` era código muerto (no se llamaba desde ningún sitio) y el daemon forzaba
+  24h a TODA clave mirando solo `g_public_mode`. Baquiano y el chat caducaban cada 24h desde la
+  última escritura — la pérdida "recurrente" que se achacó al leak/crash del daemon. Cableado en
+  `nyx-kv-stack` (`maybe_enforce_ttl` en `lib/src/commands.nx` **y** en el vendoring
+  `daemon/packages/nyx-kv/src/commands.nx`, que es COPIA — editar lib/ no basta). Verificado:
+  `SET` con el token veninfo → `TTL` = -1. Detalle: la app **no** debe poner `EXPIRE` en `chat:*`/
+  `baq:*` (solo en rate-limit y sesiones). Ver la memoria `nyx-language-gotchas.md` para el detalle
+  y los bugs colaterales del daemon (SAVE bloqueado para enterprise, PERSIST no marca dirty).
 - **Tiempo real: SÍ (WebSocket)** desde 2026-07-01. El gateway (nyx-proxy) hace
   passthrough del Upgrade (solo por TLS/:443) hacia :3010; el upgrade lo detecta el
   **parche local de nyx-serve** (`serve_ws` en `packages/nyx-serve/src/server.nx`,
@@ -475,9 +481,12 @@ dentro del propio proceso, sin puerto. `sqldb_init()` se llama en `main()`.
   al seed. Admin: **"Importar guía"** (restaurar todo) · **"Respaldar al seed"** (guardar el
   estado, tras editar o buscar imágenes) · **"Restaurar (no destructivo)"** (solo texto).
   El seed original se generó de `content/guia_turistica_venezuela.md` (referencia).
-- **⚠️ nyx-kv pierde datos** (leak/crash del daemon, incidentes 2026-07-12/13; ver memoria
-  `nyx-language-gotchas.md`): si Baquiano sale vacío/incompleto, **admin → "Importar guía"**
-  lo restaura del seed (con imágenes). Tras editar en admin, **"Respaldar al seed"** + commit.
+- **⚠️ nyx-kv pierde datos**: la causa RECURRENTE (Baquiano/chat desaparecen cada ~24h) era el
+  **TTL forzado del daemon**, ARREGLADO 2026-07-17 (ver el punto "Sin TTL forzado" arriba y la
+  memoria `nyx-language-gotchas.md`) — no era el leak/crash. Aun así, si Baquiano sale
+  vacío/incompleto por cualquier motivo, **admin → "Importar guía"** lo restaura del seed (con
+  imágenes) y, con el fix activo, lo reescribe SIN TTL (a diferencia de PERSIST, el import hace SET
+  → marca el estado dirty → el bg-saver lo persiste). Tras editar en admin, **"Respaldar al seed"** + commit.
 - **GOTCHA nyx-kv: el cliente (src/kv.nx) TRUNCA valores que contienen `\n` real** al
   escribir (el SET queda cortado en el primer salto). Por eso `desc` guarda los párrafos
   con el centinela `~~P~~` (no `\n`); `zone_edit` convierte los `\n` del textarea a

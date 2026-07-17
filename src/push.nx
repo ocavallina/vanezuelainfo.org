@@ -198,7 +198,7 @@ pub fn push_test_summary() -> String {
     let gone: String = p[4]
     let err: String = p[5]
     let last: String = p[6]
-    var s: String = "Ultima prueba (" + topic + ") hace " + rel_txt(time() - to_int0(ts)) + ": " + sent + " enviados, " + ok + " OK"
+    var s: String = "Ultima prueba (" + topic + ") " + rel_txt(time() - to_int0(ts)) + ": " + sent + " enviados, " + ok + " OK"
     if to_int0(gone) > 0 {
         s = s + ", " + gone + " expiradas (borradas)"
     }
