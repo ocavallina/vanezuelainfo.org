@@ -604,6 +604,13 @@ fn main() {
     let app: App = app_new()
     setup_routes(app)
     serve_ws(chat_ws_handler)
+    // Snapshot en SIGTERM vía serve_on_shutdown (nyx-serve >= 0.6.1): el
+    // hook corre en el drain, con workers ya quietos, DESPUÉS del deadline
+    // (NYX_SERVE_DRAIN_SECS, default 10 — no bajarlo a 0 en este consumer,
+    // el snapshot necesita ese quieto). Guard propio en nyx-serve: si
+    // db_save_now panickea, se loguea "[nyx-serve] shutdown hook failed:"
+    // y el proceso igual sale con exit 0 (ver sqldb.nx).
+    serve_on_shutdown(db_save_now)
     serve_app(app, port, 16)
 }
 

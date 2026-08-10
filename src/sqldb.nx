@@ -102,7 +102,7 @@ fn db_saver() -> int {
 }
 
 // Inicializa la base embebida: carga el snapshot si existe, asegura el esquema,
-// y lanza el guardado periódico + el handler de apagado. Llamar desde main().
+// y lanza el guardado periódico. Llamar desde main().
 pub fn sqldb_init() {
     if file_exists(DB_PATH) {
         db_load(DB_PATH)
@@ -113,6 +113,9 @@ pub fn sqldb_init() {
     sql_exec("CREATE TABLE meta (k TEXT, v TEXT)")
     sql_exec("CREATE INDEX rates_day USING BTREE ON rates (day)")
     sql_exec("CREATE INDEX visits_day USING BTREE ON visits (day)")
-    setup_shutdown_handler(db_save_now)
+    // El hook de SIGTERM para el snapshot ahora se registra vía
+    // serve_on_shutdown(db_save_now) en main.nx, ANTES de serve_app — el
+    // handler de SIGTERM lo posee nyx-serve desde v0.6.0. Se retira SOLO
+    // esa registración; el resto de sqldb_init sigue igual.
     thread_spawn(db_saver)
 }
