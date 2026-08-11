@@ -6,6 +6,7 @@ import "std/web"
 import "std/http"
 import "nyx-serve/src/server"
 import "nyx-serve/src/files"
+import "nyx-serve/src/ws"
 import "src/num"
 import "src/net"
 import "src/md"
@@ -15,7 +16,6 @@ import "src/sismos"
 import "src/news"
 import "src/funvisis"
 import "src/chat"
-import "src/ws"
 import "src/baquiano"
 import "src/admin"
 import "src/rates"
@@ -594,7 +594,6 @@ fn main() {
     funvisis_init()
     news_init()
     admin_init()
-    ws_init()
     chat_init()
     sqldb_init()
     push_init()

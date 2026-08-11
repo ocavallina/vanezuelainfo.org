@@ -9,7 +9,7 @@
 import "src/kv"
 import "src/md"
 import "src/articles"
-import "src/ws"
+import "nyx-serve/src/ws"
 
 // nyx_url_decode (percent %XX + '+') viene de std/web (import en main.nx); el scope
 // global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de
@@ -21,7 +21,8 @@ const KV_PORT: int = 6380
 // Mutex del cupo de ritmo: el GET->computar->SET de chat_post no es atómico y
 // los 16 workers de nyx-serve son HILOS de este mismo proceso — sin esto, N
 // POSTs paralelos leen el mismo "count|inicio" y el contador subcuenta justo
-// bajo flood. Mismo patrón holder+init que WS_MU (src/ws.nx).
+// bajo flood. Mismo patrón holder+init que usa nyx-serve/src/ws internamente
+// (registro fd<->sala de las rooms, init eager via serve_app).
 var CHAT_RL_MU: Map = Map.new()
 var CHAT_RL_READY: int = 0
 
@@ -379,7 +380,8 @@ pub fn chat_post(room_raw: String, nick_raw: String, texto_raw: String) -> Strin
 // Handler del upgrade WebSocket (registrado con serve_ws en main). info =
 // [fd, path, headers_flat]. Path esperado: /ws/chat/<sala> (o /ws/chat ->
 // general). Valida la sala contra nyx-kv antes de aceptar. Devuelve 1 si el
-// fd queda en manos de src/ws, 0 para que nyx-serve cierre la conexion.
+// fd queda en manos de nyx-serve/src/ws (ownership del close, drain
+// courtesy incluidos), 0 para que nyx-serve cierre la conexion.
 pub fn chat_ws_handler(info: Array) -> int {
     let fd: int = info[0]
     var path: String = info[1]
