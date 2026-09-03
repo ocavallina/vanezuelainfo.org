@@ -9,7 +9,7 @@
 import "src/kv"
 import "src/md"
 import "src/articles"
-import "nyx-serve/src/ws"
+import "std/serve"
 
 // nyx_url_decode (percent %XX + '+') viene de std/web (import en main.nx); el scope
 // global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de

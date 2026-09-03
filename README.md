@@ -23,7 +23,7 @@ tiempo real**. Aplicación web instalable (PWA).
 > | Capa | En un stack típico | Aquí |
 > |------|--------------------|------|
 > | **Proxy / TLS** | nginx | **nyx-proxy** — el reverse proxy escrito en Nyx |
-> | **Servidor web** | Express, Rails, … | **nyx-serve** — el framework web escrito en Nyx |
+> | **Servidor web** | Express, Rails, … | **`std/serve`** — el framework web de la stdlib de Nyx (absorbido de nyx-serve) |
 > | **Front-end** | React / JavaScript | **Nyx compilado a WebAssembly** |
 > | **Base de datos (KV)** | Redis | **nyx-kv** — el key-value escrito en Nyx |
 > | **Base de datos (SQL)** | Postgres / SQLite | **nyx-db** — la base SQL relacional escrita en Nyx |

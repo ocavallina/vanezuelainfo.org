@@ -12,7 +12,7 @@
 
 import "std/random"
 import "std/http"
-import "nyx-serve/src/server"
+import "std/serve"
 import "src/kv"
 import "src/md"
 import "src/layout"

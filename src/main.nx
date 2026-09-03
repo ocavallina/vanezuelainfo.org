@@ -1,12 +1,10 @@
 // src/main.nx — venezuelainfo.org: portal de noticias e informacion sobre
 // Venezuela, con seccion de sismos (datos del EMSC), PWA y pagina de detalle
-// por evento con mapa. Construido sobre nyx-serve. Entry point (ver nyx.toml).
+// por evento con mapa. Construido sobre std/serve (el framework web de la stdlib). Entry point (ver nyx.toml).
 
 import "std/web"
 import "std/http"
-import "nyx-serve/src/server"
-import "nyx-serve/src/files"
-import "nyx-serve/src/ws"
+import "std/serve"
 import "src/num"
 import "src/net"
 import "src/md"

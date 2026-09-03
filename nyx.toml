@@ -5,5 +5,4 @@ main = "src/main.nx"
 description = "venezuelainfo.org — portal de noticias e informacion sobre Venezuela (sismos en vivo via USGS)"
 
 [dependencies]
-nyx-serve = "*"
 nyx-db = "*"

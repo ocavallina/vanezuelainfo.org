@@ -5,5 +5,4 @@ version = "0.1.0"
 main = "src/main.nx"
 
 [dependencies]
-nyx-serve = "*"
 nyx-db = "*"
