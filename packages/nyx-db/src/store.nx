@@ -16,7 +16,7 @@ var g_index_btree_id: Map = Map.new() // "tablename::colname" -> tree_id string 
 var g_changes: int = 0
 var g_db_mtx: Map = Map.new()
 
-fn db_ensure_mtx() {
+pub fn db_ensure_mtx() {
     if g_db_mtx.size() == 0 {
         g_db_mtx = mutex_new()
     }
@@ -30,7 +30,7 @@ fn col_sep() -> String {
 // ── Schema helpers ──
 
 // Parse schema string "col1:TYPE,col2:TYPE:PK" -> [[col, type], ...]
-fn schema_parse(schema_str: String) -> Array {
+pub fn schema_parse(schema_str: String) -> Array {
     let result: Array = []
     let parts: Array = schema_str.split(",")
     for part: String in parts {
@@ -59,7 +59,7 @@ fn schema_pk_index(schema_str: String) -> int {
 }
 
 // Get column index by name from schema
-fn schema_col_index(schema: Array, col_name: String) -> int {
+pub fn schema_col_index(schema: Array, col_name: String) -> int {
     var i: int = 0
     while i < schema.length() {
         let entry: Array = schema[i]
@@ -71,7 +71,7 @@ fn schema_col_index(schema: Array, col_name: String) -> int {
 }
 
 // Get column type from schema
-fn schema_col_type(schema: Array, col_name: String) -> String {
+pub fn schema_col_type(schema: Array, col_name: String) -> String {
     var i: int = 0
     while i < schema.length() {
         let entry: Array = schema[i]
@@ -83,7 +83,7 @@ fn schema_col_type(schema: Array, col_name: String) -> String {
 }
 
 // Parse row data by separator
-fn row_parse(data: String) -> Array {
+pub fn row_parse(data: String) -> Array {
     return data.split(col_sep())
 }
 
@@ -102,7 +102,7 @@ fn row_serialize(values: Array) -> String {
 }
 
 // Parse rowid list from CSV string
-fn parse_rowid_list(csv: String) -> Array {
+pub fn parse_rowid_list(csv: String) -> Array {
     if csv.length() == 0 { return [] }
     let parts: Array = csv.split(",")
     let result: Array = []
@@ -158,7 +158,7 @@ fn index_col_type(table: String, col: String) -> String {
     return schema_col_type(schema, col)
 }
 
-fn index_add(table: String, col: String, value: String, rowid: int) {
+pub fn index_add(table: String, col: String, value: String, rowid: int) {
     let kind: String = index_kind_of(table, col)
     if kind == "BTREE" {
         let tree_id: int = index_btree_id_of(table, col)
@@ -288,7 +288,7 @@ fn remove_indices_for_row(table: String, schema: Array, values: Array, rowid: in
 
 // ── Table operations ──
 
-fn db_create_table(name: String, col_defs: Array) -> String {
+pub fn db_create_table(name: String, col_defs: Array) -> String {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(name) {
@@ -325,7 +325,7 @@ fn db_create_table(name: String, col_defs: Array) -> String {
     return ""
 }
 
-fn db_drop_table(name: String) -> String {
+pub fn db_drop_table(name: String) -> String {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(name) == false {
@@ -368,7 +368,7 @@ fn db_drop_table(name: String) -> String {
     return ""
 }
 
-fn db_insert(table: String, cols: Array, value_rows: Array) -> Array {
+pub fn db_insert(table: String, cols: Array, value_rows: Array) -> Array {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(table) == false {
@@ -475,7 +475,7 @@ fn db_insert(table: String, cols: Array, value_rows: Array) -> Array {
 
 // ── WHERE evaluation ──
 
-fn compare_values(a: String, b: String, col_type: String) -> int {
+pub fn compare_values(a: String, b: String, col_type: String) -> int {
     // Returns: -1 if a<b, 0 if a==b, 1 if a>b
     if col_type == "INT" or col_type == "INTEGER" {
         let ai: int = string_to_int(a)
@@ -552,7 +552,7 @@ fn like_match(text: String, pattern: String) -> bool {
     return ti >= tlen
 }
 
-fn eval_where(schema: Array, values: Array, expr: Array) -> bool {
+pub fn eval_where(schema: Array, values: Array, expr: Array) -> bool {
     let tag: String = expr[0]
 
     if tag == "NONE" { return true }
@@ -711,7 +711,7 @@ fn merge_rows(left: Array, right: Array, col_idx: int, col_type: String, dir: St
 
 // ── SELECT ──
 
-fn db_select(table: String, cols: Array, where_ast: Array, order_ast: Array, limit: int, offset: int, join_ast: Array) -> Array {
+pub fn db_select(table: String, cols: Array, where_ast: Array, order_ast: Array, limit: int, offset: int, join_ast: Array) -> Array {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(table) == false {
@@ -938,7 +938,7 @@ fn db_select(table: String, cols: Array, where_ast: Array, order_ast: Array, lim
 
 // ── UPDATE ──
 
-fn db_update(table: String, sets: Array, where_ast: Array) -> Array {
+pub fn db_update(table: String, sets: Array, where_ast: Array) -> Array {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(table) == false {
@@ -1018,7 +1018,7 @@ fn db_update(table: String, sets: Array, where_ast: Array) -> Array {
 
 // ── DELETE ──
 
-fn db_delete(table: String, where_ast: Array) -> Array {
+pub fn db_delete(table: String, where_ast: Array) -> Array {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(table) == false {
@@ -1065,7 +1065,7 @@ fn db_delete(table: String, where_ast: Array) -> Array {
 
 // ── CREATE INDEX ──
 
-fn db_create_index(idx_name: String, table: String, col: String, kind: String) -> String {
+pub fn db_create_index(idx_name: String, table: String, col: String, kind: String) -> String {
     db_ensure_mtx()
     mutex_lock(g_db_mtx)
     if g_tables.contains(table) == false {

@@ -331,7 +331,7 @@ fn bti_split_child(tree_id: int, parent_id: int, child_idx: int, col_type: Strin
 // ── Public API ─────────────────────────────────────────────────────────
 
 // Create a new empty tree; returns tree_id.
-fn bti_new_tree() -> int {
+pub fn bti_new_tree() -> int {
     var tid: int = 1
     if g_bti_next_tree.contains("") {
         tid = g_bti_next_tree.get("")
@@ -348,7 +348,7 @@ fn bti_new_tree() -> int {
 }
 
 // Insert a (key, rowid) pair. If key already exists, rowid is appended.
-fn bti_insert(tree_id: int, key: String, rowid: int, col_type: String) {
+pub fn bti_insert(tree_id: int, key: String, rowid: int, col_type: String) {
     let tk: String = int_to_string(tree_id)
     let root_id: int = string_to_int(g_bti_roots.get(tk))
     let root: Array = bti_read(tree_id, root_id)
@@ -369,7 +369,7 @@ fn bti_insert(tree_id: int, key: String, rowid: int, col_type: String) {
 }
 
 // Lookup exact key: returns Array<int> of rowids (or [] if absent/tombstoned).
-fn bti_lookup(tree_id: int, key: String, col_type: String) -> Array {
+pub fn bti_lookup(tree_id: int, key: String, col_type: String) -> Array {
     let tk: String = int_to_string(tree_id)
     var node_id: int = string_to_int(g_bti_roots.get(tk))
     while true {
@@ -445,7 +445,7 @@ fn bti_range_into(tree_id: int, node_id: int, lo: String, hi: String, lo_incl: b
 
 // Range scan: returns Array<int> of rowids with key in [lo, hi] (inclusivity per flags).
 // lo may be "__NEG_INF__"; hi may be "__POS_INF__".
-fn bti_range(tree_id: int, lo: String, hi: String, col_type: String, lo_incl: bool, hi_incl: bool) -> Array {
+pub fn bti_range(tree_id: int, lo: String, hi: String, col_type: String, lo_incl: bool, hi_incl: bool) -> Array {
     let tk: String = int_to_string(tree_id)
     let root_id: int = string_to_int(g_bti_roots.get(tk))
     let acc: Array = []
@@ -456,7 +456,7 @@ fn bti_range(tree_id: int, lo: String, hi: String, col_type: String, lo_incl: bo
 // Remove a rowid from a key's CSV. If CSV goes empty, the key is tombstoned
 // (kept in the tree, val=""). No merge or rotation in v0.4.
 // Returns true if rowid was found and removed.
-fn bti_remove(tree_id: int, key: String, rowid: int, col_type: String) -> bool {
+pub fn bti_remove(tree_id: int, key: String, rowid: int, col_type: String) -> bool {
     let tk: String = int_to_string(tree_id)
     var node_id: int = string_to_int(g_bti_roots.get(tk))
     while true {
@@ -555,7 +555,7 @@ fn bti_delete_tree(tree_id: int) {
 
 // Rebuild a BTREE index, eliminating tombstones. Returns
 // [new_tree_id, tombstones_removed]. The old tree is released.
-fn bti_vacuum(tree_id: int, col_type: String) -> Array {
+pub fn bti_vacuum(tree_id: int, col_type: String) -> Array {
     let tk: String = int_to_string(tree_id)
     if g_bti_roots.contains(tk) == false {
         let empty_res: Array = [-1, 0]

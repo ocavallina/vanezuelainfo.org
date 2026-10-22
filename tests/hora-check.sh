@@ -16,23 +16,25 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PROJ=$(pwd)
-: "${NYX_HOME:=/home/admin/NyxLang}"
+: "${NYX_HOME:=/home/admin/nyx/lang}"
 export NYX_HOME
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/src"
 printf '[package]\nname = "horatest"\nversion = "0.1.0"\nmain = "src/main.nx"\ndescription = "test de la hora del aviso"\n' > "$T/nyx.toml"
+# pad2 viene de std/time, el mismo import que declara src/push.nx (hasta el
+# 2026-10-22 usaba en silencio el pad2 privado de src/bcv.nx).
 {
-  sed -n '/^fn pad2(/,/^}/p' "$PROJ/src/bcv.nx"
-  echo
+  echo 'import "std/time"'
   sed -n '/^fn ve_civil(/,/^}/p' "$PROJ/src/push.nx"
   echo
   sed -n '/^fn sismo_hora_txt(/,/^}/p' "$PROJ/src/push.nx"
-} > "$T/src/hora.nx"
-n=$(grep -c '^fn ' "$T/src/hora.nx" || true)
-if [ "$n" -ne 3 ]; then
-  echo "FALLO: se esperaban 3 funciones extraidas (pad2, ve_civil, sismo_hora_txt), salieron $n."
-  echo "       ¿Les cambiaron el nombre o la indentacion en src/push.nx / src/bcv.nx?"
+} | sed 's/^fn /pub fn /' > "$T/src/hora.nx"
+# `pub`: el main del test las llama desde otro módulo (NYX1036 es error).
+n=$(grep -c '^pub fn ' "$T/src/hora.nx" || true)
+if [ "$n" -ne 2 ]; then
+  echo "FALLO: se esperaban 2 funciones extraidas (ve_civil, sismo_hora_txt), salieron $n."
+  echo "       ¿Les cambiaron el nombre o la indentacion en src/push.nx?"
   exit 1
 fi
 cat > "$T/src/main.nx" <<'EOF'

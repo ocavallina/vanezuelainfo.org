@@ -642,7 +642,7 @@ fn hotels_url(area: String) -> String {
 
 // Descompone la entrada de un sitio "nombre|categoria|descripcion|imgurl" en 4 campos
 // (los que falten quedan ""). Retrocompatible con entradas de 3 campos.
-fn site_split4(entry: String) -> Array {
+pub fn site_split4(entry: String) -> Array {
     var nm: String = entry
     var cat: String = ""
     var desc: String = ""

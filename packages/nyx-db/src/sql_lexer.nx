@@ -90,7 +90,7 @@ fn is_keyword(word: String) -> bool {
     return false
 }
 
-fn sql_tokenize(input: String) -> Array {
+pub fn sql_tokenize(input: String) -> Array {
     let tokens: Array = []
     let len: int = input.length()
     var pos: int = 0

@@ -324,7 +324,7 @@ fn extract_indexed_hoist(conjuncts: Array, table: String) -> Array {
 //   - Result is semantically equivalent to input (AND is commutative
 //     and associative; hoisted_eq is also re-checked by eval_where
 //     implicitly through index_lookup correctness + no-op if hoisted=NONE).
-fn plan_where(where_ast: Array, table: String) -> Array {
+pub fn plan_where(where_ast: Array, table: String) -> Array {
     let tag: String = where_ast[0]
 
     // Fast path: no WHERE at all.

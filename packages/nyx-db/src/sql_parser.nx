@@ -552,7 +552,7 @@ fn parse_vacuum() -> Array {
 }
 
 // Main parser entry point
-fn sql_parse(tokens: Array) -> Array {
+pub fn sql_parse(tokens: Array) -> Array {
     p_tokens = tokens
     p_pos = 0
 

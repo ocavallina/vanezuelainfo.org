@@ -189,7 +189,7 @@ pub fn sismos_ts() -> int {
     return e
 }
 
-fn attr_escape(s: String) -> String {
+pub fn attr_escape(s: String) -> String {
     return html_escape(s).replace("\"", "&quot;")
 }
 
@@ -294,7 +294,7 @@ fn dup_in_funvisis(fvrecs: Array, ep: int, lat: float, lon: float) -> bool {
 }
 
 // Selection sort in-place por epoch (campo 8) descendente. N pequeño (<=~220).
-fn sort_recs_desc(recs: Array) {
+pub fn sort_recs_desc(recs: Array) {
     var i: int = 0
     let n: int = recs.length()
     while i < n {
