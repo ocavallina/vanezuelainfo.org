@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PROJ=$(pwd)
-: "${NYX_HOME:=/home/admin/nyx/lang}"
+: "${NYX_HOME:=/home/admin/nyxlang}"
 export NYX_HOME
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
