@@ -6,7 +6,7 @@
 // "callback por NOMBRE de export" — el mismo de dom_on. Los consumidores JS
 // restantes hacen nyxReady.then(...).catch(...): si el wasm no carga, cada uno
 // pinta su aviso. Subir el ?v= de este archivo y del .wasm JUNTOS
-// (ver deploy/build-wasm.sh).
+// (ver venezuelainfo-build-wasm.sh en el repo del servidor).
 import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=10';
 
 window.nyxReady = (async () => {

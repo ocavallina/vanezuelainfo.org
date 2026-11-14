@@ -3,3 +3,6 @@
 *.bak.*
 *.o
 *.ll
+
+# El despliegue (unidad, plantillas, build-wasm.sh) vive en el repo privado del servidor.
+/deploy/

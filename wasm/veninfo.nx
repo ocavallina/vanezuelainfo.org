@@ -1,5 +1,5 @@
 // veninfo.nx — módulo Nyx→WASM del front de venezuelainfo.org.
-// Se compila con deploy/build-wasm.sh (make wasm del monorepo NyxLang) y se
+// Se compila con venezuelainfo-build-wasm.sh (repo del servidor) (make wasm del monorepo NyxLang) y se
 // carga en el navegador vía static/assets/nyx-loader.js (shim nyx-wasi-shim.js).
 // Regla de marshalling: SOLO int (BigInt en JS) y String cruzan la frontera;
 // los floats entran como String (string_to_float) y salen ya formateados.
