@@ -19,6 +19,9 @@ import "src/funvisis"
 // sismos_init() — mismo patron que __serve_app en nyx-serve).
 var __emsc_body: Array = [""]
 var __emsc_ts: Array = [0]
+// Último INTENTO de descarga (ver __fv_try en src/funvisis.nx).
+var __emsc_try: Array = [0]
+const EMSC_RETRY: int = 45
 
 // TTL de caché en segundos (3 minutos).
 const CACHE_TTL: int = 180
@@ -26,6 +29,7 @@ const CACHE_TTL: int = 180
 pub fn sismos_init() {
     __emsc_body = [""]
     __emsc_ts = [0]
+    __emsc_try = [0]
     ve_poly_init()
 }
 
@@ -164,7 +168,9 @@ fn emsc_body() -> String {
     let now: int = time()
     let last: int = __emsc_ts[0]
     var body: String = __emsc_body[0]
-    if body.length() == 0 or now - last > CACHE_TTL {
+    let tried: int = __emsc_try[0]
+    if (body.length() == 0 or now - last > CACHE_TTL) and now - tried >= EMSC_RETRY {
+        __emsc_try[0] = now
         let fresh: String = net_get(emsc_url())
         if fresh.length() > 0 {
             __emsc_body[0] = fresh
@@ -499,10 +505,10 @@ pub fn sismos_rotator_html(maxn: int) -> String {
 
 // Pre-calienta la caché de sismos (para el hilo de refresco).
 pub fn sismos_warm() {
-    let b: String = emsc_body()
-    if b.length() > 0 {
-        __emsc_ts[0] = time()
-    }
+    // emsc_body ya sella __emsc_ts cuando la descarga tiene ÉXITO. Antes se sellaba
+    // aquí con cualquier cuerpo no vacío: una caché VIEJA quedaba marcada como
+    // fresca y el "Actualizado" de /sismos mentía.
+    emsc_body()
 }
 
 // Busca un evento por id (EMSC o FUNVISIS) en la lista unificada.

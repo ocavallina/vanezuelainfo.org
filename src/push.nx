@@ -58,6 +58,9 @@ fn topic_ttl(topic: String) -> int {
 // Tope de longitud del endpoint (los reales pueden superar los 256 del sql_esc
 // por defecto; WNS llega a ~450+). Se usa con sql_esc_n en TODA query de endpoint.
 const PUSH_EP_MAX: int = 2048
+// Tope de suscripciones guardadas: la tabla vive en RAM y se vuelca entera cada
+// 60 s, y el envío es en serie. Muy por encima del uso real del sitio.
+const PUSH_SUBS_MAX: int = 20000
 
 // Claves VAPID raw (32B priv / 65B pub). Patrón holder single-element (el literal
 // global de array multi-elemento no se materializa fiable; se asignan en push_init).
@@ -269,6 +272,24 @@ fn clean_topics(raw: String) -> String {
     return out
 }
 
+// true si s es base64url (A-Z a-z 0-9 - _ y relleno =) con longitud en [min, max].
+fn b64url_ok(s: String, min: int, max: int) -> bool {
+    let n: int = s.length()
+    if n < min or n > max {
+        return false
+    }
+    var i: int = 0
+    while i < n {
+        let c: int = s.charAt(i)
+        let ok: bool = (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or (c >= 48 and c <= 57) or c == 45 or c == 95 or c == 61
+        if !ok {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
 // Guarda (dedup por endpoint) una suscripción. Devuelve "" en éxito o un mensaje corto.
 pub fn push_subscribe(body: String) -> String {
     let endpoint: String = form_field(body, "endpoint")
@@ -288,6 +309,12 @@ pub fn push_subscribe(body: String) -> String {
     if !push_host_ok(endpoint) {
         return "Origen no permitido"
     }
+    // Las claves del navegador son base64url de tamaño fijo: p256dh = 65 bytes
+    // (87-88 chars), auth = 16 bytes (22-24). Cualquier otra cosa no es una
+    // suscripción real y solo llenaría la tabla.
+    if !b64url_ok(p256dh, 80, 100) or !b64url_ok(auth, 16, 32) {
+        return "Claves no validas"
+    }
     let topics: String = clean_topics(topics_raw)
     let ee: String = sql_esc_n(endpoint, PUSH_EP_MAX)
     // El DELETE va PRIMERO e incondicional. Antes el `return "Sin temas"` estaba
@@ -299,6 +326,9 @@ pub fn push_subscribe(body: String) -> String {
     // Sin temas = baja voluntaria, no error: el DELETE de arriba ya la efectuó.
     if topics.length() == 0 {
         return ""
+    }
+    if sql_count("SELECT COUNT(*) FROM push_subs") >= PUSH_SUBS_MAX {
+        return "Sin cupo"
     }
     sql_exec("INSERT INTO push_subs VALUES ('" + ee + "', '" + sql_esc(p256dh) + "', '" + sql_esc(auth) + "', '" + sql_esc(topics) + "', " + int_to_string(time()) + ")")
     return ""
@@ -501,6 +531,88 @@ fn push_seen_add(id: String) {
     sql_exec("INSERT INTO push_seen VALUES ('" + sql_esc(id) + "', " + int_to_string(time()) + ")")
 }
 
+// ── Mismo sismo publicado por las DOS fuentes ───────────────────────────────
+// all_quakes() prefiere el registro de FUNVISIS cuando un evento está en los dos
+// feeds. Como EMSC suele publicar primero, el evento se avisaba con su id de EMSC
+// y, minutos después, al llegar FUNVISIS, reaparecía con OTRO id (fv-…) -> segundo
+// aviso del mismo sismo. Por eso, además del id, se guarda una "huella" con
+// fuente, hora y coordenadas, y un candidato se descarta si ya se avisó de un
+// evento de la OTRA fuente a <= 120 s y <= 0,3° (la misma tolerancia con la que
+// sismos.nx fusiona los feeds). Solo entre fuentes distintas: dos sismos seguidos
+// de la misma fuente (enjambre) se siguen avisando los dos.
+// La huella vive en push_seen con id "geo|<fuente>|<epoch>|<lat>|<lon>" (se poda
+// igual que el resto).
+fn sismo_fuente(id: String) -> String {
+    if starts_with(id, "fv-") {
+        return "fv"
+    }
+    return "em"
+}
+
+fn push_seen_add_rec(rec: Array) {
+    let id: String = rec[0]
+    let la: String = rec[2]
+    let lo: String = rec[3]
+    let ep: int = rec[8]
+    push_seen_add(id)
+    push_seen_add("geo|" + sismo_fuente(id) + "|" + int_to_string(ep) + "|" + la + "|" + lo)
+}
+
+// Huellas guardadas, como filas [fuente, epoch, lat, lon] (todo String).
+fn push_seen_geo() -> Array {
+    var out: Array = []
+    let rows: Array = sql_rows("SELECT id FROM push_seen")
+    var i: int = 1
+    while i < rows.length() {
+        let row: Array = rows[i]
+        let id: String = row[0]
+        if starts_with(id, "geo|") {
+            let p: Array = id.split("|")
+            if p.length() == 5 {
+                let f: String = p[1]
+                let e: String = p[2]
+                let la: String = p[3]
+                let lo: String = p[4]
+                let g: Array = [f, e, la, lo]
+                out.push(g)
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn push_seen_otra_fuente(geo: Array, rec: Array) -> bool {
+    let id: String = rec[0]
+    let las: String = rec[2]
+    let los: String = rec[3]
+    let ep: int = rec[8]
+    let fuente: String = sismo_fuente(id)
+    let lat: float = to_float0(las)
+    let lon: float = to_float0(los)
+    var i: int = 0
+    while i < geo.length() {
+        let g: Array = geo[i]
+        let gf: String = g[0]
+        if gf != fuente {
+            let ges: String = g[1]
+            let gla: String = g[2]
+            let glo: String = g[3]
+            var dt: int = ep - to_int0(ges)
+            if dt < 0 { dt = -dt }
+            var dla: float = lat - to_float0(gla)
+            if dla < 0.0 { dla = -dla }
+            var dlo: float = lon - to_float0(glo)
+            if dlo < 0.0 { dlo = -dlo }
+            if dt <= 120 and dla <= 0.3 and dlo <= 0.3 {
+                return true
+            }
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // Selection sort de registros por magnitud desc (in-place). Lotes diminutos.
 fn push_sort_by_mag_desc(recs: Array) {
     var i: int = 0
@@ -559,6 +671,7 @@ fn push_do_sismos() {
     // magnitud va ANTES del lookup en la tabla (comparar floats es más barato que
     // una query por evento).
     var cand: Array = []
+    let geo: Array = push_seen_geo()
     var i: int = 0
     while i < qs.length() {
         let rec: Array = qs[i]
@@ -576,7 +689,12 @@ fn push_do_sismos() {
             if mag >= PUSH_MAG_MIN {
                 let id: String = rec[0]
                 if !push_seen_has(id) {
-                    cand.push(rec)
+                    if push_seen_otra_fuente(geo, rec) {
+                        // Ya avisado con el id de la otra fuente: solo marcarlo.
+                        push_seen_add(id)
+                    } else {
+                        cand.push(rec)
+                    }
                 }
             }
         }
@@ -592,8 +710,7 @@ fn push_do_sismos() {
             var k: int = PUSH_SISMO_BURST
             while k < cand.length() {
                 let rec: Array = cand[k]
-                let id: String = rec[0]
-                push_seen_add(id)
+                push_seen_add_rec(rec)
                 k = k + 1
             }
             let top: Array = []
@@ -614,7 +731,7 @@ fn push_do_sismos() {
             let rec: Array = cand[e]
             let id: String = rec[0]
             if first {
-                push_seen_add(id)
+                push_seen_add_rec(rec)
             } else {
                 let mags: String = rec[6]
                 let lugar: String = rec[7]
@@ -630,7 +747,7 @@ fn push_do_sismos() {
                 // entregado — el más viejo, porque se emitía de nuevo a viejo. Un
                 // M6.0 seguido de un premonitor M3.6 se veía como "Sismo M3.6".
                 push_send_topic("sismos", "Sismo M" + mags + " " + lugar, cuando, "/sismos", "sismo-" + id)
-                push_seen_add(id)
+                push_seen_add_rec(rec)
             }
             e = e - 1
         }
@@ -766,6 +883,10 @@ fn push_do_tasas() {
 }
 
 fn push_do_chat() {
+    // Chat oculto desde el admin: sin avisos (las marcas pendientes se conservan).
+    if !chat_enabled() {
+        return
+    }
     let rows: Array = sql_rows("SELECT k, v FROM meta")
     let now: int = time()
     var i: int = 1

@@ -62,16 +62,13 @@ fn hex_char(n: int) -> String {
     return "f"
 }
 
+// Hex aleatorio de `bytes` bytes (máx. 32) desde el CSPRNG del sistema
+// (csprng_bytes, std/webpushcrypto). Antes salía de random_range, que es un
+// xorshift de 64 bits: el sid "de 128 bits" quedaba determinado por ese estado.
+// Se pasa por sha256 solo para obtener hex sin manipular bytes crudos.
 fn gen_random_hex(bytes: int) -> String {
-    var sb: StringBuilder = StringBuilder.new()
-    var i: int = 0
-    while i < bytes {
-        let b: int = random_range(0, 255)
-        sb.append(hex_char((b >> 4) & 15))
-        sb.append(hex_char(b & 15))
-        i = i + 1
-    }
-    return sb.to_string()
+    let h: String = sha256(base64url_encode(csprng_bytes(32)))
+    return h.substring(0, bytes * 2)
 }
 
 fn hash_password(pass: String, salt: String) -> String {
@@ -257,7 +254,11 @@ fn render_dashboard(csrf: String) -> String {
     sb.append("<p class=\"lede\">Controla el contenido del ecosistema.</p>\n")
     sb.append("<div class=\"admin-nav\">\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/baquiano\"><span class=\"admin-tile-ico\">&#128205;</span><span>Baquiano</span><small>Zonas y sitios</small></a>\n")
-    sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>Crear, borrar, moderar</small></a>\n")
+    if chat_enabled() {
+        sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>Activo &middot; crear, borrar, moderar</small></a>\n")
+    } else {
+        sb.append("<a class=\"admin-tile\" href=\"/admin/salas\"><span class=\"admin-tile-ico\">&#128172;</span><span>Salas de chat</span><small>OCULTO &middot; activar aqu&iacute;</small></a>\n")
+    }
     sb.append("<a class=\"admin-tile\" href=\"/admin/visitas\"><span class=\"admin-tile-ico\">&#128202;</span><span>Visitas</span><small>Contador y registro</small></a>\n")
     sb.append("<a class=\"admin-tile\" href=\"/admin/noticias\"><span class=\"admin-tile-ico\">&#128240;</span><span>Noticias</span><small>Fuentes RSS</small></a>\n")
     sb.append("</div>\n")
@@ -554,20 +555,20 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
     } else if act == "site_add" {
         site_add(form_field(req.body, "zone"), form_field(req.body, "nombre"), form_field(req.body, "categoria"), form_field(req.body, "descripcion"))
     } else if act == "site_delete" {
-        let idx: int = string_to_int(form_field(req.body, "idx"))
+        let idx: int = string_to_int_or(form_field(req.body, "idx"), -1)
         site_delete(form_field(req.body, "zone"), idx)
     } else if act == "fact_add" {
         fact_add(form_field(req.body, "zone"), form_field(req.body, "etiqueta"), form_field(req.body, "valor"))
     } else if act == "fact_delete" {
-        fact_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+        fact_delete(form_field(req.body, "zone"), string_to_int_or(form_field(req.body, "idx"), -1))
     } else if act == "muni_add" {
         muni_add(form_field(req.body, "zone"), form_field(req.body, "nombre"), form_field(req.body, "capital"))
     } else if act == "muni_delete" {
-        muni_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+        muni_delete(form_field(req.body, "zone"), string_to_int_or(form_field(req.body, "idx"), -1))
     } else if act == "poblado_add" {
         poblado_add(form_field(req.body, "zone"), form_field(req.body, "municipio"), form_field(req.body, "localidades"))
     } else if act == "poblado_delete" {
-        poblado_delete(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")))
+        poblado_delete(form_field(req.body, "zone"), string_to_int_or(form_field(req.body, "idx"), -1))
     } else if act == "baquiano_import" {
         baquiano_import()
     } else if act == "baquiano_restore" {
@@ -581,7 +582,7 @@ pub fn handle_admin_baquiano_post(req: Request) -> Response {
     } else if act == "fetch_zone_images" {
         baquiano_fetch_zone(form_field(req.body, "zone"), 1)
     } else if act == "site_set_img" {
-        site_set_img(form_field(req.body, "zone"), string_to_int(form_field(req.body, "idx")), form_field(req.body, "url"))
+        site_set_img(form_field(req.body, "zone"), string_to_int_or(form_field(req.body, "idx"), -1), form_field(req.body, "url"))
     }
     return redirect("/admin/baquiano")
 }
@@ -593,6 +594,21 @@ fn render_admin_salas(csrf: String) -> String {
     sb.append("<section class=\"admin\">\n")
     sb.append("<p><a href=\"/admin\">&larr; Panel</a></p>\n")
     sb.append("<h1>Salas de chat</h1>\n")
+    // Interruptor: chat visible u oculto para el público.
+    sb.append("<div class=\"admin-room\"><span>")
+    if chat_enabled() {
+        sb.append("<b>Chat ACTIVO</b> <small>visible para el p&uacute;blico</small></span>")
+    } else {
+        sb.append("<b>Chat OCULTO</b> <small>no aparece en el sitio; /chat y su API responden 404</small></span>")
+    }
+    sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-inline\">")
+    sb.append(csrf_input(csrf))
+    if chat_enabled() {
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"chat_off\"><button type=\"submit\" class=\"admin-del\">Ocultar chat</button>")
+    } else {
+        sb.append("<input type=\"hidden\" name=\"act\" value=\"chat_on\"><button type=\"submit\">Activar chat</button>")
+    }
+    sb.append("</form></div>\n")
     // Crear sala
     sb.append("<form method=\"post\" action=\"/admin/salas\" class=\"admin-form admin-row\">\n")
     sb.append(csrf_input(csrf))
@@ -666,6 +682,10 @@ pub fn handle_admin_salas_post(req: Request) -> Response {
         room_delete(form_field(req.body, "id"))
     } else if act == "room_clear" {
         chat_room_clear(form_field(req.body, "id"))
+    } else if act == "chat_on" {
+        chat_set_enabled(true)
+    } else if act == "chat_off" {
+        chat_set_enabled(false)
     }
     return redirect("/admin/salas")
 }
@@ -743,9 +763,9 @@ pub fn handle_admin_noticias_post(req: Request) -> Response {
     if act == "src_add" {
         news_source_add(form_field(req.body, "nombre"), form_field(req.body, "url"))
     } else if act == "src_edit" {
-        news_source_edit(string_to_int(form_field(req.body, "idx")), form_field(req.body, "nombre"), form_field(req.body, "url"))
+        news_source_edit(string_to_int_or(form_field(req.body, "idx"), -1), form_field(req.body, "nombre"), form_field(req.body, "url"))
     } else if act == "src_del" {
-        news_source_delete(string_to_int(form_field(req.body, "idx")))
+        news_source_delete(string_to_int_or(form_field(req.body, "idx"), -1))
     }
     return redirect("/admin/noticias")
 }
@@ -758,8 +778,16 @@ pub fn handle_admin_noticias_post(req: Request) -> Response {
 // (El índice de día civil de Venezuela vive ahora en src/sqldb.nx como db_day().)
 
 // IP del cliente segun el gateway (X-Forwarded-For / X-Real-IP; "" si no llega).
-fn client_ip(req: Request) -> String {
-    var ip: String = http_find_header(req.headers_flat, "X-Forwarded-For")
+pub fn client_ip(req: Request) -> String {
+    // X-Real-IP primero: el gateway lo REEMPLAZA con la IP real del socket.
+    // X-Forwarded-For lo ANEXA a lo que mande el cliente, así que su primer valor
+    // lo puede inventar cualquiera (servía para falsear visitas y, ahora que la IP
+    // es la clave de los límites de ritmo, para saltárselos).
+    var ip: String = http_find_header(req.headers_flat, "X-Real-IP")
+    if ip.length() > 0 {
+        return md_trim(ip)
+    }
+    ip = http_find_header(req.headers_flat, "X-Forwarded-For")
     if ip.length() > 0 {
         let c: int = ip.indexOf(",")
         if c > 0 {
@@ -767,11 +795,17 @@ fn client_ip(req: Request) -> String {
         }
         return md_trim(ip)
     }
-    ip = http_find_header(req.headers_flat, "X-Real-IP")
-    if ip.length() > 0 {
-        return md_trim(ip)
-    }
     return ""
+}
+
+// Clave de los límites de ritmo (app_rate_limit_key): IP del cliente, o la del
+// socket si no hay cabeceras de proxy (acceso directo a :3010).
+pub fn rl_key(req: Request) -> String {
+    let ip: String = client_ip(req)
+    if ip.length() > 0 {
+        return ip
+    }
+    return req_remote_addr(req)
 }
 
 // True SOLO si la ruta es una página real del sitio (lista blanca). Así los sondeos

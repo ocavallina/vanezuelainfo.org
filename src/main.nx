@@ -95,7 +95,7 @@ fn handle_finanzas(req: Request) -> Response {
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"finanzas\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     return html_nocache(200, page_fixed("Finanzas", sb.to_string()))
 }
 
@@ -163,7 +163,7 @@ fn handle_calculadora(req: Request) -> Response {
     sb.append("</details>\n")
     sb.append("<input type=\"hidden\" id=\"calc-dir\" value=\"d2b\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"calculadora\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     return html_nocache(200, page_calc("Calculadora de cambio", sb.to_string()))
 }
 
@@ -208,12 +208,14 @@ fn handle_index(req: Request) -> Response {
     sb.append("<div class=\"home-card\" data-key=\"baquiano\">")
     sb.append(baquiano_card())
     sb.append("</div>\n")
-    sb.append("<div class=\"home-card\" data-key=\"chat\">")
-    sb.append(chat_card())
-    sb.append("</div>\n")
+    if chat_enabled() {
+        sb.append("<div class=\"home-card\" data-key=\"chat\">")
+        sb.append(chat_card())
+        sb.append("</div>\n")
+    }
     sb.append("</div>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"index\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     sb.append("<script src=\"/assets/home.js?v=3\" defer></script>\n")
     return html_nocache(200, page_fixed("Inicio", sb.to_string() + render_home()))
 }
@@ -231,7 +233,7 @@ fn handle_noticias(req: Request) -> Response {
     sb.append("<p class=\"news-fuentes\">Fuentes: Efecto Cocuyo, El Pitazo, Runrun.es, Cronica Uno, El Nacional.</p>\n")
     sb.append("<input type=\"hidden\" id=\"n-sel\">\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"noticias\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Noticias", sb.to_string()))
 }
@@ -248,10 +250,21 @@ fn chat_card() -> String {
     return sb.to_string()
 }
 
-// Pagina /chat — chat colectivo publico. El cliente vive en
-// static/assets/chat.js: WebSocket (wss:///ws/chat/<sala>) para recibir en
+// Respuestas cuando el chat está oculto (interruptor en /admin/salas).
+fn chat_off_page() -> Response {
+    let nf: String = "<section class=\"chat\"><h1>Chat no disponible</h1><p class=\"lede\">El chat est&aacute; desactivado por ahora.</p><p><a href=\"/\">&larr; Volver al inicio</a></p></section>"
+    return html_nocache(404, page_fixed("Chat", nf))
+}
+
+fn chat_off_json() -> Response {
+    return json_nocache(404, "{\"ok\":false,\"error\":\"Chat desactivado\"}")
+}
+
+// Pagina /chat — chat colectivo publico. El cliente es el módulo wasm
+// (wasm/chat.nx, chat_boot): WebSocket (wss:///ws/chat/<sala>) para recibir en
 // vivo, con respaldo de polling si el WS no conecta. Envio por POST.
 fn handle_chat(req: Request) -> Response {
+    if !chat_enabled() { return chat_off_page() }
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"chat\">\n")
     sb.append("<p><a href=\"/\">&larr; Volver al inicio</a></p>\n")
@@ -259,7 +272,7 @@ fn handle_chat(req: Request) -> Response {
     sb.append("<p class=\"lede\">Publico y moderado. Elige una sala; los mensajes los ven todos. Se respetuoso.</p>\n")
     sb.append("<div class=\"chat-rooms-bar\"><label for=\"chat-room\">Sala:</label> <select id=\"chat-room\" class=\"chat-room\"><option value=\"general\">General</option></select> <span id=\"chat-live\" class=\"chat-live\" role=\"status\"></span></div>\n")
     sb.append("<div id=\"chat-log\" class=\"chat-log\" aria-live=\"polite\"></div>\n")
-    sb.append("<form id=\"chat-form\" class=\"chat-form\" autocomplete=\"off\">\n")
+    sb.append("<form id=\"chat-form\" class=\"chat-form\" autocomplete=\"off\" onsubmit=\"return false\">\n")
     sb.append("<input id=\"chat-nick\" class=\"chat-nick\" maxlength=\"24\" placeholder=\"Tu nombre (opcional)\">\n")
     sb.append("<div class=\"chat-row\">\n")
     sb.append("<textarea id=\"chat-text\" class=\"chat-text\" maxlength=\"280\" rows=\"2\" placeholder=\"Escribe un mensaje...\" required></textarea>\n")
@@ -269,28 +282,32 @@ fn handle_chat(req: Request) -> Response {
     sb.append("</form>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"chat\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     return html_nocache(200, page_fixed("Chat", sb.to_string()))
 }
 
 // GET /api/rooms — lista de salas disponibles en JSON.
 fn handle_chat_rooms(req: Request) -> Response {
+    if !chat_enabled() { return chat_off_json() }
     return json_nocache(200, chat_rooms_json())
 }
 
 // GET /api/chat — ultimos mensajes de la sala general (compat).
 fn handle_chat_list(req: Request) -> Response {
+    if !chat_enabled() { return chat_off_json() }
     return json_nocache(200, chat_list_json("general"))
 }
 
 // GET /api/chat/{room} — ultimos mensajes de una sala en JSON (sin cache).
 fn handle_chat_room(req: Request) -> Response {
+    if !chat_enabled() { return chat_off_json() }
     let room: String = req.params.get("room")
     return json_nocache(200, chat_list_json(room))
 }
 
 // POST /api/chat/send — publica un mensaje (body urlencoded: room, nick, texto).
 fn handle_chat_send(req: Request) -> Response {
+    if !chat_enabled() { return chat_off_json() }
     let err: String = chat_send_body(req.body)
     if err.length() == 0 {
         // Marca la sala para el aviso push (coalescido/throttleado en push_worker).
@@ -372,7 +389,7 @@ fn handle_clima(req: Request) -> Response {
     sb.append("<div id=\"c-aire\" class=\"clima-aire\"></div>\n")
     sb.append("</section>\n")
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"clima\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     return html_nocache(200, page_fixed("Clima", sb.to_string()))
 }
 
@@ -396,7 +413,7 @@ fn handle_sismos(req: Request) -> Response {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<section class=\"sismos\">\n")
     sb.append("<h1>Sismos recientes en Venezuela</h1>\n")
-    sb.append("<p class=\"lede\">Sismos recientes en Venezuela y su zona fronteriza (magnitud &ge; 2). Fuentes: <a href=\"http://www.funvisis.gob.ve\">FUNVISIS</a> (red nacional) y <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
+    sb.append("<p class=\"lede\">Sismos recientes en Venezuela y su zona fronteriza. Fuentes: <a href=\"http://www.funvisis.gob.ve\">FUNVISIS</a> (red nacional) y <a href=\"https://www.emsc-csem.org\">EMSC</a>.</p>\n")
     sb.append("<p class=\"hint\">Nota: combinamos FUNVISIS (autoridad sismica nacional, cubre los locales pequenos) con EMSC (aporta los eventos fronterizos y costa afuera: Colombia, Golfo de Paria, Trinidad, mar Caribe). Las horas se muestran en tu hora local.</p>\n")
     sb.append("<div class=\"sismos-top\"><span id=\"s-count\" class=\"s-count\">&mdash; sismos</span>")
     sb.append("<span id=\"s-updated\" class=\"s-updated\" data-updated=\"")
@@ -427,7 +444,7 @@ fn handle_sismos(req: Request) -> Response {
     sb.append("\">\n")
     sb.append(sismos_data_block())
     sb.append("<input type=\"hidden\" id=\"pg\" value=\"sismos\">\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismos", sb.to_string()))
 }
@@ -460,8 +477,8 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</h1>\n<p class=\"lede\">")
     sb.append(html_escape(place))
     sb.append("</p>\n")
-    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\">\n")
-    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" integrity=\"sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H\" crossorigin=\"anonymous\">\n")
+    sb.append("<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet-gesture-handling@1.2.2/dist/leaflet-gesture-handling.min.css\" integrity=\"sha384-IKK988kZjVpx+y4Iqax/6yU7EVQx/sHewAKb/iqDCb9tCtgy25bGk5ZINDla9rgv\" crossorigin=\"anonymous\">\n")
     sb.append("<div id=\"qmap\" class=\"qmap\" data-lat=\"")
     sb.append(aesc(lat))
     sb.append("\" data-lon=\"")
@@ -494,10 +511,10 @@ fn handle_quake_detail(req: Request) -> Response {
     sb.append("</strong></div>\n")
     sb.append("<div><span>Distancia desde ti</span><strong id=\"q-dist\">&mdash;</strong></div>\n")
     sb.append("</div>\n")
-    sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n")
-    sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.js\"></script>\n")
-    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=21\"></script>\n")
-    sb.append("<script src=\"/assets/quake.js?v=3\" defer></script>\n")
+    sb.append("<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\" integrity=\"sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH\" crossorigin=\"anonymous\"></script>\n")
+    sb.append("<script src=\"https://unpkg.com/leaflet-gesture-handling@1.2.2/dist/leaflet-gesture-handling.min.js\" integrity=\"sha384-TqJpQ0URK8MzCC4s3ekivmwQmVfay3oiXhBt/Vl5nViiMrO7+rdFTc5VKDeUuto8\" crossorigin=\"anonymous\"></script>\n")
+    sb.append("<script type=\"module\" src=\"/assets/nyx-loader.js?v=22\"></script>\n")
+    sb.append("<script src=\"/assets/quake.js?v=4\" defer></script>\n")
     sb.append("</section>\n")
     return html_nocache(200, page_fixed("Sismo M" + mag, sb.to_string()))
 }
@@ -585,7 +602,7 @@ fn main() {
     let port_str: String = getenv("PORT")
     var port: int = 3010
     if port_str != "" {
-        port = string_to_int(port_str)
+        port = string_to_int_or(port_str, 3010)
     }
 
     sismos_init()
@@ -594,12 +611,19 @@ fn main() {
     admin_init()
     chat_init()
     sqldb_init()
+    chat_flag_load()
     push_init()
     thread_spawn(refresher_worker)
     thread_spawn(push_worker)
 
     let app: App = app_new()
     setup_routes(app)
+    // Límites de ritmo por IP (std/serve; 429 con Retry-After al pasarse). La IP
+    // sale de X-Real-IP, que el gateway reemplaza (rl_key, src/admin.nx).
+    app_rate_limit_key(app, rl_key)
+    app_route_rate_limit(app, "POST", "/admin/login", 8, 600)          // fuerza bruta
+    app_route_rate_limit(app, "POST", "/api/chat/send", 12, 10)        // el cupo por sala no distingue clientes
+    app_route_rate_limit(app, "POST", "/api/push/subscribe", 30, 600)  // altas masivas
     serve_ws(chat_ws_handler)
     // Snapshot en SIGTERM vía serve_on_shutdown (nyx-serve >= 0.6.1): el
     // hook corre en el drain, con workers ya quietos, DESPUÉS del deadline

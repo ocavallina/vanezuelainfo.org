@@ -96,7 +96,9 @@ pub fn sql_esc(s: String) -> String {
     return sql_esc_n(s, 256)
 }
 
-// Guarda el snapshot; se llama periódicamente y en el apagado.
+// Guarda el snapshot en el APAGADO (hook de serve_on_shutdown). Sin el mutex del
+// motor: corre con los workers ya quietos, y si alguno murió con el mutex tomado,
+// pedirlo aquí colgaría el apagado.
 fn db_save_now() -> int {
     db_save(db_path())
     return 0
@@ -107,7 +109,13 @@ fn db_saver() -> int {
     var go: bool = true
     while go {
         sleep(60000)
+        // db_save (nyx-db/src/persist) recorre las tablas SIN tomar el mutex del
+        // motor; los workers insertan a la vez (una fila por visita). Se toma aquí
+        // para que el snapshot sea consistente. Mientras dura, las consultas esperan.
+        db_ensure_mtx()
+        mutex_lock(g_db_mtx)
         db_save(db_path())
+        mutex_unlock(g_db_mtx)
     }
     return 0
 }
@@ -118,7 +126,15 @@ pub fn sqldb_init() {
     let path: String = db_path()
     println("[sqldb] base: " + path)
     if file_exists(path) {
-        db_load(path)
+        // db_load devuelve 0 si el archivo no se puede leer (CRC, magic, truncado).
+        // Antes ese fallo se ignoraba: se arrancaba con la base vacía y a los 60 s
+        // el saver la escribía ENCIMA del archivo (suscripciones push, tasas y
+        // visitas perdidas sin copia). Ahora el archivo ilegible se aparta.
+        if db_load(path) == 0 {
+            let aparte: String = path + ".ilegible-" + int_to_string(time())
+            rename_file(path, aparte)
+            println("[sqldb] ATENCION: no se pudo leer la base; se arranca vacia y el archivo queda en " + aparte)
+        }
     }
     // Esquema (idempotente: si ya existen, sql_exec devuelve -1 y se ignora).
     sql_exec("CREATE TABLE rates (day INTEGER, kind TEXT, value REAL)")

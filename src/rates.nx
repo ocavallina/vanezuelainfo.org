@@ -76,6 +76,11 @@ fn dolarapi_oficial(body: String) -> String {
 // refresher, single-thread). `val` es un token numérico (dígitos/./-): sin comillas
 // ni riesgo de inyección; `kind` es un literal fijo del código.
 fn rate_put(ds: String, kind: String, val: String) {
+    // Validar ANTES del DELETE: un valor raspado no numérico (BCV cambia el
+    // formato) hacía fallar el INSERT después de haber borrado la tasa buena.
+    if to_float0(val) <= 0.0 {
+        return
+    }
     sql_exec("DELETE FROM rates WHERE day = " + ds + " AND kind = '" + kind + "'")
     sql_exec("INSERT INTO rates VALUES (" + ds + ", '" + kind + "', " + val + ")")
 }

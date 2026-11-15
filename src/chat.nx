@@ -10,6 +10,7 @@ import "src/kv"
 import "src/md"
 import "src/articles"
 import "std/serve"
+import "src/sqldb"
 
 // nyx_url_decode (percent %XX + '+') viene de std/web (import en main.nx); el scope
 // global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de
@@ -25,6 +26,40 @@ const KV_PORT: int = 6380
 // (registro fd<->sala de las rooms, init eager via serve_app).
 var CHAT_RL_MU: Map = Map.new()
 var CHAT_RL_READY: int = 0
+
+// ── Interruptor del chat ────────────────────────────────────────────────────
+// El chat se puede OCULTAR desde /admin/salas. Apagado: no sale la tarjeta de la
+// portada, /chat y /api/chat* responden 404, el WebSocket se rechaza y no se
+// mandan avisos push de chat. El estado vive en la tabla meta de nyx-db (clave
+// chat_on) con copia en memoria; SIN FILA = APAGADO (también si se pierde la base).
+var __chat_on: Array = [0]
+const CHAT_WS_MAX: int = 300
+
+// Llamar desde main() DESPUÉS de sqldb_init (lee la tabla meta).
+pub fn chat_flag_load() {
+    __chat_on = [0]
+    let rows: Array = sql_rows("SELECT v FROM meta WHERE k = 'chat_on'")
+    if rows.length() >= 2 {
+        let row: Array = rows[1]
+        let v: String = row[0]
+        if v == "1" {
+            __chat_on[0] = 1
+        }
+    }
+}
+
+pub fn chat_enabled() -> bool {
+    let v: int = __chat_on[0]
+    return v == 1
+}
+
+pub fn chat_set_enabled(on: bool) {
+    var v: String = "0"
+    if on { v = "1" }
+    sql_exec("DELETE FROM meta WHERE k = 'chat_on'")
+    sql_exec("INSERT INTO meta VALUES ('chat_on', '" + v + "')")
+    if on { __chat_on[0] = 1 } else { __chat_on[0] = 0 }
+}
 
 // Llamar una vez desde main() antes de servir (crea el mutex).
 pub fn chat_init() {
@@ -386,6 +421,16 @@ pub fn chat_ws_handler(info: Array) -> int {
     let fd: int = info[0]
     var path: String = info[1]
     let headers: Array = info[2]
+    if !chat_enabled() {
+        tcp_write(fd, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        return 0
+    }
+    // Tope de conexiones vivas: cada una cuesta un hilo y un fd, y la difusión
+    // escribe a todas en serie.
+    if ws_count() >= CHAT_WS_MAX {
+        tcp_write(fd, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        return 0
+    }
     let qp: int = path.indexOf("?")
     if qp >= 0 {
         path = path.substring(0, qp)

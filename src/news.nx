@@ -19,6 +19,7 @@ var __bvc_ibc: Array = [""]
 var __bvc_ts: Array = [0]
 
 const NEWS_TTL: int = 900
+const NEWS_RETRY: int = 60
 
 pub fn news_init() {
     __news_full = [""]
@@ -689,6 +690,10 @@ fn refresh() {
         fetch_into(items, "https://cronica.uno/feed/", "Cronica Uno")
         fetch_into(items, "https://www.elnacional.com/feed/", "El Nacional")
     }
+    // Sin ítems (red caída, todos los feeds fallaron): conservar lo que había.
+    if items.length() == 0 {
+        return
+    }
     sort_desc(items)
     __news_full[0] = render_list(items, 60, false)
     __news_prev[0] = render_list(items, 5, true)
@@ -699,9 +704,11 @@ fn ensure_fresh() {
     let now: int = time()
     let last: int = __news_ts[0]
     let cur: String = __news_full[0]
-    if cur.length() == 0 or now - last > NEWS_TTL {
-        refresh()
+    // Con la caché vacía se reintenta, pero como mucho una vez por minuto: antes
+    // cada request repetía los fetch síncronos y bloqueaba a los workers.
+    if now - last > NEWS_TTL or (cur.length() == 0 and now - last > NEWS_RETRY) {
         __news_ts[0] = now
+        refresh()
     }
 }
 
@@ -737,6 +744,9 @@ fn bvc_refresh() {
     if xml.length() > 0 {
         parse_feed(xml, "BVC", items, 20)
     }
+    if items.length() == 0 {
+        return
+    }
     __bvc_list[0] = render_list(items, 12, false)
     var ibc: String = ""
     var i: int = 0
@@ -757,9 +767,9 @@ fn bvc_ensure() {
     let now: int = time()
     let last: int = __bvc_ts[0]
     let cur: String = __bvc_list[0]
-    if cur.length() == 0 or now - last > NEWS_TTL {
-        bvc_refresh()
+    if now - last > NEWS_TTL or (cur.length() == 0 and now - last > NEWS_RETRY) {
         __bvc_ts[0] = now
+        bvc_refresh()
     }
 }
 

@@ -21,10 +21,15 @@ const FV_TTL: int = 180
 
 var __fv_body: Array = [""]
 var __fv_ts: Array = [0]
+// Último INTENTO de descarga (éxito o no): sin esto, con FUNVISIS caído cada
+// request reintentaba la descarga y los workers se agotaban esperando.
+var __fv_try: Array = [0]
+const FV_RETRY: int = 45
 
 pub fn funvisis_init() {
     __fv_body = [""]
     __fv_ts = [0]
+    __fv_try = [0]
 }
 
 // Epoch (segundos) de la ultima descarga exitosa de FUNVISIS. 0 si nunca hubo.
@@ -40,8 +45,13 @@ fn funvisis_body() -> String {
     let now: int = time()
     let last: int = __fv_ts[0]
     var body: String = __fv_body[0]
-    if body.length() == 0 or now - last > FV_TTL {
-        let resp: Array = http_get(FV_URL)
+    let tried: int = __fv_try[0]
+    if (body.length() == 0 or now - last > FV_TTL) and now - tried >= FV_RETRY {
+        __fv_try[0] = now
+        // net_request (src/net.nx): plazo TOTAL de 20 s (http_get esperaba hasta
+        // 30 s por lectura).
+        let hd: Array = ["User-Agent", NET_UA, "Accept", "*/*"]
+        let resp: Array = net_request(FV_URL, hd)
         let status: int = resp[1]
         if status == 200 {
             let fresh: String = resp[3]

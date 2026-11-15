@@ -62,7 +62,13 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
         sb.append("<div id=\"push-topics\" class=\"push-topics\" hidden>\n")
         sb.append("<label><input type=\"checkbox\" id=\"push-t-sismos\" checked> Sismos</label>\n")
         sb.append("<label><input type=\"checkbox\" id=\"push-t-tasas\" checked> Tasas BCV</label>\n")
-        sb.append("<label><input type=\"checkbox\" id=\"push-t-chat\" checked> Chat</label>\n")
+        // La casilla existe siempre (el JS de abajo la lee por id), pero se oculta y
+        // se desmarca cuando el chat está apagado desde el admin.
+        if chat_enabled() {
+            sb.append("<label><input type=\"checkbox\" id=\"push-t-chat\" checked> Chat</label>\n")
+        } else {
+            sb.append("<label hidden><input type=\"checkbox\" id=\"push-t-chat\" disabled> Chat</label>\n")
+        }
         sb.append("</div>\n")
         sb.append("</div>\n")
         sb.append("<p>venezuelainfo.org — Hecho con <a href=\"https://nyxlang.com\">Nyx</a>. ")
