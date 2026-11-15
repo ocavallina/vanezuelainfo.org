@@ -55,7 +55,7 @@ pub fn kv_cmd(h: int, parts: Array) -> String {
     let first: int = header.charAt(0)
     if first == 36 {
         let len_str: String = header.substring(1, header.length())
-        let len: int = string_to_int(len_str)
+        let len: int = string_to_int_or(len_str, -1)
         if len < 0 {
             return ""
         }
@@ -99,7 +99,7 @@ pub fn kv_cmd_array(h: int, parts: Array) -> Array {
         return result
     }
     let count_str: String = header.substring(1, header.length())
-    let count: int = string_to_int(count_str)
+    let count: int = string_to_int_or(count_str, 0)
     if count <= 0 {
         return result
     }
@@ -177,7 +177,7 @@ pub fn kv_exists(h: int, key: String) -> bool {
 
 pub fn kv_incr(h: int, key: String) -> int {
     let parts: Array = ["INCR", key]
-    return string_to_int(kv_cmd(h, parts))
+    return string_to_int_or(kv_cmd(h, parts), 0)
 }
 
 pub fn kv_expire(h: int, key: String, ttl: int) {

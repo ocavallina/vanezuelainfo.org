@@ -23,9 +23,14 @@
 // http_parse_url/http_build_request/http_tls_request/http_get salen de std/http
 // por scope global (lo importa src/main.nx); no hay que importarlo aquí.
 //
-// OJO: NO desactiva la validación de certificados — es que nunca estuvo activa.
-// tls_connect y https_get comparten el mismo get_ssl_ctx() con SSL_VERIFY_NONE
-// (runtime/tls.c:74), así que el cert roto de bcv.org.ve sigue funcionando igual.
+// CERTIFICADOS (2026-11-15): desde nyx 0.44 std/http VERIFICA el certificado por
+// omisión (antes el runtime no validaba nada). Se verifica TODO salvo los hosts de
+// NET_TLS_SIN_VERIFICAR: bcv.org.ve sirve una cadena que no valida contra las CAs
+// del sistema, y sin la excepción las tasas caerían al respaldo de DolarAPI y se
+// perdería la fecha valor. La excepción va POR PETICIÓN (HttpOpts.verificar_tls),
+// no con http_tls_inseguro(), que apaga la verificación de todo el proceso.
+// Riesgo aceptado: quien intercepte la ruta a BCV puede falsear la tasa (igual que
+// antes de 0.44). Si BCV arregla su cadena, vaciar la lista.
 
 const NET_UA: String = "venezuelainfo.org/1.0 (+https://venezuelainfo.org)"
 
@@ -41,21 +46,35 @@ fn net_resp_body(resp: Array) -> String {
     return body
 }
 
-// GET de una URL externa. Devuelve el body YA des-chunkeado, o "" ante fallo.
-// Sustituye a https_get en todo el proyecto.
-pub fn net_get(url: String) -> String {
+// Hosts a los que se conecta SIN verificar el certificado (comparación exacta).
+fn net_tls_sin_verificar(host: String) -> bool {
+    return host == "www.bcv.org.ve" or host == "bcv.org.ve"
+}
+
+// GET con cabeceras propias. Devuelve la respuesta de std/http
+// ["response", status, headers, body]; status -1 ante fallo de transporte
+// (conexión, certificado, plazo vencido, respuesta cortada).
+// Plazos: 10 s para conectar y 20 s para la respuesta COMPLETA (tope total, no por
+// lectura: un servidor que gotea bytes no cuelga al hilo que llama).
+pub fn net_request(url: String, headers: Array) -> Array {
     let parsed: Array = http_parse_url(url)
-    let secure: int = parsed[4]
-    if secure == 1 {
-        let host: String = parsed[1]
-        let port: int = parsed[2]
-        let path: String = parsed[3]
-        let hd: Array = ["User-Agent", NET_UA, "Accept", "*/*"]
-        let req: String = http_build_request("GET", host, path, hd, "")
-        let resp: Array = http_tls_request(host, port, req)
-        return net_resp_body(resp)
+    let host: String = parsed[1]
+    var o: HttpOpts = http_opts()
+    o.connect_ms = 10000
+    o.respuesta_ms = 20000
+    o.verificar_tls = !net_tls_sin_verificar(host)
+    let r: Result<Array, Error> = try_http_request_opts("GET", url, headers, "", o)
+    match r {
+        Result.Ok(resp) => { return resp }
+        Result.Err(_e) => {}
     }
-    // HTTP plano: http_get de std/http ya des-chunkea por su cuenta
-    // (http_read_chunked_fd). Es el camino que usa src/funvisis.nx.
-    return net_resp_body(http_get(url))
+    let fail: Array = ["response", -1, [], ""]
+    return fail
+}
+
+// GET de una URL externa (http o https). Devuelve el body YA des-chunkeado, o ""
+// ante fallo o status no 2xx. Sustituye a https_get en todo el proyecto.
+pub fn net_get(url: String) -> String {
+    let hd: Array = ["User-Agent", NET_UA, "Accept", "*/*"]
+    return net_resp_body(net_request(url, hd))
 }

@@ -280,8 +280,8 @@ fn dup_in_funvisis(fvrecs: Array, ep: int, lat: float, lon: float) -> bool {
         if dt <= 90 {
             let flat: String = r[2]
             let flon: String = r[3]
-            var dla: float = string_to_float(flat) - lat
-            var dlo: float = string_to_float(flon) - lon
+            var dla: float = to_float0(flat) - lat
+            var dlo: float = to_float0(flon) - lon
             if dla < 0.0 { dla = -dla }
             if dlo < 0.0 { dlo = -dlo }
             if dla <= 0.3 and dlo <= 0.3 {
@@ -337,8 +337,8 @@ pub fn all_quakes() -> Array {
         let ep: int = r[8]
         let la: String = r[2]
         let lo: String = r[3]
-        let latf: float = string_to_float(la)
-        let lonf: float = string_to_float(lo)
+        let latf: float = to_float0(la)
+        let lonf: float = to_float0(lo)
         if !dup_in_funvisis(fv, ep, latf, lonf) {
             merged.push(r)
         }

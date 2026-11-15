@@ -221,6 +221,18 @@ fn push_host_ok(endpoint: String) -> bool {
     if slash > 0 {
         host = rest.substring(0, slash)
     }
+    // El host debe ser SOLO un nombre: sin puerto, userinfo, query ni espacios.
+    // std/http corta el host en el primer ":" — "evil.example:443.push.apple.com"
+    // pasaba el filtro por sufijo y la conexión iba a evil.example (SSRF).
+    var hi: int = 0
+    while hi < host.length() {
+        let hc: int = host.charAt(hi)
+        let ok: bool = (hc >= 97 and hc <= 122) or (hc >= 48 and hc <= 57) or hc == 45 or hc == 46
+        if !ok {
+            return false
+        }
+        hi = hi + 1
+    }
     if host == "fcm.googleapis.com" {
         return true
     }

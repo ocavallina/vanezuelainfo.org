@@ -337,21 +337,21 @@ fn rfc822_key(s: String) -> int {
     let pmon: String = parts[2]
     let pyr: String = parts[3]
     let ptm: String = parts[4]
-    let day: int = string_to_int(md_trim(pday))
+    let day: int = to_int0(md_trim(pday))
     let mon: int = month_num(md_trim(pmon))
-    let yr: int = string_to_int(md_trim(pyr))
+    let yr: int = to_int0(md_trim(pyr))
     let tm: String = md_trim(ptm)
     var hh: int = 0
     var mm: int = 0
     let c1: int = tm.indexOf(":")
     if c1 > 0 {
-        hh = string_to_int(tm.substring(0, c1))
+        hh = to_int0(tm.substring(0, c1))
         let rest: String = tm.substring(c1 + 1, tm.length())
         let c2: int = rest.indexOf(":")
         if c2 > 0 {
-            mm = string_to_int(rest.substring(0, c2))
+            mm = to_int0(rest.substring(0, c2))
         } else {
-            mm = string_to_int(rest)
+            mm = to_int0(rest)
         }
     }
     return ((yr * 100 + mon) * 100 + day) * 10000 + hh * 100 + mm
@@ -380,9 +380,9 @@ fn rfc822_epoch(s: String) -> int {
     let pmon: String = parts[2]
     let pyr: String = parts[3]
     let ptm: String = parts[4]
-    let day: int = string_to_int(md_trim(pday))
+    let day: int = to_int0(md_trim(pday))
     let mon: int = month_num(md_trim(pmon))
-    let yr: int = string_to_int(md_trim(pyr))
+    let yr: int = to_int0(md_trim(pyr))
     if yr < 1970 or mon < 1 or day < 1 {
         return 0
     }
@@ -393,19 +393,19 @@ fn rfc822_epoch(s: String) -> int {
     if tp.length() >= 2 {
         let h0: String = tp[0]
         let m0: String = tp[1]
-        hh = string_to_int(h0)
-        mm = string_to_int(m0)
+        hh = to_int0(h0)
+        mm = to_int0(m0)
         if tp.length() >= 3 {
             let s0: String = tp[2]
-            ss = string_to_int(s0)
+            ss = to_int0(s0)
         }
     }
     var ep: int = __dfc2(yr, mon, day) * 86400 + hh * 3600 + mm * 60 + ss
     if parts.length() >= 6 {
         let z: String = md_trim(parts[5])
         if z.length() == 5 and (z.startsWith("+") or z.startsWith("-")) {
-            let zh: int = string_to_int(z.substring(1, 3))
-            let zm: int = string_to_int(z.substring(3, 5))
+            let zh: int = to_int0(z.substring(1, 3))
+            let zm: int = to_int0(z.substring(3, 5))
             let off: int = zh * 3600 + zm * 60
             if z.startsWith("+") { ep = ep - off } else { ep = ep + off }
         }
@@ -448,7 +448,7 @@ pub fn rel_fill(html: String) -> String {
             return out.to_string()
         }
         let eps: String = tail.substring(0, e)
-        let ep: int = string_to_int(eps)
+        let ep: int = to_int0(eps)
         if ep > 0 {
             out.append(rel_txt(now - ep))
         }

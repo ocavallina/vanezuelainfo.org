@@ -9,7 +9,7 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
     sb.append(viewport)
     sb.append("\">\n")
     sb.append("<title>")
-    sb.append(title)
+    sb.append(html_escape(title))
     sb.append(" — VenezuelaInfo</title>\n")
     sb.append("<meta name=\"description\" content=\"Noticias, informacion y monitoreo sismico de Venezuela.\">\n")
     sb.append("<link rel=\"stylesheet\" href=\"/assets/style.css?v=68\">\n")
