@@ -26,5 +26,6 @@ datos clave:
 - Manten a la mano un kit de emergencia.
 - Durante un sismo: agachate, cubrete y sujetate.
 
-Los datos provienen del **USGS** (Servicio Geologico de los Estados Unidos), una
-fuente publica y confiable de informacion sismica mundial.
+Los datos provienen de **FUNVISIS** (la Fundacion Venezolana de Investigaciones
+Sismologicas, autoridad sismica nacional) y del **EMSC** (Centro Sismologico
+Euro-Mediterraneo), que aporta los eventos fronterizos y costa afuera.

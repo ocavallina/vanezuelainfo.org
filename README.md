@@ -17,7 +17,8 @@ tiempo real**. Aplicación web instalable (PWA).
 >
 > Lo interesante de VenezuelaInfo no es solo lo que hace, sino **con qué está
 > hecho**: **cada capa del stack está escrita en [Nyx](https://nyxlang.com)**.
-> No hay nginx, ni un framework web de otro lenguaje, ni JavaScript de aplicación,
+> No hay nginx, ni un framework web de otro lenguaje, ni un framework de JavaScript (solo queda
+> una pasarela JS mínima para lo que WebAssembly aún no alcanza),
 > ni una base de datos de terceros.
 >
 > | Capa | En un stack típico | Aquí |

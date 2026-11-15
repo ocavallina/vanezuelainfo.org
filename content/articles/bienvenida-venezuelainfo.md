@@ -13,7 +13,7 @@ sismico en vivo**.
 ## Que vas a encontrar
 
 - Noticias y articulos sobre el pais.
-- Una seccion de [sismos recientes](/sismos) con datos del USGS.
+- Una seccion de [sismos recientes](/sismos) con datos de FUNVISIS y EMSC.
 - Informacion practica y de interes general.
 
 ## Hecho con Nyx

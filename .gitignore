@@ -6,3 +6,6 @@
 
 # El despliegue (unidad, plantillas, build-wasm.sh) vive en el repo privado del servidor.
 /deploy/
+
+# Índice de la stdlib generado por `nyx capabilities` (depende del toolchain instalado).
+/CAPABILITIES.md

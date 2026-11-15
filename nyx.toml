@@ -2,7 +2,7 @@
 name = "venezuelainfo-org"
 version = "0.1.0"
 main = "src/main.nx"
-description = "venezuelainfo.org — portal de noticias e informacion sobre Venezuela (sismos en vivo via USGS)"
+description = "venezuelainfo.org — portal de noticias e informacion sobre Venezuela (sismos en vivo via FUNVISIS y EMSC)"
 
 [dependencies]
 nyx-db = "*"
