@@ -136,7 +136,9 @@ pub fn wcard_boot() {
     if nm == "Tu ubicacion" or nm == "Mi ubicacion" {
         revgeo_fetch("wcard_on_revgeo")
     }
-    js_geo("wcard_geo_ok", "")
+    // SIN js_geo aquí: pedía la ubicación nada más abrir la portada (sin gesto del
+    // usuario) y, con el permiso concedido, pisaba la ciudad elegida en /clima. La
+    // ubicación se pide solo desde el botón "Mi ubicación" de /clima.
 }
 
 // — Página /clima —

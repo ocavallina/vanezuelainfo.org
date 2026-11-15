@@ -10,7 +10,7 @@
 import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=11';
 
 window.nyxReady = (async () => {
-  const wresp = await fetch('/assets/veninfo.wasm?v=20');
+  const wresp = await fetch('/assets/veninfo.wasm?v=21');
   // Un 404/502 trae HTML: sin esta comprobación el fallo aparecía como error de compilación.
   if (!wresp.ok) throw new Error('veninfo.wasm: HTTP ' + wresp.status);
   const bytes = await wresp.arrayBuffer();

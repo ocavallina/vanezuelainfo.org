@@ -3,10 +3,10 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v71';
+const CACHE = 'veninfo-v72';
 const SHELL = ['/', '/calculadora', '/assets/style.css?v=68', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest',
   // El front (loader + shim + wasm): sin ellos la calculadora instalada no arranca sin red.
-  '/assets/nyx-loader.js?v=22', '/assets/nyx-wasi-shim.js?v=11', '/assets/veninfo.wasm?v=20'];
+  '/assets/nyx-loader.js?v=23', '/assets/nyx-wasi-shim.js?v=11', '/assets/veninfo.wasm?v=21'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }));

@@ -136,7 +136,20 @@ export async function afterStart({ exports, nyx }) {
   exports.fx_on_rates(0n, M(""));
   if (!texts["#fin-body"].includes("No se pudieron cargar las tasas")) throw new Error("FALLO aviso sin tasas: " + texts["#fin-body"]);
   console.log("ok finanzas: aviso si /api/rates falla sin tasas previas");
+
+  // Sin conexión PERO con tasas guardadas en el dispositivo: se usan, avisando.
+  store["fx_rates"] = FIX_RATES;
+  values["#calc-rate-sel"] = "bcv"; values["#calc-dir"] = "d2b"; values["#calc-day"] = "hoy"; values["#calc-amt"] = "1";
+  exports.fx_on_rates(0n, M(""));
+  if (texts["#fin-body"].includes("No se pudieron")) throw new Error("FALLO offline: no usó las tasas guardadas: " + texts["#fin-body"]);
+  if (!texts["#calc-rate"].includes("tasa guardada")) throw new Error("FALLO offline: sin aviso de tasa guardada: " + texts["#calc-rate"]);
+  if (texts["#calc-rate"].includes("mañana")) throw new Error("FALLO offline: ofreció la tasa de mañana guardada");
+  delete store["fx_rates"];
+  console.log("ok finanzas: sin conexión usa las tasas guardadas y lo avisa");
   exports.fx_on_rates(200n, M(FIX_RATES));
+  if (store["fx_rates"] !== FIX_RATES) throw new Error("FALLO: /api/rates no se guardó en el dispositivo");
+  exports.calc_render();
+  if (texts["#calc-rate"].includes("tasa guardada")) throw new Error("FALLO: sigue el aviso de tasa guardada tras cargar: " + texts["#calc-rate"]);
   exports.fx_on_criptoya(200n, M(FIX_CRIPTOYA));
   exports.fx_on_cop(200n, M(FIX_COP));
   const card = texts["#fin-body"], page = texts["#fz-div"];

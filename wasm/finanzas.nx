@@ -24,6 +24,8 @@ var fxc: Array = [""]
 var fxb: Array = [""]
 // 1 si /api/rates falló: se avisa en vez de dejar "Cargando…" para siempre.
 var fx_fail: Array = [0]
+// 1 si las tasas en pantalla son las GUARDADAS en el dispositivo (sin conexión).
+var fx_stale: Array = [0]
 
 // ISO "YYYY-MM-DD" -> "dd/mm" (o "" si corto).
 fn iso_ddmm(iso: String) -> String {
@@ -202,7 +204,13 @@ fn calc_render_do() {
         dom_set_html("#calc-to-unit", "Bs")
         dom_set_html("#calc-result", fmt_f(amt * r, 2, 2))
     }
-    dom_set_html("#calc-rate", "1 " + div_name(sel, day) + " = " + fmt_f(r, 2, 2) + " Bs")
+    var nota: String = ""
+    if fx_stale[0] == 1 {
+        let f0: String = fxb[0]
+        nota = " &middot; sin conexi&oacute;n: tasa guardada"
+        if f0.length() >= 10 { nota = nota + " del " + iso_ddmm(f0) }
+    }
+    dom_set_html("#calc-rate", "1 " + div_name(sel, day) + " = " + fmt_f(r, 2, 2) + " Bs" + nota)
 }
 
 // Invierte el sentido (divisa↔Bs) y recalcula.
@@ -311,16 +319,32 @@ fn calc_copy() {
 #[export_name = "fx_on_rates"]
 fn fx_on_rates(status: int, body: String) {
     if status != 200 {
-        // Solo cuenta como fallo si NO hay tasas previas: un refresco fallido con
-        // tasas ya cargadas no debe cambiar lo que se ve.
+        // Solo importa si NO hay tasas previas: un refresco fallido con tasas ya
+        // cargadas no debe cambiar lo que se ve.
         let prev: String = fxv[0]
         if prev.length() == 0 {
-            fx_fail[0] = 1
-            fx_paint()
+            // Sin red: usar las últimas tasas guardadas en este dispositivo (la
+            // calculadora instalada tiene que servir sin conexión), avisando de
+            // que no son de ahora. Si no hay ninguna guardada, se avisa del fallo.
+            let saved: String = ls_get("fx_rates")
+            if jseg(saved, "\"hoy\"").length() > 0 {
+                fx_stale[0] = 1
+                fx_apply(saved)
+            } else {
+                fx_fail[0] = 1
+                fx_paint()
+            }
         }
         return
     }
     fx_fail[0] = 0
+    fx_stale[0] = 0
+    ls_set("fx_rates", body)
+    fx_apply(body)
+}
+
+// Aplica un cuerpo de /api/rates (recién llegado o guardado) al estado y repinta.
+fn fx_apply(body: String) {
     let hoy: String = jseg(body, "\"hoy\"")
     if hoy.length() > 0 {
         let bcv: String = jnum(hoy, "bcv")
@@ -330,7 +354,7 @@ fn fx_on_rates(status: int, body: String) {
         fxb[0] = jstr(hoy, "fecha")
     }
     let prox: String = jseg(body, "\"prox\"")
-    if prox.length() > 0 {
+    if prox.length() > 0 and fx_stale[0] == 0 {
         fxb[1] = jnum(prox, "bcv")
         fxb[2] = jnum(prox, "eur")
         fxb[3] = jstr(prox, "fecha")

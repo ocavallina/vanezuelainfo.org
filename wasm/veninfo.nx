@@ -58,6 +58,7 @@ fn main() {
     // re-entrante pilla un holder corto aunque su boot no haya corrido).
     fxv = ["", "", "", "", "", ""]
     fx_fail = [0]
+    fx_stale = [0]
     fxc = ["", "", ""]
     wc = ["10.4806", "-66.9036", "Caracas"]
     cr_name = []

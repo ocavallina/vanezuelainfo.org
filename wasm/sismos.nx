@@ -255,16 +255,17 @@ fn s_render() {
     }
 }
 
-// Tarjeta "más fuerte 24 h" (#sismo-destacado)
-fn s_destacado() {
+// Índice del sismo más fuerte de los últimos `win` segundos con magnitud*10 >=
+// `min10` (a igual magnitud, el más reciente). -1 si no hay.
+fn s_best(win: int, min10: int) -> int {
     let now: int = time()
     var best: int = 0 - 1
-    var bm: int = 0 - 1
+    var bm: int = min10 - 1
     var i: int = 0
     let n: int = s_n[0]
     while i < n {
         let ep: int = s_epoch[i]
-        if ep > 0 and now - ep <= 86400 and ep <= now + 3600 {
+        if ep > 0 and now - ep <= win and ep <= now + 3600 {
             let m: int = s_mag10[i]
             if m > bm {
                 bm = m
@@ -276,10 +277,36 @@ fn s_destacado() {
         }
         i = i + 1
     }
+    return best
+}
+
+// Tarjeta del sismo destacado (#sismo-destacado): el más fuerte de 24 h; si en la
+// semana hubo un M>=6 más fuerte, ese; y si en 24 h no hubo nada, el más fuerte
+// de los últimos 7 días.
+fn s_destacado() {
+    var tag: String = "Mas fuerte (24 h)"
+    var best: int = s_best(86400, 0)
+    let fuerte: int = s_best(604800, 60)
+    if fuerte >= 0 {
+        var supera: bool = best < 0
+        if best >= 0 {
+            let mb: int = s_mag10[best]
+            let mf: int = s_mag10[fuerte]
+            supera = mf > mb
+        }
+        if supera {
+            best = fuerte
+            tag = "Sismo fuerte (7 dias)"
+        }
+    }
+    if best < 0 {
+        best = s_best(604800, 0)
+        tag = "Mas fuerte (7 dias)"
+    }
     if best < 0 {
         js_remove_attr("#sismo-destacado", "href")
         js_toggle_class("#sismo-destacado", "vacio", 1)
-        dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">Ultimas 24 h</span><span class=\"destacado-info\">Sin sismos registrados</span>")
+        dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">Ultimos 7 dias</span><span class=\"destacado-info\">Sin sismos registrados</span>")
         js_remove_attr("#sismo-destacado", "hidden")
         return
     }
@@ -291,7 +318,7 @@ fn s_destacado() {
     let hora: String = s_hora[best]
     js_set_attr("#sismo-destacado", "href", "/sismos/" + esc(id))
     js_toggle_class("#sismo-destacado", "vacio", 0)
-    dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">Mas fuerte (24 h)</span><span class=\"destacado-mag\">M " + esc(mag) + " " + esc(mtype) + "</span><span class=\"destacado-info\">" + esc(place) + " &middot; " + esc(dia) + " " + esc(hora) + "</span>")
+    dom_set_html("#sismo-destacado", "<span class=\"destacado-tag\">" + tag + "</span><span class=\"destacado-mag\">M " + esc(mag) + " " + esc(mtype) + "</span><span class=\"destacado-info\">" + esc(place) + " &middot; " + esc(dia) + " " + esc(hora) + "</span>")
     js_remove_attr("#sismo-destacado", "hidden")
 }
 
