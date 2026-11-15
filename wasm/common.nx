@@ -294,3 +294,9 @@ pub fn fmt_cop_do(vs: String) -> String {
     return fmt_f(string_to_float(vs), 0, 0)
 }
 
+// Float tolerante para datos de APIs: 0.0 si el texto no es un número ("" cuando
+// falta el campo, "null" cuando la API manda null). string_to_float ABORTA el
+// módulo con esas entradas.
+pub fn fnum(s: String) -> float {
+    return string_to_float_or(s, 0.0)
+}

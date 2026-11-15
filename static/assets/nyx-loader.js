@@ -10,7 +10,10 @@
 import { runNyxWasm, domBindings, browserBindings } from '/assets/nyx-wasi-shim.js?v=11';
 
 window.nyxReady = (async () => {
-  const bytes = await (await fetch('/assets/veninfo.wasm?v=19')).arrayBuffer();
+  const wresp = await fetch('/assets/veninfo.wasm?v=20');
+  // Un 404/502 trae HTML: sin esta comprobación el fallo aparecía como error de compilación.
+  if (!wresp.ok) throw new Error('veninfo.wasm: HTTP ' + wresp.status);
+  const bytes = await wresp.arrayBuffer();
   const dom = domBindings();
   const br = browserBindings();             // std/browser: fetch/timers/ls/tz/media
   const ref = { exports: null };            // los callbacks re-entran vía ref
@@ -64,13 +67,22 @@ window.nyxReady = (async () => {
       const c = S(contSel), it = S(itemSel), a = S(attr), hs = S(hiddenSel), h = S(handler);
       const cont = document.querySelector(c);
       if (!cont) return;
-      cont.addEventListener('click', (e) => {
-        if (e.target.closest && e.target.closest('a')) return;
+      const pick = (e) => {
+        if (e.target.closest && e.target.closest('a')) return false;
         const item = e.target.closest && e.target.closest(it);
-        if (!item || !cont.contains(item)) return;
+        if (!item || !cont.contains(item)) return false;
         const hid = document.querySelector(hs);
         if (hid) hid.value = item.getAttribute(a) || '';
         call(h);
+        return true;
+      };
+      cont.addEventListener('click', pick);
+      // Teclado: Enter o Espacio sobre el item enfocado hacen lo mismo que el click.
+      cont.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const t = e.target;
+        if (!t || !t.matches || !t.matches(it)) return;
+        if (pick(e)) e.preventDefault();
       });
     },
     // — Enter en un input (preventDefault) —
@@ -126,4 +138,12 @@ window.nyxReady = (async () => {
     havKm: (la1, lo1, la2, lo2) => Number(S(r.exports.hav_km(M(String(la1)), M(String(lo1)), M(String(la2)), M(String(lo2))))),
   };
 })();
-window.nyxReady.catch(() => {}); // sin unhandledrejection; cada consumidor maneja el fallo
+// Si el módulo no carga, las secciones que esperan al wasm se quedaban en
+// "Cargando…" para siempre: se avisa en su lugar.
+window.nyxReady.catch(() => {
+  const msg = 'No se pudo cargar esta sección. Recarga la página.';
+  ['#w-body', '#fin-body', '#fz-div', '#fz-cripto', '#calc-result', '#c-actual', '#chat-status'].forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el && /Cargando|Esperando|^\s*$/.test(el.textContent)) el.textContent = msg;
+  });
+}); // sin unhandledrejection; cada consumidor maneja el fallo

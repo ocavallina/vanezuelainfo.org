@@ -3,8 +3,10 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v70';
-const SHELL = ['/', '/calculadora', '/assets/style.css?v=68', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest'];
+const CACHE = 'veninfo-v71';
+const SHELL = ['/', '/calculadora', '/assets/style.css?v=68', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest',
+  // El front (loader + shim + wasm): sin ellos la calculadora instalada no arranca sin red.
+  '/assets/nyx-loader.js?v=22', '/assets/nyx-wasi-shim.js?v=11', '/assets/veninfo.wasm?v=20'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }));
@@ -51,7 +53,15 @@ self.addEventListener('notificationclick', function (e) {
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (cs) {
       for (var i = 0; i < cs.length; i++) {
-        if (cs[i].url.indexOf(u) !== -1 && 'focus' in cs[i]) { return cs[i].focus(); }
+        if (cs[i].url.indexOf(u) !== -1 && 'focus' in cs[i]) {
+          // Recargar antes de enfocar: una pestaña ya abierta en /sismos mostraba
+          // la lista vieja, sin el sismo del aviso.
+          var c = cs[i];
+          if ('navigate' in c) {
+            return c.navigate(u).then(function (w) { return (w || c).focus(); }, function () { return c.focus(); });
+          }
+          return c.focus();
+        }
       }
       return self.clients.openWindow(u);
     })

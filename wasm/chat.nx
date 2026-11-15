@@ -10,10 +10,8 @@
 // arena:true sin corromper estado (a diferencia de finanzas/sismos, que sí
 // guardan substrings del fetch en globales y por eso NO usan arena).
 //
-// EN FRÍO: este módulo está escrito y compilado pero NO enchufado — handle_chat
-// (src/main.nx) sigue sirviendo chat.js y no carga el loader, y main() no rutea
-// pg=="chat". Go-live = añadir el loader + #pg a handle_chat, rutear chat_boot,
-// activar arena en el loader para pg=="chat", y borrar chat.js.
+// EN PRODUCCIÓN: /chat lo sirve este módulo (handle_chat emite pg="chat" y el
+// loader activa la arena). static/assets/chat.js se retiró el 2026-11-15.
 
 var chat_tries: Array = [0]    // reintentos de WS (backoff exponencial)
 var chat_wsok: Array = [0]     // 1 si el WS está en vivo
@@ -258,6 +256,7 @@ fn chat_on_rooms(status: int, body: String) {
     let root: Array = json_parse(body)
     let items: Array = root[1]
     let cur: String = chat_room()
+    var found: bool = false
     var sb: StringBuilder = StringBuilder.new()
     var i: int = 0
     while i < items.length() {
@@ -267,17 +266,26 @@ fn chat_on_rooms(status: int, body: String) {
         sb.append("<option value=\"")
         sb.append(esc(id))
         sb.append("\"")
-        if id == cur { sb.append(" selected") }
+        if id == cur { sb.append(" selected"); found = true }
         sb.append(">")
         sb.append(esc(nm))
         sb.append("</option>")
         i = i + 1
     }
     dom_set_html("#chat-room", sb.to_string())
+    // La sala en uso ya no existe (borrada, o guardada de otra época): el select
+    // cayó a la primera; cambiar también la conexión, que seguía en la vieja.
+    if !found and items.length() > 0 {
+        chat_room_switch()
+    }
 }
 
 #[export_name = "chat_room_change"]
 fn chat_room_change() {
+    chat_room_switch()
+}
+
+fn chat_room_switch() {
     let r: String = dom_get_value("#chat-room")
     ls_set("chat_room", r)
     js_chat_clear()
@@ -291,6 +299,14 @@ fn chat_room_change() {
 pub fn chat_boot() {
     let sn: String = ls_get("chat_nick")
     if sn.length() > 0 { js_set_value("#chat-nick", sn) }
+    // Restaurar la sala guardada: el <select> llega del servidor solo con
+    // "general", así que chat_room() nunca alcanzaba a leer localStorage y cada
+    // visita volvía a General. Se siembra la opción guardada; chat_on_rooms
+    // reconstruye la lista real (y cambia de sala si esta ya no existe).
+    let sr: String = ls_get("chat_room")
+    if sr.length() > 0 and sr != "general" {
+        dom_set_html("#chat-room", "<option value=\"" + esc(sr) + "\" selected>" + esc(sr) + "</option>")
+    }
     dom_on("#chat-text", "input", "chat_count")
     dom_on("#chat-room", "change", "chat_room_change")
     js_on_submit("#chat-form", "chat_send")

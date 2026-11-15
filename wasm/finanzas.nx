@@ -22,6 +22,8 @@ var fxv: Array = [""]
 var fxc: Array = [""]
 // BCV extra: [0]=fecha valor de HOY (ISO) [1]=bcv MAÑANA [2]=eur MAÑANA [3]=fecha MAÑANA (ISO)
 var fxb: Array = [""]
+// 1 si /api/rates falló: se avisa en vez de dejar "Cargando…" para siempre.
+var fx_fail: Array = [0]
 
 // ISO "YYYY-MM-DD" -> "dd/mm" (o "" si corto).
 fn iso_ddmm(iso: String) -> String {
@@ -72,7 +74,9 @@ fn fx_paint() {
     if hoyf.length() >= 10 {
         h = h + "<div class=\"fin-meta\">Tasa BCV válida " + iso_ddmm(hoyf) + "</div>"
     }
-    if h.length() == 0 { h = "Cargando…" }
+    if h.length() == 0 {
+        if fx_fail[0] == 1 { h = "No se pudieron cargar las tasas. Recarga la página." } else { h = "Cargando…" }
+    }
     dom_set_html("#fin-body", h)
 
     // Página /finanzas (divisas)
@@ -94,7 +98,9 @@ fn fx_paint() {
         let bpc: float = base / copf
         g = g + fz_item("Peso ↔ Bolívar", "1.000 COP = Bs " + fmt_f(bpc * 1000.0, 2, 2), "Bs 100 = " + fmt_f(100.0 / bpc, 0, 0) + " COP (vía USDT)")
     }
-    if g.length() == 0 { g = "Cargando…" }
+    if g.length() == 0 {
+        if fx_fail[0] == 1 { g = "No se pudieron cargar las tasas. Recarga la página." } else { g = "Cargando…" }
+    }
     dom_set_html("#fz-div", g)
 }
 
@@ -174,7 +180,11 @@ fn calc_render_do() {
     let day: String = dom_get_value("#calc-day")
     let r: float = rate_bs(sel, day)
     if r <= 0.0 {
-        dom_set_html("#calc-result", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
+        if fx_fail[0] == 1 {
+            dom_set_html("#calc-result", "<span class=\"calc-wait\">No se pudieron cargar las tasas. Recarga la p&aacute;gina.</span>")
+        } else {
+            dom_set_html("#calc-result", "<span class=\"calc-wait\">Esperando tasas&hellip;</span>")
+        }
         dom_set_html("#calc-rate", "")
         return
     }
@@ -300,7 +310,17 @@ fn calc_copy() {
 // {"hoy":{"bcv":..,"eur":..,"fecha":"YYYY-MM-DD"},"prox":{...}?,"bin":..}
 #[export_name = "fx_on_rates"]
 fn fx_on_rates(status: int, body: String) {
-    if status != 200 { return }
+    if status != 200 {
+        // Solo cuenta como fallo si NO hay tasas previas: un refresco fallido con
+        // tasas ya cargadas no debe cambiar lo que se ve.
+        let prev: String = fxv[0]
+        if prev.length() == 0 {
+            fx_fail[0] = 1
+            fx_paint()
+        }
+        return
+    }
+    fx_fail[0] = 0
     let hoy: String = jseg(body, "\"hoy\"")
     if hoy.length() > 0 {
         let bcv: String = jnum(hoy, "bcv")

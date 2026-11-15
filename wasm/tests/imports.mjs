@@ -132,6 +132,10 @@ export async function afterStart({ exports, nyx }) {
   // 2026-07-02T00:00:00-04:00 == 2026-07-02T04:00:00Z; local UTC-4 → 2/7/2026 00:00
 
   // Fase B: disparar los handlers con los fixtures (como haría js_fetch)
+  // /api/rates caído SIN tasas previas: avisa en vez de quedarse en "Cargando…"
+  exports.fx_on_rates(0n, M(""));
+  if (!texts["#fin-body"].includes("No se pudieron cargar las tasas")) throw new Error("FALLO aviso sin tasas: " + texts["#fin-body"]);
+  console.log("ok finanzas: aviso si /api/rates falla sin tasas previas");
   exports.fx_on_rates(200n, M(FIX_RATES));
   exports.fx_on_criptoya(200n, M(FIX_CRIPTOYA));
   exports.fx_on_cop(200n, M(FIX_COP));
