@@ -105,12 +105,15 @@ pub fn rates_snapshot() {
         let bd: String = net_get("https://ve.dolarapi.com/v1/dolares")
         if bd.length() > 0 {
             let bcv: String = dolarapi_oficial(bd)
-            if bcv.length() > 0 { rate_put(ds, "bcv", bcv) }
+            // El respaldo NO pisa un valor ya guardado para hoy: el de BCV directo es
+            // el exacto, y sustituirlo por el de DolarAPI (levemente distinto)
+            // disparaba un aviso "Nueva tasa BCV" falso al caer y otro al volver.
+            if bcv.length() > 0 and rate_on("bcv", d).length() == 0 { rate_put(ds, "bcv", bcv) }
         }
         let ed: String = net_get("https://ve.dolarapi.com/v1/euros")
         if ed.length() > 0 {
             let eur: String = dolarapi_oficial(ed)
-            if eur.length() > 0 { rate_put(ds, "eur", eur) }
+            if eur.length() > 0 and rate_on("eur", d).length() == 0 { rate_put(ds, "eur", eur) }
         }
     }
     let cd: String = net_get("https://criptoya.com/api/USDT/VES/1")

@@ -78,7 +78,13 @@ fn page_v(title: String, content: String, viewport: String, manifest: String, ap
         sb.append("</footer>\n")
     }
     // Registro del service worker (PWA)
-    sb.append("<script>\n")
+    // El nonce lo pone html_nocache (src/main.nx) al responder; ver la CSP allí.
+    // Sin atributos on*= en el HTML: la CSP los bloquea. Van aquí como listeners.
+    sb.append("<script nonce=\"@NONCE@\">\n")
+    sb.append("(function(){var ca=document.getElementById('calc-amt');if(ca){var sel=function(){ca.select();};ca.addEventListener('focus',sel);ca.addEventListener('click',sel);}\n")
+    // Mini-calculadora: los botones no deben robarle el foco al campo de expresión.
+    sb.append("['mc-eq','mc-ops'].forEach(function(i){var m=document.getElementById(i);if(m)m.addEventListener('mousedown',function(e){e.preventDefault();});});\n")
+    sb.append("var cf=document.getElementById('chat-form');if(cf)cf.addEventListener('submit',function(e){e.preventDefault();});})();\n")
     sb.append("if('serviceWorker' in navigator){\n")
     sb.append("  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});\n")
     sb.append("}\n")

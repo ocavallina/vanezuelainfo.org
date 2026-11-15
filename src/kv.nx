@@ -3,6 +3,21 @@
 // una conexion TLS corta por request (AUTH -> comandos -> cierra). Loopback,
 // asi que el SSL_VERIFY_NONE implicito del runtime es aceptable.
 
+// Dónde está nyx-kv. Por omisión 127.0.0.1:6380; VENINFO_KV_HOST / VENINFO_KV_PORT
+// lo cambian (pruebas: un puerto cerrado deja al sitio sin KV sin tocar el real).
+pub fn kv_host() -> String {
+    let h: String = getenv("VENINFO_KV_HOST")
+    if h.length() > 0 {
+        return h
+    }
+    return "127.0.0.1"
+}
+
+pub fn kv_port() -> int {
+    return string_to_int_or(getenv("VENINFO_KV_PORT"), 6380)
+}
+
+
 fn tls_read_line_local(h: int) -> String {
     var sb: StringBuilder = StringBuilder.new()
     var saw_cr: bool = false

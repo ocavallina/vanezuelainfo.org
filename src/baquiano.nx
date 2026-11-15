@@ -23,7 +23,7 @@ fn baq_token() -> String {
 }
 
 fn baq_conn() -> int {
-    return kv_connect_auth("127.0.0.1", 6380, baq_token())
+    return kv_connect_auth(kv_host(), kv_port(), baq_token())
 }
 
 // Quita '|' y caracteres de control (a espacio), recorta y limita a maxb bytes.

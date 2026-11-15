@@ -25,6 +25,19 @@ import "nyx-db/src/query"
 // vez de guardarla en un global: así no depende del orden de inicialización.
 const DB_PATH_DEFAULT: String = "/home/admin/veninfo.ndb"
 
+// MODO DE PRUEBA (VENINFO_TEST=1): para levantar el binario en otro puerto sin
+// tocar producción. main() exige además VENINFO_DB distinta de la ruta por omisión,
+// no arranca los hilos de fondo (refresher, avisos push) y no escribe el respaldo
+// de la clave VAPID. Úsese con VENINFO_KV_PORT apuntando a un puerto cerrado para
+// no hablar con el nyx-kv real. Ver tests/humo.sh.
+pub fn veninfo_test_mode() -> bool {
+    return getenv("VENINFO_TEST") == "1"
+}
+
+pub fn db_path_is_default() -> bool {
+    return db_path() == DB_PATH_DEFAULT
+}
+
 pub fn db_path() -> String {
     let e: String = md_trim(getenv("VENINFO_DB"))
     if e.length() > 0 {

@@ -16,8 +16,6 @@ import "src/sqldb"
 // global plano lo hace visible aqui. NO redeclarar el extern: duplicarlo con el de
 // std/web da "invalid redefinition of function 'nyx_url_decode'" en el link.
 
-const KV_HOST: String = "127.0.0.1"
-const KV_PORT: int = 6380
 
 // Mutex del cupo de ritmo: el GET->computar->SET de chat_post no es atómico y
 // los 16 workers de nyx-serve son HILOS de este mismo proceso — sin esto, N
@@ -120,7 +118,7 @@ fn chat_token() -> String {
 }
 
 pub fn chat_conn() -> int {
-    return kv_connect_auth(KV_HOST, KV_PORT, chat_token())
+    return kv_connect_auth(kv_host(), kv_port(), chat_token())
 }
 
 // Quita '|' y caracteres de control (los pasa a espacio), recorta y limita.

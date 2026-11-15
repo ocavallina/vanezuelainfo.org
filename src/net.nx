@@ -72,6 +72,24 @@ pub fn net_request(url: String, headers: Array) -> Array {
     return fail
 }
 
+// POST con cabeceras propias y plazo TOTAL de `total_ms` para la respuesta. Misma
+// forma de respuesta que net_request (status -1 ante fallo de transporte).
+pub fn net_post(url: String, headers: Array, body: String, total_ms: int) -> Array {
+    let parsed: Array = http_parse_url(url)
+    let host: String = parsed[1]
+    var o: HttpOpts = http_opts()
+    o.connect_ms = 8000
+    o.respuesta_ms = total_ms
+    o.verificar_tls = !net_tls_sin_verificar(host)
+    let r: Result<Array, Error> = try_http_request_opts("POST", url, headers, body, o)
+    match r {
+        Result.Ok(resp) => { return resp }
+        Result.Err(_e) => {}
+    }
+    let fail: Array = ["response", -1, [], ""]
+    return fail
+}
+
 // GET de una URL externa (http o https). Devuelve el body YA des-chunkeado, o ""
 // ante fallo o status no 2xx. Sustituye a https_get en todo el proyecto.
 pub fn net_get(url: String) -> String {

@@ -35,7 +35,7 @@ fn admin_token() -> String {
 }
 
 fn admin_conn() -> int {
-    return kv_connect_auth("127.0.0.1", 6380, admin_token())
+    return kv_connect_auth(kv_host(), kv_port(), admin_token())
 }
 
 // Escapa un valor para atributo HTML entre comillas dobles.
@@ -69,6 +69,11 @@ fn hex_char(n: int) -> String {
 fn gen_random_hex(bytes: int) -> String {
     let h: String = sha256(base64url_encode(csprng_bytes(32)))
     return h.substring(0, bytes * 2)
+}
+
+// Hex aleatorio para otros módulos (nonce de la CSP en src/main.nx).
+pub fn rand_hex(bytes: int) -> String {
+    return gen_random_hex(bytes)
 }
 
 fn hash_password(pass: String, salt: String) -> String {
@@ -275,6 +280,15 @@ fn render_dashboard(csrf: String) -> String {
     sb.append("<input name=\"body\" placeholder=\"Texto\" value=\"Notificacion de prueba de VenezuelaInfo\">\n")
     sb.append("<button type=\"submit\">Enviar prueba</button>\n")
     sb.append("</form>\n")
+    // Umbral de magnitud de los avisos de sismo.
+    sb.append("<form method=\"post\" action=\"/admin/push\" class=\"admin-form admin-row\">\n")
+    sb.append(csrf_input(csrf))
+    sb.append("<input type=\"hidden\" name=\"act\" value=\"magmin\">\n")
+    sb.append("<label>Avisar de sismos desde magnitud <input name=\"mag\" inputmode=\"decimal\" size=\"4\" value=\"")
+    sb.append(float_to_string(push_mag_min()))
+    sb.append("\"></label>\n")
+    sb.append("<button type=\"submit\">Guardar umbral</button> <small>entre 2.0 y 8.0</small>\n")
+    sb.append("</form>\n")
     // Resultado de la última prueba (la escribe el hilo emisor: cuando este POST
     // redirige, los envíos aún no han terminado).
     let tres: String = push_test_summary()
@@ -307,6 +321,10 @@ pub fn handle_admin_push_post(req: Request) -> Response {
     let tok: String = form_field(req.body, "csrf")
     if tok != csrf {
         return admin_html(403, render_login("Token invalido."))
+    }
+    if form_field(req.body, "act") == "magmin" {
+        push_mag_min_set(form_field(req.body, "mag"))
+        return redirect("/admin")
     }
     var topic: String = form_field(req.body, "topic")
     if topic != "tasas" and topic != "chat" {

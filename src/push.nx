@@ -19,7 +19,14 @@ import "src/md"
 // Contacto VAPID (llega a los push services; informativo). Umbral de sismos para
 // notificar. Ventana de coalescencia del chat (s). Respaldo de la clave en disco.
 const VAPID_SUBJECT: String = "mailto:ottaviocavallinaleon@gmail.com"
+// Umbral por omisión de los avisos de sismo; el vigente se cambia en /admin
+// (meta push_mag_min) y se lee con push_mag_min().
 const PUSH_MAG_MIN: float = 3.5
+// Fallos seguidos (distintos de 404/410, que dan de baja al momento) tras los que
+// una suscripción se borra: un endpoint muerto retrasa los avisos de todos.
+const PUSH_FAIL_MAX: int = 6
+// Plazo TOTAL por envío (ms). Los envíos van en serie por un solo hilo.
+const PUSH_SEND_MS: int = 10000
 const CHAT_THROTTLE: int = 300
 const VAPID_FILE: String = "/home/admin/.veninfo-vapid-key"
 // Sismos: solo se consideran eventos de las últimas 6 h (los feeds pueden publicar
@@ -147,6 +154,8 @@ pub fn push_init() {
     // de ids se truncaría en silencio a la docena de eventos y volveríamos a avisar
     // de sismos viejos. Se poda por tick (PUSH_SEEN_KEEP).
     sql_exec("CREATE TABLE push_seen (id TEXT, ts INTEGER)")
+    // Fallos seguidos por suscripción (ver PUSH_FAIL_MAX).
+    sql_exec("CREATE TABLE push_fail (endpoint TEXT, n INTEGER)")
 
     // Keypair: env > meta (nyx-db) > respaldo en disco > generar. Cada fuente se
     // VALIDA (vapid_kp_ok) antes de usarse. El respaldo existe justamente para
@@ -167,7 +176,10 @@ pub fn push_init() {
         let kp: String = ec_p256_keypair()      // 97 bytes raw (32 priv ‖ 65 pub)
         kpb = base64url_encode(kp)
         meta_set("vapid_kp", kpb)
-        write_file(VAPID_FILE, kpb)
+        // En modo de prueba la clave generada es desechable: no pisar el respaldo.
+        if !veninfo_test_mode() {
+            write_file(VAPID_FILE, kpb)
+        }
     }
     let raw: String = base64url_decode(kpb)
     __vpriv = [raw.substring(0, 32)]
@@ -363,6 +375,42 @@ fn push_payload(title: String, body: String, url: String, tag: String) -> String
     return "{\"t\":\"" + pjson_esc(title) + "\",\"b\":\"" + pjson_esc(body) + "\",\"u\":\"" + pjson_esc(url) + "\",\"tag\":\"" + pjson_esc(tag) + "\"}"
 }
 
+// Siguiente valor del contador de fallos (prev = 0 si no había fila).
+fn push_fail_next(prev: int) -> int {
+    if prev < 0 {
+        return 1
+    }
+    return prev + 1
+}
+
+// Umbral vigente de magnitud para avisar de un sismo: meta push_mag_min si es un
+// valor razonable (2.0 a 8.0), si no PUSH_MAG_MIN.
+pub fn push_mag_min() -> float {
+    let v: float = to_float0(meta_get("push_mag_min"))
+    if v >= 2.0 and v <= 8.0 {
+        return v
+    }
+    return PUSH_MAG_MIN
+}
+
+// Fija el umbral desde el admin. Devuelve false si el valor no es válido.
+pub fn push_mag_min_set(raw: String) -> bool {
+    let t: String = md_trim(raw)
+    var norm: String = ""
+    var i: int = 0
+    while i < t.length() {
+        let c: String = t.substring(i, i + 1)
+        if c == "," { norm = norm + "." } else { norm = norm + c }
+        i = i + 1
+    }
+    let v: float = to_float0(norm)
+    if v < 2.0 or v > 8.0 {
+        return false
+    }
+    meta_set("push_mag_min", norm)
+    return true
+}
+
 // Cifra y envía UN push con un JWT ya firmado. Devuelve el código HTTP; borra la
 // suscripción si el push service dice 404/410 (suscripción expirada).
 fn push_send_raw(endpoint: String, p256dh_b64: String, auth_b64: String, jwt: String, payload: String, ttl: int) -> int {
@@ -370,10 +418,32 @@ fn push_send_raw(endpoint: String, p256dh_b64: String, auth_b64: String, jwt: St
     let p256raw: String = base64url_decode(p256dh_b64)
     let authraw: String = base64url_decode(auth_b64)
     let enc: String = webpush_encrypt(payload, p256raw, authraw)
-    let resp: Array = webpush_send(endpoint, jwt, pubkey, enc, ttl)
+    // Mismas cabeceras que webpush_send (std/webpush), pero por net_post: aquel va
+    // por http_request, sin plazo total, y un endpoint que responde a cuentagotas
+    // dejaba colgado el ÚNICO hilo de avisos.
+    let hd: Array = [
+        "Authorization", "vapid t=" + jwt + ",k=" + base64url_encode(pubkey),
+        "Content-Encoding", "aes128gcm",
+        "TTL", int_to_string(ttl)
+    ]
+    let resp: Array = net_post(endpoint, hd, enc, PUSH_SEND_MS)
     let code: int = resp[1]
+    let ee: String = sql_esc_n(endpoint, PUSH_EP_MAX)
     if code == 404 or code == 410 {
-        sql_exec("DELETE FROM push_subs WHERE endpoint = '" + sql_esc_n(endpoint, PUSH_EP_MAX) + "'")
+        sql_exec("DELETE FROM push_subs WHERE endpoint = '" + ee + "'")
+        sql_exec("DELETE FROM push_fail WHERE endpoint = '" + ee + "'")
+    } else if code >= 200 and code < 300 {
+        sql_exec("DELETE FROM push_fail WHERE endpoint = '" + ee + "'")
+    } else {
+        // Cualquier otro fallo (sin respuesta, 4xx, 5xx): se cuenta, y a los
+        // PUSH_FAIL_MAX seguidos la suscripción se da de baja.
+        let n: int = push_fail_next(sql_count("SELECT n FROM push_fail WHERE endpoint = '" + ee + "'"))
+        sql_exec("DELETE FROM push_fail WHERE endpoint = '" + ee + "'")
+        if n >= PUSH_FAIL_MAX {
+            sql_exec("DELETE FROM push_subs WHERE endpoint = '" + ee + "'")
+        } else {
+            sql_exec("INSERT INTO push_fail VALUES ('" + ee + "', " + int_to_string(n) + ")")
+        }
     }
     return code
 }
@@ -671,6 +741,7 @@ fn push_do_sismos() {
     // magnitud va ANTES del lookup en la tabla (comparar floats es más barato que
     // una query por evento).
     var cand: Array = []
+    let mag_min: float = push_mag_min()
     let geo: Array = push_seen_geo()
     var i: int = 0
     while i < qs.length() {
@@ -686,7 +757,7 @@ fn push_do_sismos() {
             // valor raro abortaba el proceso ENTERO — matando el sitio y este mismo
             // hilo de avisos.
             let mag: float = to_float0(mags)
-            if mag >= PUSH_MAG_MIN {
+            if mag >= mag_min {
                 let id: String = rec[0]
                 if !push_seen_has(id) {
                     if push_seen_otra_fuente(geo, rec) {

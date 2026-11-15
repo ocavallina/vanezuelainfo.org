@@ -46,7 +46,7 @@ fn news_token() -> String {
 }
 
 fn news_conn() -> int {
-    return kv_connect_auth("127.0.0.1", 6380, news_token())
+    return kv_connect_auth(kv_host(), kv_port(), news_token())
 }
 
 // Quita '|' y controles (a espacio), recorta y limita a maxb bytes.
