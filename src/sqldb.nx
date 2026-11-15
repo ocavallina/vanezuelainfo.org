@@ -20,7 +20,18 @@ import "nyx-db/src/executor"
 import "nyx-db/src/persist"
 import "nyx-db/src/query"
 
-const DB_PATH: String = "/home/admin/veninfo.ndb"
+// Ruta del snapshot. Configurable con la variable de entorno VENINFO_DB; si no
+// está o viene vacía se usa DB_PATH_DEFAULT. Se resuelve en cada uso (barato) en
+// vez de guardarla en un global: así no depende del orden de inicialización.
+const DB_PATH_DEFAULT: String = "/home/admin/veninfo.ndb"
+
+pub fn db_path() -> String {
+    let e: String = md_trim(getenv("VENINFO_DB"))
+    if e.length() > 0 {
+        return e
+    }
+    return DB_PATH_DEFAULT
+}
 
 // Índice de día civil de Venezuela (UTC-4). Compartido por rates y visits.
 pub fn db_day() -> int {
@@ -87,7 +98,7 @@ pub fn sql_esc(s: String) -> String {
 
 // Guarda el snapshot; se llama periódicamente y en el apagado.
 fn db_save_now() -> int {
-    db_save(DB_PATH)
+    db_save(db_path())
     return 0
 }
 
@@ -96,7 +107,7 @@ fn db_saver() -> int {
     var go: bool = true
     while go {
         sleep(60000)
-        db_save(DB_PATH)
+        db_save(db_path())
     }
     return 0
 }
@@ -104,8 +115,10 @@ fn db_saver() -> int {
 // Inicializa la base embebida: carga el snapshot si existe, asegura el esquema,
 // y lanza el guardado periódico. Llamar desde main().
 pub fn sqldb_init() {
-    if file_exists(DB_PATH) {
-        db_load(DB_PATH)
+    let path: String = db_path()
+    println("[sqldb] base: " + path)
+    if file_exists(path) {
+        db_load(path)
     }
     // Esquema (idempotente: si ya existen, sql_exec devuelve -1 y se ignora).
     sql_exec("CREATE TABLE rates (day INTEGER, kind TEXT, value REAL)")
