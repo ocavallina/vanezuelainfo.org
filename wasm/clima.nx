@@ -93,7 +93,7 @@ fn wcard_on_meteo(status: int, body: String) {
     let code: String = jnum(cur, "weather_code")
     var wcode: int = 0 - 1
     if code.length() > 0 { wcode = float_to_int(string_to_float(code)) }
-    let w: Array = wdesc(wcode).split("|")
+    let w: Array = wdesc_do(wcode).split("|")
     let wt: String = w[0]
     let wi: String = w[1]
     let t: int = round_i(string_to_float(jnum(cur, "temperature_2m")))
@@ -128,7 +128,7 @@ fn wcard_geo_ok(lat: String, lon: String) {
     revgeo_fetch("wcard_on_revgeo")
 }
 
-fn wcard_boot() {
+pub fn wcard_boot() {
     wc_load_coords(1)
     let nm: String = wc[2]
     dom_set_text("#w-city-name", nm)
@@ -160,7 +160,7 @@ fn hm_of(iso: String) -> String {
 fn wdesc_of(code_raw: String) -> Array {
     var wcode: int = 0 - 1
     if code_raw.length() > 0 { wcode = float_to_int(string_to_float(code_raw)) }
-    return wdesc(wcode).split("|")
+    return wdesc_do(wcode).split("|")
 }
 
 #[export_name = "clima_on_forecast"]
@@ -179,7 +179,7 @@ fn clima_on_forecast(status: int, body: String) {
     h = h + "<div class=\"ca-grid\">"
     h = h + "<div><span>Sensacion</span><b>" + round_i(string_to_float(jnum(cur, "apparent_temperature"))).to_string() + "°</b></div>"
     h = h + "<div><span>Humedad</span><b>" + jnum(cur, "relative_humidity_2m") + "%</b></div>"
-    h = h + "<div><span>Viento</span><b>" + round_i(string_to_float(jnum(cur, "wind_speed_10m"))).to_string() + " km/h " + compass(round_i(string_to_float(jnum(cur, "wind_direction_10m")))) + "</b></div>"
+    h = h + "<div><span>Viento</span><b>" + round_i(string_to_float(jnum(cur, "wind_speed_10m"))).to_string() + " km/h " + compass_do(round_i(string_to_float(jnum(cur, "wind_direction_10m")))) + "</b></div>"
     h = h + "<div><span>Rafagas</span><b>" + round_i(string_to_float(jnum(cur, "wind_gusts_10m"))).to_string() + " km/h</b></div>"
     h = h + "<div><span>Presion</span><b>" + round_i(string_to_float(jnum(cur, "surface_pressure"))).to_string() + " hPa</b></div>"
     h = h + "<div><span>Nubosidad</span><b>" + jnum(cur, "cloud_cover") + "%</b></div>"
@@ -290,7 +290,7 @@ fn clima_on_aire(status: int, body: String) {
         dom_set_text("#c-aire", "Sin datos.")
         return
     }
-    let l: Array = aqi_label(float_to_int(string_to_float(aqi))).split("|")
+    let l: Array = aqi_label_do(float_to_int(string_to_float(aqi))).split("|")
     let lt: String = l[0]
     let lc: String = l[1]
     var pm25: String = jnum(cur, "pm2_5")
@@ -398,7 +398,7 @@ fn clima_geo_err() {
     dom_set_text("#c-results", "No se pudo obtener la ubicacion.")
 }
 
-fn clima_boot() {
+pub fn clima_boot() {
     wc_load_coords(0)
     dom_on("#c-buscar", "click", "clima_buscar")
     js_on_enter("#c-q", "clima_buscar")

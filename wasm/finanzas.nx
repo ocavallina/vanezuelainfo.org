@@ -55,18 +55,18 @@ fn fx_paint() {
 
     // Tarjeta de la portada
     var h: String = ""
-    if bcv.length() > 0 { h = h + fin_row("Dólar BCV", " Bs " + fmt_bs(bcv)) }
+    if bcv.length() > 0 { h = h + fin_row("Dólar BCV", " Bs " + fmt_bs_do(bcv)) }
     if uc.length() > 0 and uv.length() > 0 {
         h = h + fin_row("Dólar Binance", "Bs " + fmt_f(base, 2, 2))
     }
-    if eur.length() > 0 { h = h + fin_row("Euro BCV", "Bs " + fmt_bs(eur)) }
-    if cop.length() > 0 { h = h + fin_row("USD en COP", "COP " + fmt_cop(cop)) }
+    if eur.length() > 0 { h = h + fin_row("Euro BCV", "Bs " + fmt_bs_do(eur)) }
+    if cop.length() > 0 { h = h + fin_row("USD en COP", "COP " + fmt_cop_do(cop)) }
     if base > 0.0 and copf > 0.0 {
         h = h + fin_row("1.000 COP", "Bs " + fmt_f(base / copf * 1000.0, 2, 2))
     }
     let pbcv: String = fxb[1]
     if pbcv.length() > 0 {
-        h = h + fin_row("Dólar BCV mañana", "Bs " + fmt_bs(pbcv))
+        h = h + fin_row("Dólar BCV mañana", "Bs " + fmt_bs_do(pbcv))
     }
     let hoyf: String = fxb[0]
     if hoyf.length() >= 10 {
@@ -80,16 +80,16 @@ fn fx_paint() {
     var vlab: String = ""
     let hf: String = fxb[0]
     if hf.length() >= 10 { vlab = "válido " + iso_ddmm(hf) }
-    if bcv.length() > 0 { g = g + fz_item("USD oficial (BCV)", "Bs " + fmt_bs(bcv), vlab) }
-    if eur.length() > 0 { g = g + fz_item("EUR oficial (BCV)", "Bs " + fmt_bs(eur), vlab) }
+    if bcv.length() > 0 { g = g + fz_item("USD oficial (BCV)", "Bs " + fmt_bs_do(bcv), vlab) }
+    if eur.length() > 0 { g = g + fz_item("EUR oficial (BCV)", "Bs " + fmt_bs_do(eur), vlab) }
     let pb: String = fxb[1]
     let pe: String = fxb[2]
     let pf: String = fxb[3]
-    if pb.length() > 0 { g = g + fz_item("USD oficial mañana", "Bs " + fmt_bs(pb), "válido " + iso_ddmm(pf)) }
-    if pe.length() > 0 { g = g + fz_item("EUR oficial mañana", "Bs " + fmt_bs(pe), "válido " + iso_ddmm(pf)) }
-    if uc.length() > 0 { g = g + fz_item("USDT compra (P2P)", "Bs " + fmt_bs(uc), "Binance P2P") }
-    if uv.length() > 0 { g = g + fz_item("USDT venta (P2P)", "Bs " + fmt_bs(uv), "Binance P2P") }
-    if cop.length() > 0 { g = g + fz_item("USD en Colombia", "COP " + fmt_cop(cop), "1 USD") }
+    if pb.length() > 0 { g = g + fz_item("USD oficial mañana", "Bs " + fmt_bs_do(pb), "válido " + iso_ddmm(pf)) }
+    if pe.length() > 0 { g = g + fz_item("EUR oficial mañana", "Bs " + fmt_bs_do(pe), "válido " + iso_ddmm(pf)) }
+    if uc.length() > 0 { g = g + fz_item("USDT compra (P2P)", "Bs " + fmt_bs_do(uc), "Binance P2P") }
+    if uv.length() > 0 { g = g + fz_item("USDT venta (P2P)", "Bs " + fmt_bs_do(uv), "Binance P2P") }
+    if cop.length() > 0 { g = g + fz_item("USD en Colombia", "COP " + fmt_cop_do(cop), "1 USD") }
     if base > 0.0 and copf > 0.0 {
         let bpc: float = base / copf
         g = g + fz_item("Peso ↔ Bolívar", "1.000 COP = Bs " + fmt_f(bpc * 1000.0, 2, 2), "Bs 100 = " + fmt_f(100.0 / bpc, 0, 0) + " COP (vía USDT)")
@@ -165,6 +165,10 @@ fn fmt_div(sel: String, v: float) -> String {
 // "d2b" divisa→Bs por defecto, "b2d" Bs→divisa) y el monto (#calc-amt).
 #[export_name = "calc_render"]
 fn calc_render() {
+    calc_render_do()
+}
+
+fn calc_render_do() {
     let sel: String = dom_get_value("#calc-rate-sel")
     let dir: String = dom_get_value("#calc-dir")
     let day: String = dom_get_value("#calc-day")
@@ -200,7 +204,7 @@ fn calc_swap() {
     } else {
         js_set_value("#calc-dir", "b2d")
     }
-    calc_render()
+    calc_render_do()
 }
 
 // Texto de la conversión actual (para compartir/copiar).
@@ -324,7 +328,7 @@ fn fx_on_rates(status: int, body: String) {
         js_set_value("#calc-day", "hoy")
     }
     fx_paint()
-    calc_render()
+    calc_render_do()
 }
 
 #[export_name = "fx_on_criptoya"]
@@ -337,7 +341,7 @@ fn fx_on_criptoya(status: int, body: String) {
     if a.length() > 0 { fxv[2] = a }
     if b.length() > 0 { fxv[3] = b }
     fx_paint()
-    calc_render()
+    calc_render_do()
 }
 
 #[export_name = "fx_on_cop"]
@@ -346,7 +350,7 @@ fn fx_on_cop(status: int, body: String) {
     let v: String = jnum(body, "COP")
     if v.length() > 0 { fxv[4] = v }
     fx_paint()
-    calc_render()
+    calc_render_do()
 }
 
 #[export_name = "fx_on_cripto"]
@@ -362,12 +366,12 @@ fn fx_on_cripto(status: int, body: String) {
     if e.length() > 0 { fxc[1] = e }
     if t.length() > 0 { fxc[2] = t }
     fx_paint_cripto()
-    calc_render()
+    calc_render_do()
 }
 
 // Arranque de tasas: con_cripto=1 trae también CoinGecko (cripto + USDT-USD),
 // necesario en /finanzas (sección cripto) y /calculadora (USDT).
-fn fx_boot(con_cripto: int) {
+pub fn fx_boot(con_cripto: int) {
     fxv = ["", "", "", "", "", ""]
     fxc = ["", "", ""]
     fxb = ["", "", "", ""]
@@ -430,6 +434,15 @@ fn me_number() -> float {
     if i == start { me_ok[0] = 0; return 0.0 }
     let tok: String = s.substring(start, i)
     me_pos[0] = i
+    // string_to_float ABORTA el módulo con ".", "1.2.3" o "..": exigir como mucho
+    // un punto y al menos un dígito antes de convertir.
+    var dots: int = 0
+    var k: int = 0
+    while k < tok.length() {
+        if tok.substring(k, k + 1) == "." { dots = dots + 1 }
+        k = k + 1
+    }
+    if dots > 1 or tok.length() == dots { me_ok[0] = 0; return 0.0 }
     return string_to_float(tok)
 }
 
@@ -534,7 +547,7 @@ fn mcalc_eval() {
         return
     }
     js_set_value("#calc-amt", me_fmt(r))
-    calc_render()
+    calc_render_do()
     dom_set_html("#mc-out", "= " + fmt_f(r, 0, 4))
 }
 
@@ -552,7 +565,7 @@ fn mcalc_ins() {
     }
 }
 
-fn calc_boot() {
+pub fn calc_boot() {
     dom_on("#calc-amt", "input", "calc_render")
     dom_on("#calc-rate-sel", "change", "calc_render")
     dom_on("#calc-day", "change", "calc_render")
@@ -574,6 +587,6 @@ fn calc_boot() {
     js_on_enter("#mc-expr", "mcalc_eval")
     js_delegate("#mc-ops", "button", "data-op", "#mc-opkey", "mcalc_ins")
     browser_interval(3600000, "fx_tick_binance") // 1 h: refresca la tasa Binance
-    calc_render()
+    calc_render_do()
 }
 

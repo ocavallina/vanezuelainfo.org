@@ -7,7 +7,7 @@
 // idéntico al de render_quakes en src/sismos.nx (duplicación consciente).
 
 
-fn esc(s: String) -> String {
+pub fn esc(s: String) -> String {
     var out: String = s.replace("&", "&amp;")
     out = out.replace("<", "&lt;")
     out = out.replace(">", "&gt;")
@@ -505,6 +505,10 @@ fn sismos_load(data: String) {
 // epoch y fecha/hora LOCAL él mismo, y arranca geolocalización y reloj.
 #[export_name = "sismos_boot"]
 fn sismos_boot() {
+    sismos_boot_do()
+}
+
+pub fn sismos_boot_do() {
     let data: String = dom_get_value("#s-data")
     if data.length() == 0 { return }
     s_reset()

@@ -14,6 +14,7 @@
 
 const ERRNO_SUCCESS = 0;
 const ERRNO_BADF = 8;
+const ERRNO_NOSYS = 52;
 
 class NyxExit {
     constructor(code) { this.code = code; }
@@ -95,10 +96,13 @@ export function makeWasiImports(state) {
                     for (let off = 0; off < view.length; off += 65536) {
                         globalThis.crypto.getRandomValues(view.subarray(off, Math.min(off + 65536, view.length)));
                     }
-                } else {
-                    for (let i = 0; i < view.length; i++) view[i] = (Math.random() * 256) | 0;
+                    return ERRNO_SUCCESS;
                 }
-                return ERRNO_SUCCESS;
+                // Sin crypto.getRandomValues NO se cae a Math.random: random_get es
+                // la fuente de csprng_bytes (llaves, nonces, PKCE), y bytes
+                // predecibles que «funcionan» son peores que un error. NOSYS hace
+                // que csprng_bytes devuelva "" y std/crypto dé Err.
+                return ERRNO_NOSYS;
             },
             clock_time_get(id, precision, timePtr) {
                 mem().setBigUint64(timePtr, BigInt(Date.now()) * 1000000n, true);
@@ -125,6 +129,177 @@ export function makeNyxHelpers(state) {
         const len = Number(mem().getBigUint64(ptr, true));
         const dataPtr = mem().getUint32(ptr + 16, true);
         return td.decode(bytes().subarray(dataPtr, dataPtr + len));
+    };
+    // Invoca un closure Nyx (par {fn_ptr, env_ptr}) por la function table.
+    // Definido acá arriba —y no solo como método— para que anchorClosure lo
+    // use sin depender de `this` (los bindings destructuran los helpers).
+    const callClosureImpl = (pairPtr, ...args) => {
+        if (!state.table) {
+            throw new Error("callClosure: __indirect_function_table no exportada (linkear con -Wl,--export-table)");
+        }
+        const fnIdx = mem().getUint32(pairPtr, true);
+        const envPtr = mem().getUint32(pairPtr + 4, true);
+        // Por enterWasm: un cierre que llega a un import #[suspends] devuelve
+        // una Promise en vez del valor (y rebobina con los mismos argumentos).
+        return enterWasm(() => state.table.get(fnIdx)(envPtr, ...args));
+    };
+
+    // ── Asyncify: una pila wasm que ESPERA al anfitrión (arco async-real-wasm) ──
+    //
+    // Solo existe si el módulo pasó por `wasm-opt --asyncify` —lo hace el build
+    // cuando el programa usa un import `#[suspends]`— y por lo tanto exporta
+    // asyncify_*. Sin eso `state.asy` es null y cada helper de abajo es la
+    // llamada directa de siempre: un módulo sin await sigue EXACTAMENTE igual.
+    //
+    // El ciclo, medido a mano antes de escribir esto (ledger del arco):
+    //   1. JS entra a wasm (_start, un export o un cierre) por enterWasm.
+    //   2. Nyx llama a un import que suspende; el import (vía `suspend`) arranca
+    //      la Promise, llama asyncify_start_unwind y vuelve. Asyncify desenrolla
+    //      la pila wasm guardando los locals en un buffer de memoria lineal.
+    //   3. enterWasm ve el estado «unwinding», lo detiene y espera la Promise.
+    //   4. Al resolver: convierte el resultado a valor wasm (p.ej. makeString,
+    //      EN ESTE turno), asyncify_start_rewind y vuelve a llamar la MISMA
+    //      entrada. Asyncify rebobina hasta el import, que ahora entrega el valor.
+    //   5. Nyx sigue en la línea siguiente. Puede volver a suspender (bucle).
+    //
+    // UNA SOLA PILA SUSPENDIDA (D-3). Asyncify tiene un estado global y un solo
+    // buffer, y la pila sombra de C (__stack_pointer) es compartida: una
+    // segunda computación suspendida pisaría a la primera. Por eso los eventos
+    // que llegan mientras hay una suspensión se ENCOLAN (`turn`) y se entregan
+    // en orden al terminar, y un import que suspende alcanzado desde una
+    // entrada anidada (JS→wasm→JS→wasm) es un error ruidoso: Asyncify no puede
+    // desenrollar a través de un marco JS.
+    //
+    // ARENA. La pila suspendida guarda punteros a memoria del turno en que
+    // corría. Si algo resetea la arena durante la espera, al rebobinar lee
+    // basura EN SILENCIO (medido: «antes-107» donde iba «antes-7»). Por eso al
+    // desenrollar se ancla el turno vivo (nyx_arena_pin_turn) y se suelta
+    // cuando la entrada termina de verdad. Medido: 1000 ciclos sin crecer la
+    // memoria y sin turnos retenidos.
+    //
+    // NO TOCAR el puntero actual del buffer entre stop_unwind y start_rewind:
+    // rewind lee desde la CIMA de lo guardado. Reiniciarlo rebobina con índices
+    // vacíos y trapea «unreachable» lejos de la causa (en fputs).
+    const resetAsyncify = (a) => {
+        const s = a.ex.asyncify_get_state();
+        if (s === 1) a.ex.asyncify_stop_unwind();
+        else if (s === 2) a.ex.asyncify_stop_rewind();
+    };
+    // Un trap DURANTE el desenrollado casi siempre es el buffer de Asyncify
+    // desbordado (medido: con menos bytes de los que la pila necesita,
+    // «unreachable» sin más). Se dice la causa en vez de dejar el trap pelado.
+    const explainUnwindTrap = (a, e) => {
+        if (e instanceof WebAssembly.RuntimeError && a.ex.asyncify_get_state() === 1) {
+            e.message += ` — ocurrió mientras Asyncify desenrollaba la pila: probablemente desbordó ` +
+                `su buffer (${a.dataBytes} bytes; una pila suspendida demasiado profunda)`;
+        }
+        return e;
+    };
+    const callCounted = (a, fn) => {
+        a.depth++;
+        try { return fn(); }
+        catch (e) { explainUnwindTrap(a, e); resetAsyncify(a); throw e; }
+        finally { a.depth--; }
+    };
+    const resumeSuspended = async (a, fn) => {
+        const tokens = [];
+        try {
+            for (;;) {
+                a.suspended = true;
+                if (state.pinTurn) tokens.push(state.pinTurn());
+                const { promise, toWasm } = a.pending;
+                a.pending = null;
+                try { a.value = toWasm(await promise); a.error = null; }
+                catch (e) { a.value = undefined; a.error = e; }
+                a.suspended = false;
+                a.ex.asyncify_start_rewind(a.dataPtr);
+                const r = callCounted(a, fn);
+                if (a.ex.asyncify_get_state() !== 1) return r;
+                a.ex.asyncify_stop_unwind();
+            }
+        } finally {
+            a.suspended = false;
+            if (state.unpinTurn) for (const t of tokens) state.unpinTurn(t);
+        }
+    };
+    // Entrar a wasm. Devuelve el valor, o una Promise si la llamada suspendió.
+    const enterWasm = (fn) => {
+        const a = state.asy;
+        if (!a) return fn();
+        const r = callCounted(a, fn);
+        if (a.ex.asyncify_get_state() !== 1) return r;
+        a.ex.asyncify_stop_unwind();
+        return resumeSuspended(a, fn);
+    };
+    // Cuerpo de un import que suspende. `start()` corre YA (leer los punteros
+    // de los argumentos acá, no después) y devuelve una Promise; `toWasm`
+    // convierte su resultado al valor que el import devuelve, en el turno de
+    // la reanudación. `zero` es lo que se devuelve mientras desenrolla: tiene
+    // que tener el tipo del retorno (0n para un `int` Nyx, que es i64).
+    const suspend = (start, toWasm, zero) => {
+        const a = state.asy;
+        if (!a) {
+            throw new Error("import que suspende: el módulo no pasó por wasm-opt --asyncify " +
+                "(declarar el extern con #[suspends] y construir con nyx build --target wasm32-wasi)");
+        }
+        if (a.ex.asyncify_get_state() === 2) {
+            a.ex.asyncify_stop_rewind();
+            if (a.error) { const e = a.error; a.error = null; throw e; }
+            const v = a.value;
+            a.value = undefined;
+            return v;
+        }
+        if (a.suspended || a.pending) {
+            throw new Error("wasm: ya hay una pila suspendida esperando al anfitrión; una segunda " +
+                "suspensión la pisaría (una sola pila suspendida a la vez)");
+        }
+        if (a.depth !== 1) {
+            throw new Error("wasm: un import que suspende se alcanzó desde una entrada anidada " +
+                "(JS→wasm→JS→wasm); Asyncify no desenrolla a través de un marco JS");
+        }
+        a.pending = { promise: Promise.resolve(start()), toWasm: toWasm || ((v) => v) };
+        a.ex.asyncify_start_unwind(a.dataPtr);
+        return zero;
+    };
+    // `try { thunk() } finally { fin() }` que respeta la suspensión: si thunk
+    // devolvió una Promise, fin corre cuando termina, no cuando desenrolla.
+    // Los bindings sueltan anclajes y resetean la arena en `fin`.
+    const finish = (thunk, fin) => {
+        let r;
+        try { r = thunk(); }
+        catch (e) { fin(); throw e; }
+        if (r instanceof Promise) {
+            return r.then((v) => { fin(); return v; }, (e) => { fin(); throw e; });
+        }
+        fin();
+        return r;
+    };
+    // Un TURNO de evento: todo lo que un binding hace al dispararse (armar
+    // Strings, llamar, resetear) va adentro, para que un evento encolado arme
+    // sus argumentos cuando le toca y no en un turno que ya se reseteó.
+    // Anidado síncrono (dentro de otro turno o con wasm en la pila): corre ya.
+    const drainTurns = (a) => {
+        while (!a.busy && a.queue.length > 0) {
+            const { body, res, rej } = a.queue.shift();
+            try {
+                const r = runTurn(a, body);
+                if (r instanceof Promise) r.then(res, rej); else res(r);
+            } catch (e) { rej(e); }
+        }
+    };
+    const runTurn = (a, body) => {
+        let r;
+        a.turnDepth++;
+        try { r = body(); } finally { a.turnDepth--; }
+        if (!(r instanceof Promise)) return r;
+        a.busy = true;
+        return r.finally(() => { a.busy = false; drainTurns(a); });
+    };
+    const turn = (body) => {
+        const a = state.asy;
+        if (!a || a.turnDepth > 0 || a.depth > 0) return body();
+        if (a.busy) return new Promise((res, rej) => a.queue.push({ body, res, rej }));
+        return runTurn(a, body);
     };
     // Construye un String Nyx en memoria wasm (vía nyx_wasi_malloc exportado)
     // → puntero i32 usable como retorno `-> String` de un extern "js"
@@ -194,13 +369,67 @@ export function makeNyxHelpers(state) {
         // Invoca un CLOSURE Nyx (par {fn_ptr, env_ptr}, wasm32: 2×u32) vía la
         // function table exportada. fn_ptr en wasm ES un índice de tabla.
         // Requiere link con -Wl,--export-table (make wasm ya lo hace).
-        callClosure(pairPtr, ...args) {
-            if (!state.table) {
-                throw new Error("callClosure: __indirect_function_table no exportada (linkear con -Wl,--export-table)");
-            }
-            const fnIdx = mem().getUint32(pairPtr, true);
-            const envPtr = mem().getUint32(pairPtr + 4, true);
-            return state.table.get(fnIdx)(envPtr, ...args);
+        callClosure: callClosureImpl,
+        // Asyncify (ver arriba). Para bindings: `suspend` en un import
+        // #[suspends], `turn` alrededor de todo lo que un evento hace, `finish`
+        // en vez de try/finally. `enterWasm` lo usa runNyxWasm en las entradas.
+        suspend,
+        turn,
+        finish,
+        enterWasm,
+        // Ancla un CLOSURE que se va a disparar en OTRO turno de evento
+        // (fetch en vuelo, listener, timer). Sin esto el entorno del cierre
+        // —memoria de turno— muere en el nyx_arena_event_reset() siguiente y
+        // el cierre lee basura o trapea. Ver runtime/wasi/nyx_arena.c.
+        //
+        // Devuelve { call(...args), release() }. REGLA: el release() lo hace
+        // el BINDING, nunca el usuario — un disparo único libera al disparar,
+        // uno multi-disparo libera en su cancelación. Un cierre anclado que
+        // nadie libera retiene el turno entero: la fuga es ruidosa a propósito.
+        //
+        // Con la arena apagada pinTurn devuelve 0 y esto es un envoltorio sin
+        // costo: nada se libera nunca, no hay qué anclar.
+        //
+        // release() DURANTE el propio disparo se POSTERGA hasta que la llamada
+        // vuelve. Es el caso normal de una interfaz, no uno raro: un click que
+        // llama a update() y el VDOM re-registra el listener de ese mismo botón,
+        // un interval que se apaga a sí mismo, un SSE que se cierra al recibir
+        // «fin», un router que re-suscribe hashchange. Los cinco bindings
+        // desanclan el cierre viejo en ese momento, y el cierre SIGUE CORRIENDO:
+        // si el unpin soltara ya el turno, lo que el cierre lea después de
+        // re-registrarse está en memoria liberada. Medido 2026-09-14: trap
+        // «memory access out of bounds» en nyx_string_concat dentro del cierre
+        // (test-wasm-29). `depth` y no un booleano: un cierre puede dispararse
+        // a sí mismo de forma síncrona (un handler que dispara el mismo evento).
+        // EN: anchors a closure fired in a LATER event turn; the binding owns
+        // release(), never user code. A release() while the closure is running
+        // is deferred until the outermost call returns.
+        anchorClosure(pairPtr) {
+            const tok = state.pinTurn ? state.pinTurn() : 0;
+            let live = true;
+            let depth = 0;          // llamadas en curso de ESTE cierre
+            let pending = false;    // release() pedido mientras corría
+            const unpin = () => { if (tok && state.unpinTurn) state.unpinTurn(tok); };
+            return {
+                get alive() { return live; },
+                call: (...args) => {
+                    if (!live) return undefined;
+                    depth++;
+                    // finish y no try/finally: un cierre que suspende SIGUE
+                    // corriendo hasta que su Promise termina, y su entorno
+                    // tiene que seguir anclado hasta entonces.
+                    return finish(() => callClosureImpl(pairPtr, ...args), () => {
+                        depth--;
+                        if (depth === 0 && pending) { pending = false; unpin(); }
+                    });
+                },
+                release() {
+                    if (!live) return;
+                    live = false;
+                    if (depth > 0) { pending = true; return; }
+                    unpin();
+                },
+            };
         },
         // Escapes crudos por si un import necesita más
         memoryBytes: bytes,
@@ -211,7 +440,7 @@ export function makeNyxHelpers(state) {
 // Implementación estándar de los imports js_dom_* de std/dom.nx sobre un DOM
 // real (browser) o un mock (tests node: pasá un objeto con querySelector).
 // Los eventos llaman fns Nyx EXPORTADAS por nombre → hace falta cerrar el
-// círculo post-instanciación: usá el `ref` devuelto.
+// círculo post-instanciación: usa el `ref` devuelto.
 //   const dom = domBindings();
 //   const r = await runNyxWasm(bytes, { js: dom.imports });
 //   dom.ref.exports = r.exports;   // habilita los listeners
@@ -256,17 +485,16 @@ export function domBindings(doc) {
             const handler = nyx.readString(handlerPtr);
             const el = d.querySelector(sel);
             if (!el) return;
-            el.addEventListener(event, (ev) => {
+            el.addEventListener(event, (ev) => nyx.turn(() => {
                 if (!ref.exports || !ref.exports[handler]) {
                     throw new Error(`dom_on: export Nyx '${handler}' no encontrado (¿#[export_name = "${handler}"]? ¿ref.exports seteado?)`);
                 }
                 ref.currentEvent = ev || null;
-                try { ref.exports[handler](); }
-                finally {
+                return nyx.finish(() => ref.exports[handler](), () => {
                     ref.currentEvent = null;
                     if (ref.afterEvent) ref.afterEvent();
-                }
-            });
+                });
+            }));
         },
         js_console_log(msgPtr) {
             console.log(nyx.readString(msgPtr));
@@ -349,7 +577,6 @@ export function domBindings(doc) {
         js_dom_on_fn(selPtr, eventPtr, pairPtr) {
             const sel = nyx.readString(selPtr);
             const event = nyx.readString(eventPtr);
-            // pairPtr queda vivo post-main (GC=calloc nunca libera en wasm)
             const el = d.querySelector(sel);
             if (!el) return;
             // dedupe por (nodo, evento): sin esto cada llamada (p.ej. re-bind de
@@ -359,15 +586,22 @@ export function domBindings(doc) {
             el.__nyxHandlers = el.__nyxHandlers || {};
             if (el.__nyxHandlers[event]) {
                 el.removeEventListener(event, el.__nyxHandlers[event]);
+                // el listener viejo es multi-disparo: acá está SU cancelación,
+                // y por lo tanto acá va su desanclaje. El comentario que decía
+                // «pairPtr queda vivo post-main (GC=calloc nunca libera)» era
+                // falso bajo arena: un listener registrado DURANTE un evento
+                // moría en el reset siguiente. Ver nyx.anchorClosure.
+                if (el.__nyxHandlers[event].__anchor) el.__nyxHandlers[event].__anchor.release();
             }
-            const cb = (ev) => {
+            const anchor = nyx.anchorClosure(pairPtr);
+            const cb = (ev) => nyx.turn(() => {
                 ref.currentEvent = ev || null;
-                try { nyx.callClosure(pairPtr); }
-                finally {
+                return nyx.finish(() => anchor.call(), () => {
                     ref.currentEvent = null;
                     if (ref.afterEvent) ref.afterEvent();
-                }
-            };
+                });
+            });
+            cb.__anchor = anchor;
             el.__nyxHandlers[event] = cb;
             el.addEventListener(event, cb);
         },
@@ -411,6 +645,13 @@ export function domBindings(doc) {
             const node = p.childNodes[Number(idx)];
             return node ? BigInt(handleOf(node)) : 0n;
         },
+        // Adición Task 2 (router): cantidad de hijos directos (0 si el
+        // handle no existe o no tiene childNodes).
+        js_dom_child_count(h) {
+            const n = handles[Number(h)];
+            if (!n || !n.childNodes) return 0n;
+            return BigInt(n.childNodes.length);
+        },
         js_dom_set_text_h(h, sPtr) {
             const n = handles[Number(h)];
             if (n) n.textContent = nyx.readString(sPtr);
@@ -439,15 +680,18 @@ export function domBindings(doc) {
             n.__nyxHandlers = n.__nyxHandlers || {};
             if (n.__nyxHandlers[event]) {
                 n.removeEventListener(event, n.__nyxHandlers[event]);
+                // reemplazar el listener ES cancelarlo → desanclar su entorno
+                if (n.__nyxHandlers[event].__anchor) n.__nyxHandlers[event].__anchor.release();
             }
-            const cb = (ev) => {
+            const anchor = nyx.anchorClosure(pairPtr);
+            const cb = (ev) => nyx.turn(() => {
                 ref.currentEvent = ev || null;
-                try { nyx.callClosure(pairPtr); }
-                finally {
+                return nyx.finish(() => anchor.call(), () => {
                     ref.currentEvent = null;
                     if (ref.afterEvent) ref.afterEvent();
-                }
-            };
+                });
+            });
+            cb.__anchor = anchor;
             n.__nyxHandlers[event] = cb;
             n.addEventListener(event, cb);
         },
@@ -458,7 +702,8 @@ export function domBindings(doc) {
 // Implementación estándar de los imports js_browser_*/js_ls_*/js_tz_offset/
 // js_match_media de std/browser.nx (handoff #6). Igual que domBindings:
 // callback-por-nombre-de-export → setear ref.exports tras runNyxWasm.
-// opts permite inyectar mocks en tests: { fetch, storage, geo, matchMedia, now }.
+// opts permite inyectar mocks en tests: { fetch, storage, geo, matchMedia, now,
+// idb, serial }.
 //   const br = browserBindings();
 //   const r = await runNyxWasm(bytes, { js: (nyx) => ({ ...br.imports(nyx) }) });
 //   br.ref.exports = r.exports;
@@ -466,8 +711,22 @@ export function domBindings(doc) {
 // matchMedia) over the real browser or injected mocks; callback-by-export-name.
 export function browserBindings(opts = {}) {
     const ref = { exports: null };
+    // Canales SSE vivos: id → { closed, abort, anchor }. El anchor se suelta al
+    // cerrar, o si el stream termina/falla — nunca se deja anclado.
+    const sseChannels = new Map();
+    let sseSeq = 0;
+    // Resultado de la última operación que suspendió (js_browser_*_await). UNO
+    // alcanza: hay una sola pila suspendida a la vez (D-3).
+    const ultimoAwait = { status: 0, kind: "", msg: "" };
     const fetchImpl = opts.fetch ||
         (globalThis.fetch ? globalThis.fetch.bind(globalThis) : null);
+    // window/location: inyectables por opts (tests) — default al browser
+    // real. Task 2 (router): js_browser_get_hash lee locationImpl.hash;
+    // js_browser_on_hashchange_fn escucha sobre windowImpl.
+    const windowImpl = opts.window ||
+        (typeof window !== "undefined" ? window : globalThis);
+    const locationImpl = opts.location ||
+        (typeof location !== "undefined" ? location : { hash: "" });
     // storage: localStorage-like (getItem/setItem) o Map fallback (Node)
     const mapStore = new Map();
     const storage = opts.storage || globalThis.localStorage || {
@@ -482,15 +741,457 @@ export function browserBindings(opts = {}) {
     const tzOffsetImpl = (opts.tzOffset !== undefined)
         ? () => opts.tzOffset
         : () => -(new Date().getTimezoneOffset());
+    // ── IndexedDB (arco browser-indexeddb, D-4/D-9) ───────────────────────
+    // Una sola base física ("nyx_idb"), un solo objectStore ("kv"), clave
+    // COMPUESTA [store, key]: el string `store` que ve Nyx es un namespace
+    // lógico (prefijo de clave), NO un objectStore real de IndexedDB — evita
+    // el `onupgradeneeded`/`blocked` que dispararía crear un objectStore
+    // nuevo la primera vez que aparece un nombre de store en tiempo de
+    // ejecución (D-4 del spec). `idb_keys` recorre ese prefijo con un
+    // IDBKeyRange acotado: `[store]` .. `[store, []]` — un Array SIEMPRE
+    // ordena después de cualquier String al comparar claves de IndexedDB,
+    // así que `[]` como segundo componente es el techo del rango (mismo
+    // truco que usan otras libs para "prefijo" sobre claves array).
+    //
+    // opts.idb inyectable para tests (misma forma que opts.storage): objeto
+    // { get(store,key), put(store,key,val), delete(store,key), keys(store) }
+    // que devuelve Promise. Errores: reject con un Error cuyo `.nyxKind` ya
+    // trae el kind mapeado (D-6) — así un mock de test inyecta cualquier
+    // kind sin duplicar la lógica de mapeo real.
+    const idbTaggedError = (msg, kind) => Object.assign(new Error(msg), { nyxKind: kind });
+    const idbDomKind = (err) => {
+        const name = err && err.name;
+        if (name === "QuotaExceededError") return "oom";
+        if (name === "VersionError" || name === "InvalidStateError") return "in_use";
+        return "io";
+    };
+    // Fallback sin navegador (Node, y por lo tanto make test-wasm sin mock
+    // explícito): un Map en memoria con la misma clave compuesta, resuelto
+    // en un microtask — mismo patrón que el Map fallback de `storage`.
+    const idbMapFallback = () => {
+        const m = new Map();
+        const ck = (store, key) => store + "\u0000" + key;
+        return {
+            get: async (store, key) => (m.has(ck(store, key)) ? m.get(ck(store, key)) : null),
+            put: async (store, key, val) => { m.set(ck(store, key), val); },
+            delete: async (store, key) => { m.delete(ck(store, key)); },
+            keys: async (store) => {
+                const pre = store + "\u0000";
+                const out = [];
+                for (const k of m.keys()) if (k.startsWith(pre)) out.push(k.slice(pre.length));
+                return out;
+            },
+        };
+    };
+    // Implementación real sobre window.indexedDB: base "nyx_idb" v1, un solo
+    // objectStore "kv", conexión CACHEADA (una sola apertura por página).
+    const idbReal = () => {
+        const DB_NAME = "nyx_idb", STORE = "kv";
+        let dbPromise = null;
+        const open = () => {
+            if (dbPromise) return dbPromise;
+            dbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(idbTaggedError(String(req.error), idbDomKind(req.error)));
+                // otra pestaña con la base abierta a una versión vieja: no
+                // cuelga el await, se mapea a "in_use" (D-6 / riesgo del spec).
+                req.onblocked = () => reject(idbTaggedError("open bloqueado por otra pestaña", "in_use"));
+            });
+            return dbPromise;
+        };
+        return {
+            get: async (store, key) => {
+                const db = await open();
+                return new Promise((resolve, reject) => {
+                    const req = db.transaction(STORE, "readonly").objectStore(STORE).get([store, key]);
+                    req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+                    req.onerror = () => reject(idbTaggedError(String(req.error), idbDomKind(req.error)));
+                });
+            },
+            put: async (store, key, val) => {
+                const db = await open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE, "readwrite");
+                    tx.objectStore(STORE).put(val, [store, key]);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(idbTaggedError(String(tx.error), idbDomKind(tx.error)));
+                    tx.onabort = () => reject(idbTaggedError(String(tx.error), idbDomKind(tx.error)));
+                });
+            },
+            delete: async (store, key) => {
+                const db = await open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE, "readwrite");
+                    tx.objectStore(STORE).delete([store, key]);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(idbTaggedError(String(tx.error), idbDomKind(tx.error)));
+                    tx.onabort = () => reject(idbTaggedError(String(tx.error), idbDomKind(tx.error)));
+                });
+            },
+            keys: async (store) => {
+                const db = await open();
+                return new Promise((resolve, reject) => {
+                    const range = IDBKeyRange.bound([store], [store, []]);
+                    const req = db.transaction(STORE, "readonly").objectStore(STORE).getAllKeys(range);
+                    req.onsuccess = () => resolve(req.result.map((k) => k[1]));
+                    req.onerror = () => reject(idbTaggedError(String(req.error), idbDomKind(req.error)));
+                });
+            },
+        };
+    };
+    const idbImpl = opts.idb ||
+        (typeof indexedDB !== "undefined" ? idbReal() : idbMapFallback());
+    // Resultado de la última operación idb_* que suspendió — mismo patrón
+    // que `ultimoAwait` (D-3: una sola pila suspendida a la vez alcanza).
+    const ultimoIdb = { kind: "", msg: "" };
+    // ── Web Serial (arco browser-serial, pedido de nyxerp 2026-09-24) ─────
+    //
+    // Un "puerto" cruza a Nyx como un `int` opaco (SerialPort.id de
+    // std/browser_serial.nx) — el objeto real (o el mock) vive del lado JS
+    // en `serialPorts`, mismo truco que `timers` para los handles de
+    // setTimeout/setInterval, que tampoco caben en un i64 portable.
+    //
+    // `serialTaggedError`/`serialDomKind`: mismo mecanismo que
+    // idbTaggedError/idbDomKind — un mock de test inyecta cualquier kind sin
+    // duplicar el mapeo real. DOMException reales que puede tirar Web
+    // Serial: NotFoundError (requestPort cancelado / sin dispositivo),
+    // SecurityError (página sin HTTPS/localhost, o iframe sin permiso),
+    // NetworkError (el dispositivo se desconectó o falló a mitad de
+    // camino), InvalidStateError/TypeError (abrir un puerto ya abierto, u
+    // opciones inválidas).
+    const serialTaggedError = (msg, kind) => Object.assign(new Error(msg), { nyxKind: kind });
+    const serialDomKind = (err) => {
+        const name = err && err.name;
+        if (name === "NotFoundError") return "not_found";
+        if (name === "SecurityError") return "permission";
+        if (name === "NetworkError") return "connection";
+        if (name === "InvalidStateError" || name === "TypeError") return "invalid";
+        return "io";
+    };
+    // Registro puerto→id: un WeakMap keyed por el objeto YA ENVUELTO (no el
+    // SerialPort crudo) — así requestPort() y getPorts() sobre el MISMO
+    // dispositivo dan el MISMO id, sin que dos wrappers independientes
+    // compitan por el reader/writer del mismo puerto real. `wrapRealPort`
+    // cachea su propio wrapper por SerialPort crudo (ver abajo) antes de
+    // llegar acá, así que esta dedupe alcanza con una sola tabla.
+    const serialPorts = new Map();      // id (Number) → wrapped { open, write, read, close }
+    const serialIdByWrapped = new WeakMap();
+    let serialSeq = 0;
+    const registerPort = (wrapped) => {
+        let id = serialIdByWrapped.get(wrapped);
+        if (id === undefined) {
+            id = ++serialSeq;
+            serialIdByWrapped.set(wrapped, id);
+            serialPorts.set(id, wrapped);
+        }
+        return id;
+    };
+    // Envuelve un SerialPort real (navigator.serial) en la interfaz simple
+    // open/write/read/close que usan los imports de abajo — misma idea que
+    // idbReal() adapta indexedDB crudo a {get,put,delete,keys}. El reader y
+    // el writer se piden UNA vez (getWriter/getReader bloquea el stream) y
+    // se retienen entre llamadas; se sueltan en `close`.
+    //
+    // Lectura con plazo: sin un AbortSignal nativo sobre
+    // ReadableStreamDefaultReader.read(), el plazo se arma con
+    // Promise.race contra un setTimeout (mismo patrón que
+    // js_browser_fetch_await). Si el plazo gana sin haber leído nada,
+    // `reader.cancel()` asienta la lectura pendiente y suelta el reader —
+    // la próxima `read()` pide uno nuevo con `port.readable.getReader()`;
+    // el puerto sigue abierto y disponible para seguir leyendo después.
+    const wrapRealPort = (rawPort) => {
+        let reader = null;
+        let writer = null;
+        return {
+            open: async (opts) => {
+                await rawPort.open({
+                    baudRate: opts.baudRate,
+                    dataBits: opts.dataBits || 8,
+                    stopBits: opts.stopBits || 1,
+                    parity: opts.parity || "none",
+                });
+            },
+            write: async (datosBytes) => {
+                if (!writer) writer = rawPort.writable.getWriter();
+                const data = Uint8Array.from(datosBytes);
+                await writer.write(data);
+                return data.length;
+            },
+            read: async (maxBytes, timeoutMs) => {
+                if (!reader) reader = rawPort.readable.getReader();
+                const out = [];
+                const plazo = timeoutMs > 0 ? Date.now() + timeoutMs : null;
+                while (out.length < maxBytes) {
+                    let restante = null;
+                    if (plazo !== null) {
+                        restante = plazo - Date.now();
+                        if (restante <= 0) break;
+                    }
+                    const paso = restante === null
+                        ? { tipo: "dato", r: await reader.read() }
+                        : await Promise.race([
+                            reader.read().then((r) => ({ tipo: "dato", r })),
+                            new Promise((res) => setTimeout(() => res({ tipo: "timeout" }), restante)),
+                        ]);
+                    if (paso.tipo === "timeout") break;
+                    const { value, done } = paso.r;
+                    if (done) break;
+                    if (value) for (const b of value) { out.push(b); if (out.length >= maxBytes) break; }
+                }
+                if (out.length === 0 && plazo !== null) {
+                    // se agotó el plazo sin ni un byte: la lectura racedeada
+                    // sigue pendiente del lado del navegador — cancelarla
+                    // asienta esa promesa y libera el reader; la siguiente
+                    // serial_read pide uno nuevo.
+                    try { await reader.cancel(); } catch (e) { /* ya cancelado/cerrado */ }
+                    reader = null;
+                    throw serialTaggedError(`sin datos en ${timeoutMs} ms`, "timeout");
+                }
+                return out;
+            },
+            close: async () => {
+                if (reader) {
+                    try { await reader.cancel(); } catch (e) { /* ya cancelado/cerrado */ }
+                    try { reader.releaseLock(); } catch (e) { /* ya liberado */ }
+                    reader = null;
+                }
+                if (writer) {
+                    try { writer.releaseLock(); } catch (e) { /* ya liberado */ }
+                    writer = null;
+                }
+                await rawPort.close();
+            },
+        };
+    };
+    const wrapperPorRawPort = new WeakMap();
+    const wrapRealPortCached = (rawPort) => {
+        if (!wrapperPorRawPort.has(rawPort)) wrapperPorRawPort.set(rawPort, wrapRealPort(rawPort));
+        return wrapperPorRawPort.get(rawPort);
+    };
+    const serialSupported = typeof navigator !== "undefined" && !!navigator.serial;
+    const serialReal = () => ({
+        requestPort: async () => wrapRealPortCached(await navigator.serial.requestPort()),
+        getPorts: async () => (await navigator.serial.getPorts()).map(wrapRealPortCached),
+    });
+    // Sin Web Serial (Firefox/Safari, o página sin HTTPS/localhost):
+    // requestPort() SIEMPRE falla con kind "io" — mismo criterio que
+    // std/browser_idb usa "io" para "IndexedDB deshabilitado" (D-6): una
+    // capacidad del navegador ausente, no el fallo de una operación
+    // puntual. getPorts() da lista vacía: sin la API no hay puertos
+    // autorizados que reportar, y eso no es un error en sí.
+    const serialUnsupported = () => ({
+        requestPort: async () => {
+            throw serialTaggedError(
+                "Web Serial no disponible (Firefox/Safari, o página sin HTTPS/localhost)", "io");
+        },
+        getPorts: async () => [],
+    });
+    const serialImpl = opts.serial || (serialSupported ? serialReal() : serialUnsupported());
+    // Resultado de la última operación serial_* que suspendió — mismo
+    // patrón que ultimoAwait/ultimoIdb (D-3).
+    const ultimoSerial = { kind: "", msg: "" };
     // Los handles de timer JS no caben en un i64 portable → tabla propia
     const timers = new Map();
+    // anclajes de los timers con CLOSURE, por id: browser_clear_timer es la
+    // cancelación y por lo tanto el punto de desanclaje (ver *_fn abajo).
+    const timerAnchors = new Map();
     let timerSeq = 0;
-    const callExport = (name, ...args) => {
+    // `args` es una FUNCIÓN que arma los argumentos, y corre DENTRO del turno:
+    // un evento encolado detrás de una pila suspendida (D-3) arma sus Strings
+    // cuando le toca, no en un turno que para entonces ya se reseteó.
+    // Espacio de direcciones destino para el permiso de red local de Chrome
+    // (Local Network Access, antes Private Network Access): `fetch` acepta
+    // `targetAddressSpace` con "local" (red privada/LAN), "loopback" y, en el
+    // nombre viejo de PNA, "private". Se pasa TAL CUAL a fetch, pero solo si
+    // es uno de esos valores conocidos: cualquier otra cosa se ignora en vez
+    // de mandar un campo que el navegador podría rechazar. Un navegador que no
+    // conoce el campo lo ignora (es un dict de RequestInit), así que fijarlo
+    // nunca rompe el pedido. Los nombres exactos y sus valores son los de la
+    // documentación de Chrome al escribir esto (2026-09) y NO se pudieron
+    // verificar contra un navegador real desde este entorno.
+    const ESPACIOS_DESTINO = new Set(["local", "private", "loopback"]);
+    const initFetch = (method, body, espacio, signal) => {
+        const init = { method: method || "GET", body: body === "" ? undefined : body };
+        if (ESPACIOS_DESTINO.has(espacio)) init.targetAddressSpace = espacio;
+        if (signal) init.signal = signal;
+        return init;
+    };
+    const callExport = (nyx, name, args) => nyx.turn(() => {
         if (!ref.exports || !ref.exports[name]) {
             throw new Error(`browser: export Nyx '${name}' no encontrado (¿#[export_name]? ¿ref.exports seteado?)`);
         }
-        try { return ref.exports[name](...args); }
-        finally { if (ref.afterEvent) ref.afterEvent(); }
+        return nyx.finish(() => ref.exports[name](...args()), () => { if (ref.afterEvent) ref.afterEvent(); });
+    });
+    const fetchFn = (nyx, urlPtr, methodPtr, bodyPtr, ms, espacio, pairPtr) => {
+        const url = nyx.readString(urlPtr);
+        const method = nyx.readString(methodPtr);
+        const body = nyx.readString(bodyPtr);
+        const anchor = nyx.anchorClosure(pairPtr);
+        // un solo disparo: se llame como se llame (ok, error, plazo, sin
+        // fetch), el cierre corre a lo sumo una vez y el entorno se suelta ahí.
+        let disparado = false;
+        const fire = (status, text) => {
+            if (disparado) return;
+            disparado = true;
+            nyx.turn(() => nyx.finish(
+                () => anchor.call(BigInt(status), nyx.makeString(text)),
+                () => {
+                    if (ref.afterEvent) ref.afterEvent();
+                    anchor.release();
+                }));
+        };
+        if (!fetchImpl) { fire(0, "fetch no disponible"); return; }
+        const ctl = ms > 0 && typeof AbortController !== "undefined" ? new AbortController() : null;
+        let reloj = null;
+        if (ms > 0) {
+            reloj = setTimeout(() => {
+                if (ctl) ctl.abort();
+                fire(0, `timeout: sin respuesta en ${ms} ms`);
+            }, ms);
+        }
+        Promise.resolve()
+            .then(() => fetchImpl(url, initFetch(method, body, espacio, ctl && ctl.signal)))
+            .then(async (r) => { const t = await r.text(); if (reloj) clearTimeout(reloj); fire(r.status, t); })
+            .catch((e) => { if (reloj) clearTimeout(reloj); fire(0, String(e && e.message ? e.message : e)); });
+    };
+    const fetchAwait = (nyx, urlPtr, methodPtr, bodyPtr, timeoutMs, espacio) => {
+        return nyx.suspend(() => {
+            const url = nyx.readString(urlPtr);
+            const method = nyx.readString(methodPtr);
+            const body = nyx.readString(bodyPtr);
+            const ms = Number(timeoutMs);
+            if (!fetchImpl) {
+                return { status: 0, text: "", kind: "connection", msg: "fetch no disponible" };
+            }
+            const ctl = ms > 0 && typeof AbortController !== "undefined" ? new AbortController() : null;
+            const init = initFetch(method, body, espacio, ctl && ctl.signal);
+            const pedido = Promise.resolve()
+                .then(() => fetchImpl(url, init))
+                .then(async (r) => ({ status: r.status, text: await r.text(), kind: "", msg: "" }))
+                .catch((e) => ({ status: 0, text: "", kind: "connection",
+                                 msg: String(e && e.message ? e.message : e) }));
+            if (!(ms > 0)) return pedido;
+            let reloj = null;
+            const plazo = new Promise((res) => {
+                reloj = setTimeout(() => {
+                    if (ctl) ctl.abort();
+                    res({ status: 0, text: "", kind: "timeout", msg: `sin respuesta en ${ms} ms` });
+                }, ms);
+            });
+            return Promise.race([pedido, plazo]).finally(() => clearTimeout(reloj));
+        }, (res) => {
+            ultimoAwait.status = res.status;
+            ultimoAwait.kind = res.kind;
+            ultimoAwait.msg = res.msg;
+            return nyx.makeString(res.text);
+        }, 0);
+    };
+    const sseAbrir = (nyx, url, pairPtr, ms, espacio, avisar_ok) => {
+        const anchor = nyx.anchorClosure(pairPtr);
+        const id = ++sseSeq;
+        const ctl = { closed: false, abort: null, anchor };
+        const ac = (ms > 0 || avisar_ok) && typeof AbortController !== "undefined" ? new AbortController() : null;
+        ctl.abort = () => { if (ac) ac.abort(); };
+        let reloj = null;
+        sseChannels.set(id, ctl);
+        const soltar = () => {
+            if (reloj) { clearTimeout(reloj); reloj = null; }
+            if (ctl.closed) return;
+            ctl.closed = true;
+            sseChannels.delete(id);
+            anchor.release();
+        };
+        // El parser del protocolo: líneas, y un frame por línea en blanco.
+        // `data:` puede venir repetido y se une con \n, que es lo que dice
+        // el estándar; `event:` da el nombre, ausente = "message". Las
+        // líneas que empiezan con ':' son comentarios (keep-alive) y los
+        // campos `id:`/`retry:` se ignoran a propósito: reconectar es otra
+        // decisión y no se toma acá sin pedirla.
+        let buf = "";
+        let evento = "";
+        let datos = [];
+        const despachar = () => {
+            if (datos.length === 0 && evento === "") return;
+            const nombre = evento === "" ? "message" : evento;
+            const cuerpo = datos.join("\n");
+            evento = ""; datos = [];
+            if (ctl.closed) return;
+            // Con una pila suspendida el frame se encola (D-3): al tocarle
+            // puede ser que el canal ya se haya cerrado, y ahí no se entrega.
+            nyx.turn(() => {
+                if (ctl.closed) return undefined;
+                return nyx.finish(() => anchor.call(nyx.makeString(nombre), nyx.makeString(cuerpo)),
+                    () => { if (ref.afterEvent) ref.afterEvent(); });
+            });
+        };
+        // Cierre con aviso (solo variante con opciones): entrega UN evento de
+        // control al cierre y después suelta el entorno. El desanclaje va en el
+        // `finish` de esa misma entrega, no antes: con una pila suspendida (D-3)
+        // la llamada se encola y soltar el entorno antes la dejaría sin cierre.
+        const cerrarConAviso = (kind) => {
+            if (ctl.closed) return;
+            if (!avisar_ok) { soltar(); return; }
+            if (reloj) { clearTimeout(reloj); reloj = null; }
+            ctl.closed = true;                 // no más frames del servidor
+            sseChannels.delete(id);
+            nyx.turn(() => nyx.finish(
+                () => anchor.call(nyx.makeString("nyx-error"), nyx.makeString(kind)),
+                () => { if (ref.afterEvent) ref.afterEvent(); anchor.release(); }));
+        };
+        if (!fetchImpl) { cerrarConAviso("connection"); return 0n; }
+        const consumir = (texto) => {
+            buf += texto;
+            let corte;
+            while ((corte = buf.indexOf("\n")) >= 0) {
+                let linea = buf.slice(0, corte);
+                buf = buf.slice(corte + 1);
+                if (linea.endsWith("\r")) linea = linea.slice(0, -1);
+                if (linea === "") { despachar(); continue; }
+                if (linea.startsWith(":")) continue;          // comentario
+                const i = linea.indexOf(":");
+                const campo = i < 0 ? linea : linea.slice(0, i);
+                let valor = i < 0 ? "" : linea.slice(i + 1);
+                if (valor.startsWith(" ")) valor = valor.slice(1);
+                if (campo === "event") evento = valor;
+                else if (campo === "data") datos.push(valor);
+            }
+        };
+
+        if (ms > 0) {
+            reloj = setTimeout(() => {
+                reloj = null;
+                if (ac) ac.abort();
+                cerrarConAviso("timeout");
+            }, ms);
+        }
+        Promise.resolve()
+            .then(() => fetchImpl(url, initFetch("GET", "", espacio, ac && ac.signal)))
+            .then(async (r) => {
+                if (reloj) { clearTimeout(reloj); reloj = null; }   // conectó: el plazo ya no aplica
+                if (ctl.closed) { try { r && r.body && r.body.cancel && r.body.cancel(); } catch (e) {} return; }
+                const body = r && r.body;
+                if (!body || typeof body.getReader !== "function") {
+                    // Sin streaming no hay SSE: se consume lo que haya y se
+                    // cierra, en vez de fingir un canal abierto.
+                    if (r && typeof r.text === "function") consumir(await r.text());
+                    despachar();
+                    soltar();
+                    return;
+                }
+                const reader = body.getReader();
+                ctl.abort = () => { try { reader.cancel(); } catch (e) {} if (ac) ac.abort(); };
+                const dec = new TextDecoder();
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done || ctl.closed) break;
+                    consumir(dec.decode(value, { stream: true }));
+                }
+                soltar();
+            })
+            .catch(() => { cerrarConAviso("connection"); });
+        return BigInt(id);
     };
     const imports = (nyx) => ({
         js_browser_fetch(urlPtr, methodPtr, bodyPtr, handlerPtr) {
@@ -498,34 +1199,488 @@ export function browserBindings(opts = {}) {
             const method = nyx.readString(methodPtr);
             const body = nyx.readString(bodyPtr);
             const handler = nyx.readString(handlerPtr);
-            if (!fetchImpl) { callExport(handler, 0n, nyx.makeString("fetch no disponible")); return; }
+            if (!fetchImpl) { callExport(nyx, handler, () => [0n, nyx.makeString("fetch no disponible")]); return; }
             Promise.resolve(fetchImpl(url, { method: method || "GET", body: body === "" ? undefined : body }))
                 .then(async (r) => {
                     const text = await r.text();
-                    callExport(handler, BigInt(r.status), nyx.makeString(text));
+                    callExport(nyx, handler, () => [BigInt(r.status), nyx.makeString(text)]);
                 })
-                .catch((e) => { callExport(handler, 0n, nyx.makeString(String(e))); });
+                .catch((e) => { callExport(nyx, handler, () => [0n, nyx.makeString(String(e))]); });
+        },
+        // — Variantes con CLOSURE (el entorno viaja: qué línea de la pantalla
+        //   era) — mismo transporte {fn_ptr, env_ptr} que js_dom_on_fn.
+        //   El desanclaje vive ACÁ, no en el código del usuario:
+        //     fetch/timeout disparan UNA vez  → release al disparar;
+        //     interval es multi-disparo       → release en clear_timer.
+        js_browser_fetch_fn(urlPtr, methodPtr, bodyPtr, pairPtr) {
+            const url = nyx.readString(urlPtr);
+            const method = nyx.readString(methodPtr);
+            const body = nyx.readString(bodyPtr);
+            const anchor = nyx.anchorClosure(pairPtr);
+            // un solo disparo: se llame como se llame (ok, error, sin fetch),
+            // el cierre corre a lo sumo una vez y el entorno se suelta ahí.
+            const fire = (status, text) => nyx.turn(() => nyx.finish(
+                () => anchor.call(BigInt(status), nyx.makeString(text)),
+                () => {
+                    if (ref.afterEvent) ref.afterEvent();
+                    anchor.release();
+                }));
+            if (!fetchImpl) { fire(0, "fetch no disponible"); return; }
+            Promise.resolve(fetchImpl(url, { method: method || "GET", body: body === "" ? undefined : body }))
+                .then(async (r) => { fire(r.status, await r.text()); })
+                .catch((e) => { fire(0, String(e)); });
+        },
+        // Con plazo (ms > 0) y espacio destino. Si vence el plazo el cierre
+        // recibe status 0 y el cuerpo "timeout: sin respuesta en N ms"; un
+        // fallo de red, status 0 y el texto del error.
+        js_browser_fetch_fn_opts(urlPtr, methodPtr, bodyPtr, timeoutMs, spacePtr, pairPtr) {
+            fetchFn(nyx, urlPtr, methodPtr, bodyPtr, Number(timeoutMs), nyx.readString(spacePtr), pairPtr);
+        },
+        js_browser_timeout_fn(ms, pairPtr) {
+            const anchor = nyx.anchorClosure(pairPtr);
+            const id = ++timerSeq;
+            timers.set(id, setTimeout(() => {
+                timers.delete(id);
+                nyx.turn(() => nyx.finish(() => anchor.call(), () => {
+                    if (ref.afterEvent) ref.afterEvent();
+                    anchor.release();          // un solo disparo
+                    timerAnchors.delete(id);   // no dejar el anclaje muerto en la tabla
+                }));
+            }, Number(ms)));
+            timerAnchors.set(id, anchor);      // por si lo cancelan antes de disparar
+            return BigInt(id);
+        },
+        js_browser_interval_fn(ms, pairPtr) {
+            const anchor = nyx.anchorClosure(pairPtr);
+            const id = ++timerSeq;
+            // Con una pila suspendida (D-3) cada tick se encola: un interval corto
+            // durante un fetch lento entrega sus ticks juntos al terminar.
+            timers.set(id, setInterval(() => {
+                nyx.turn(() => nyx.finish(() => anchor.call(), () => {
+                    if (ref.afterEvent) ref.afterEvent();
+                }));
+            }, Number(ms)));
+            timerAnchors.set(id, anchor);      // multi-disparo: libera clear_timer
+            return BigInt(id);
         },
         js_browser_interval(ms, handlerPtr) {
             const handler = nyx.readString(handlerPtr);
             const id = ++timerSeq;
-            timers.set(id, setInterval(() => callExport(handler), Number(ms)));
+            timers.set(id, setInterval(() => callExport(nyx, handler, () => []), Number(ms)));
             return BigInt(id);
         },
         js_browser_timeout(ms, handlerPtr) {
             const handler = nyx.readString(handlerPtr);
             const id = ++timerSeq;
-            timers.set(id, setTimeout(() => { timers.delete(id); callExport(handler); }, Number(ms)));
+            timers.set(id, setTimeout(() => { timers.delete(id); callExport(nyx, handler, () => []); }, Number(ms)));
             return BigInt(id);
         },
         js_browser_clear_timer(id) {
             const h = timers.get(Number(id));
             if (h !== undefined) { clearInterval(h); clearTimeout(h); timers.delete(Number(id)); }
+            // cancelar un timer con cierre ES su desanclaje (release es
+            // idempotente: un timeout que ya disparó y liberó no se rompe).
+            const a = timerAnchors.get(Number(id));
+            if (a) { a.release(); timerAnchors.delete(Number(id)); }
         },
         js_browser_geo(handlerPtr) {
             const handler = nyx.readString(handlerPtr);
             // lat/lon son float Nyx (f64) → cruzan como Number, sin BigInt
-            geoImpl((lat, lon) => callExport(handler, lat, lon));
+            geoImpl((lat, lon) => callExport(nyx, handler, () => [lat, lon]));
+        },
+        js_browser_geo_fn(pairPtr) {
+            // Un solo disparo: si el permiso falla, geoImpl no llama y el
+            // entorno quedaría anclado para siempre — por eso el release va en
+            // un `fire` que corre a lo sumo una vez, y también en el camino de
+            // error. Mismo patrón que js_browser_fetch_fn.
+            const anchor = nyx.anchorClosure(pairPtr);
+            let done = false;
+            const fire = (lat, lon) => {
+                if (done) return;
+                done = true;
+                nyx.turn(() => nyx.finish(() => anchor.call(lat, lon), () => {
+                    if (ref.afterEvent) ref.afterEvent();
+                    anchor.release();
+                }));
+            };
+            try {
+                geoImpl((lat, lon) => fire(lat, lon));
+            } catch (e) {
+                if (!done) { done = true; anchor.release(); }
+            }
+        },
+        // ── SSE: eventos enviados por el servidor ────────────────────────
+        //
+        // Va sobre fetch con el cuerpo en STREAMING, no sobre EventSource. Dos
+        // razones, y las dos se midieron antes de elegir:
+        //   1. EventSource exige registrar cada nombre de evento de antemano
+        //      (addEventListener por nombre); no tiene catch-all. El contrato
+        //      que pidió el reporte es fn(evento, datos) con nombres
+        //      arbitrarios — «stock», «factura»—, así que hay que parsear.
+        //   2. node 20 no trae EventSource, pero sí fetch y ReadableStream.
+        //      Sobre fetch esto se puede TESTEAR bajo node con el mismo
+        //      opts.fetch que ya inyectan los tests; sobre EventSource no.
+        //
+        // MULTI-DISPARO: el entorno queda anclado hasta js_browser_sse_close.
+        // Se suelta ahí, y también si el stream termina o falla — un canal que
+        // se cae no puede dejar el cierre anclado para siempre.
+        js_browser_sse_fn(urlPtr, pairPtr) {
+            const url = nyx.readString(urlPtr);
+            const anchor = nyx.anchorClosure(pairPtr);
+            const id = ++sseSeq;
+            const ctl = { closed: false, abort: null, anchor };
+            sseChannels.set(id, ctl);
+            const soltar = () => {
+                if (ctl.closed) return;
+                ctl.closed = true;
+                sseChannels.delete(id);
+                anchor.release();
+            };
+            if (!fetchImpl) { soltar(); return 0n; }
+
+            // El parser del protocolo: líneas, y un frame por línea en blanco.
+            // `data:` puede venir repetido y se une con \n, que es lo que dice
+            // el estándar; `event:` da el nombre, ausente = "message". Las
+            // líneas que empiezan con ':' son comentarios (keep-alive) y los
+            // campos `id:`/`retry:` se ignoran a propósito: reconectar es otra
+            // decisión y no se toma acá sin pedirla.
+            let buf = "";
+            let evento = "";
+            let datos = [];
+            const despachar = () => {
+                if (datos.length === 0 && evento === "") return;
+                const nombre = evento === "" ? "message" : evento;
+                const cuerpo = datos.join("\n");
+                evento = ""; datos = [];
+                if (ctl.closed) return;
+                // Con una pila suspendida el frame se encola (D-3): al tocarle
+                // puede ser que el canal ya se haya cerrado, y ahí no se entrega.
+                nyx.turn(() => {
+                    if (ctl.closed) return undefined;
+                    return nyx.finish(() => anchor.call(nyx.makeString(nombre), nyx.makeString(cuerpo)),
+                        () => { if (ref.afterEvent) ref.afterEvent(); });
+                });
+            };
+            const consumir = (texto) => {
+                buf += texto;
+                let corte;
+                while ((corte = buf.indexOf("\n")) >= 0) {
+                    let linea = buf.slice(0, corte);
+                    buf = buf.slice(corte + 1);
+                    if (linea.endsWith("\r")) linea = linea.slice(0, -1);
+                    if (linea === "") { despachar(); continue; }
+                    if (linea.startsWith(":")) continue;          // comentario
+                    const i = linea.indexOf(":");
+                    const campo = i < 0 ? linea : linea.slice(0, i);
+                    let valor = i < 0 ? "" : linea.slice(i + 1);
+                    if (valor.startsWith(" ")) valor = valor.slice(1);
+                    if (campo === "event") evento = valor;
+                    else if (campo === "data") datos.push(valor);
+                }
+            };
+
+            Promise.resolve(fetchImpl(url, { method: "GET" }))
+                .then(async (r) => {
+                    const body = r && r.body;
+                    if (!body || typeof body.getReader !== "function") {
+                        // Sin streaming no hay SSE: se consume lo que haya y se
+                        // cierra, en vez de fingir un canal abierto.
+                        if (r && typeof r.text === "function") consumir(await r.text());
+                        despachar();
+                        soltar();
+                        return;
+                    }
+                    const reader = body.getReader();
+                    ctl.abort = () => { try { reader.cancel(); } catch (e) {} };
+                    const dec = new TextDecoder();
+                    for (;;) {
+                        const { done, value } = await reader.read();
+                        if (done || ctl.closed) break;
+                        consumir(dec.decode(value, { stream: true }));
+                    }
+                    soltar();
+                })
+                .catch(() => { soltar(); });
+            return BigInt(id);
+        },
+        // Con plazo de CONEXIÓN (ms > 0: hasta recibir la respuesta, no la
+        // duración del canal) y espacio destino. Además de los eventos del
+        // servidor, el cierre recibe eventos de control con nombre
+        // "nyx-error" y dato "timeout" o "connection", y después el canal se
+        // cierra solo (entorno soltado).
+        js_browser_sse_opts_fn(urlPtr, timeoutMs, spacePtr, pairPtr) {
+            return sseAbrir(nyx, nyx.readString(urlPtr), pairPtr, Number(timeoutMs), nyx.readString(spacePtr), true);
+        },
+        js_browser_sse_close(id) {
+            const ctl = sseChannels.get(Number(id));
+            if (!ctl) return;
+            if (ctl.abort) ctl.abort();
+            if (!ctl.closed) {
+                ctl.closed = true;
+                sseChannels.delete(Number(id));
+                ctl.anchor.release();
+            }
+        },
+        // ── Operaciones que SUSPENDEN (imports #[suspends], arco async-real-wasm) ──
+        //
+        // `await browser_fetch_await(...)` en Nyx llega acá: el import arranca la
+        // Promise y la pila wasm se desenrolla (nyx.suspend); al resolver, la
+        // función Nyx sigue en la línea siguiente con el valor. Sin callbacks.
+        //
+        // El import devuelve SOLO el cuerpo. status, kind y msg quedan en
+        // `ultimoAwait` y std/browser_await los lee con los imports de abajo justo
+        // después de reanudar: con una sola pila suspendida (D-3) no corre nada
+        // entre la reanudación y esas lecturas. Así no hay que armar un
+        // Result<HttpResp, Error> de Nyx desde JS.
+        //
+        // Errores (vocabulario cerrado de std/error): "connection" si no hubo
+        // respuesta, "timeout" si venció timeout_ms. El status HTTP NO es error.
+        js_browser_fetch_await(urlPtr, methodPtr, bodyPtr, timeoutMs) {
+            return nyx.suspend(() => {
+                const url = nyx.readString(urlPtr);
+                const method = nyx.readString(methodPtr);
+                const body = nyx.readString(bodyPtr);
+                const ms = Number(timeoutMs);
+                if (!fetchImpl) {
+                    return { status: 0, text: "", kind: "connection", msg: "fetch no disponible" };
+                }
+                const init = { method: method || "GET", body: body === "" ? undefined : body };
+                const ctl = ms > 0 && typeof AbortController !== "undefined" ? new AbortController() : null;
+                if (ctl) init.signal = ctl.signal;
+                const pedido = Promise.resolve()
+                    .then(() => fetchImpl(url, init))
+                    .then(async (r) => ({ status: r.status, text: await r.text(), kind: "", msg: "" }))
+                    .catch((e) => ({ status: 0, text: "", kind: "connection",
+                                     msg: String(e && e.message ? e.message : e) }));
+                if (!(ms > 0)) return pedido;
+                let reloj = null;
+                const plazo = new Promise((res) => {
+                    reloj = setTimeout(() => {
+                        if (ctl) ctl.abort();
+                        res({ status: 0, text: "", kind: "timeout", msg: `sin respuesta en ${ms} ms` });
+                    }, ms);
+                });
+                return Promise.race([pedido, plazo]).finally(() => clearTimeout(reloj));
+            }, (res) => {
+                ultimoAwait.status = res.status;
+                ultimoAwait.kind = res.kind;
+                ultimoAwait.msg = res.msg;
+                return nyx.makeString(res.text);
+            }, 0);
+        },
+        // Igual, con espacio destino (permiso de red local de Chrome).
+        js_browser_fetch_await_net(urlPtr, methodPtr, bodyPtr, timeoutMs, spacePtr) {
+            return fetchAwait(nyx, urlPtr, methodPtr, bodyPtr, timeoutMs, nyx.readString(spacePtr));
+        },
+        js_browser_sleep_await(ms) {
+            return nyx.suspend(() => new Promise((r) => setTimeout(r, Number(ms))), () => undefined, undefined);
+        },
+        js_browser_await_status() {
+            return BigInt(ultimoAwait.status);
+        },
+        js_browser_await_error_kind() {
+            return nyx.makeString(ultimoAwait.kind);
+        },
+        js_browser_await_error_msg() {
+            return nyx.makeString(ultimoAwait.msg);
+        },
+        // ── IndexedDB (imports #[suspends], arco browser-indexeddb) ──────────
+        //
+        // Misma forma que js_browser_fetch_await: el import devuelve SOLO el
+        // valor útil; kind/msg quedan en `ultimoIdb` y std/browser_idb los lee
+        // con los imports síncronos de abajo justo después de reanudar (D-3:
+        // una sola pila suspendida, nada corre entre la reanudación y esas
+        // lecturas).
+        //
+        // idb_get de una clave ausente: value=null del binding → kind
+        // "not_found" (D-5/D-6), NO una excepción — distingue "no existe" de
+        // un fallo real de IndexedDB.
+        js_idb_get(storePtr, keyPtr) {
+            const store = nyx.readString(storePtr);
+            const key = nyx.readString(keyPtr);
+            return nyx.suspend(() => idbImpl.get(store, key)
+                .then((v) => ({
+                    value: v,
+                    kind: v == null ? "not_found" : "",
+                    msg: v == null ? "clave ausente: " + store + "/" + key : "",
+                }))
+                .catch((e) => ({
+                    value: null,
+                    kind: (e && e.nyxKind) || "io",
+                    msg: String(e && e.message ? e.message : e),
+                })),
+            (res) => {
+                ultimoIdb.kind = res.kind;
+                ultimoIdb.msg = res.msg;
+                return nyx.makeString(res.value == null ? "" : res.value);
+            }, 0);
+        },
+        js_idb_put(storePtr, keyPtr, valPtr) {
+            const store = nyx.readString(storePtr);
+            const key = nyx.readString(keyPtr);
+            const val = nyx.readString(valPtr);
+            return nyx.suspend(() => idbImpl.put(store, key, val)
+                .then(() => ({ kind: "", msg: "" }))
+                .catch((e) => ({ kind: (e && e.nyxKind) || "io", msg: String(e && e.message ? e.message : e) })),
+            (res) => {
+                ultimoIdb.kind = res.kind;
+                ultimoIdb.msg = res.msg;
+                return 0n; // int Nyx = i64, zero mientras desenrolla
+            }, 0n);
+        },
+        js_idb_delete(storePtr, keyPtr) {
+            const store = nyx.readString(storePtr);
+            const key = nyx.readString(keyPtr);
+            return nyx.suspend(() => idbImpl.delete(store, key)
+                .then(() => ({ kind: "", msg: "" }))
+                .catch((e) => ({ kind: (e && e.nyxKind) || "io", msg: String(e && e.message ? e.message : e) })),
+            (res) => {
+                ultimoIdb.kind = res.kind;
+                ultimoIdb.msg = res.msg;
+                return 0n;
+            }, 0n);
+        },
+        js_idb_keys(storePtr) {
+            const store = nyx.readString(storePtr);
+            return nyx.suspend(() => idbImpl.keys(store)
+                .then((ks) => ({ keys: ks, kind: "", msg: "" }))
+                .catch((e) => ({ keys: [], kind: (e && e.nyxKind) || "io", msg: String(e && e.message ? e.message : e) })),
+            (res) => {
+                ultimoIdb.kind = res.kind;
+                ultimoIdb.msg = res.msg;
+                return nyx.makeArray(res.keys, "string");
+            }, 0);
+        },
+        js_idb_error_kind() {
+            return nyx.makeString(ultimoIdb.kind);
+        },
+        js_idb_error_msg() {
+            return nyx.makeString(ultimoIdb.msg);
+        },
+        // ── Web Serial (imports #[suspends], arco browser-serial) ────────────
+        //
+        // Misma forma que js_idb_*: el import devuelve SOLO el valor útil;
+        // kind/msg quedan en `ultimoSerial` y std/browser_serial los lee con
+        // los imports síncronos de abajo justo después de reanudar (D-3: una
+        // sola pila suspendida, nada corre entre la reanudación y esas
+        // lecturas).
+        js_serial_request_port() {
+            return nyx.suspend(() => serialImpl.requestPort()
+                .then((wrapped) => ({ id: registerPort(wrapped), kind: "", msg: "" }))
+                .catch((e) => ({
+                    id: 0,
+                    kind: (e && e.nyxKind) || serialDomKind(e),
+                    msg: String(e && e.message ? e.message : e),
+                })),
+            (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return BigInt(res.id);
+            }, 0n);
+        },
+        js_serial_authorized_ports() {
+            return nyx.suspend(() => serialImpl.getPorts()
+                .then((puertos) => ({ ids: puertos.map(registerPort), kind: "", msg: "" }))
+                .catch((e) => ({
+                    ids: [],
+                    kind: (e && e.nyxKind) || serialDomKind(e),
+                    msg: String(e && e.message ? e.message : e),
+                })),
+            (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return nyx.makeArray(res.ids, "int");
+            }, 0);
+        },
+        js_serial_open(id, baud, dataBits, stopBits, parityPtr) {
+            const puerto = serialPorts.get(Number(id));
+            const parity = nyx.readString(parityPtr);
+            return nyx.suspend(() => {
+                if (!puerto) {
+                    return Promise.resolve({ kind: "not_found", msg: "puerto desconocido: id " + id });
+                }
+                return puerto.open({
+                    baudRate: Number(baud),
+                    dataBits: Number(dataBits),
+                    stopBits: Number(stopBits),
+                    parity: parity || "none",
+                })
+                    .then(() => ({ kind: "", msg: "" }))
+                    .catch((e) => ({
+                        kind: (e && e.nyxKind) || serialDomKind(e),
+                        msg: String(e && e.message ? e.message : e),
+                    }));
+            }, (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return 0n;
+            }, 0n);
+        },
+        js_serial_write(id, datosPtr) {
+            const puerto = serialPorts.get(Number(id));
+            // leer el Array ACÁ, antes de suspender — el puntero es memoria
+            // del turno actual (mismo motivo que readString en js_idb_put).
+            const datos = nyx.readArray(datosPtr, "int").map((b) => Number(b) & 0xff);
+            return nyx.suspend(() => {
+                if (!puerto) {
+                    return Promise.resolve({ n: 0, kind: "not_found", msg: "puerto desconocido: id " + id });
+                }
+                return puerto.write(datos)
+                    .then((n) => ({ n, kind: "", msg: "" }))
+                    .catch((e) => ({
+                        n: 0,
+                        kind: (e && e.nyxKind) || serialDomKind(e),
+                        msg: String(e && e.message ? e.message : e),
+                    }));
+            }, (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return BigInt(res.n);
+            }, 0n);
+        },
+        js_serial_read(id, maxBytes, timeoutMs) {
+            const puerto = serialPorts.get(Number(id));
+            return nyx.suspend(() => {
+                if (!puerto) {
+                    return Promise.resolve({ bytes: [], kind: "not_found", msg: "puerto desconocido: id " + id });
+                }
+                return puerto.read(Number(maxBytes), Number(timeoutMs))
+                    .then((bytes) => ({ bytes, kind: "", msg: "" }))
+                    .catch((e) => ({
+                        bytes: [],
+                        kind: (e && e.nyxKind) || serialDomKind(e),
+                        msg: String(e && e.message ? e.message : e),
+                    }));
+            }, (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return nyx.makeArray(res.bytes, "int");
+            }, 0);
+        },
+        js_serial_close(id) {
+            const puerto = serialPorts.get(Number(id));
+            return nyx.suspend(() => {
+                // cerrar un id desconocido o ya cerrado: idempotente, no
+                // error (mismo criterio que idb_delete de una clave que ya
+                // no existe).
+                if (!puerto) return Promise.resolve({ kind: "", msg: "" });
+                return puerto.close()
+                    .then(() => { serialPorts.delete(Number(id)); return { kind: "", msg: "" }; })
+                    .catch((e) => ({
+                        kind: (e && e.nyxKind) || serialDomKind(e),
+                        msg: String(e && e.message ? e.message : e),
+                    }));
+            }, (res) => {
+                ultimoSerial.kind = res.kind;
+                ultimoSerial.msg = res.msg;
+                return 0n;
+            }, 0n);
+        },
+        js_serial_error_kind() {
+            return nyx.makeString(ultimoSerial.kind);
+        },
+        js_serial_error_msg() {
+            return nyx.makeString(ultimoSerial.msg);
         },
         js_ls_get(keyPtr) {
             const v = storage.getItem(nyx.readString(keyPtr));
@@ -542,6 +1697,32 @@ export function browserBindings(opts = {}) {
             if (!matchMediaImpl) return 0n;
             return matchMediaImpl(nyx.readString(queryPtr)).matches ? 1n : 0n;
         },
+        // — Router (Task 2): hash actual + suscripción a hashchange —
+        js_browser_get_hash() {
+            return nyx.makeString(locationImpl && locationImpl.hash ? String(locationImpl.hash) : "");
+        },
+        // Par {fn_ptr, env_ptr} vía function table (mismo mecanismo que
+        // js_dom_on_fn/js_dom_on_h). Dedupe sobre windowImpl.__nyxHandlers:
+        // sin esto, cada llamada a browser_on_hashchange (p.ej. si
+        // router_start se invocara más de una vez) apilaría otro listener
+        // en vez de reemplazar el anterior.
+        js_browser_on_hashchange_fn(pairPtr) {
+            if (!windowImpl || !windowImpl.addEventListener) return;
+            windowImpl.__nyxHandlers = windowImpl.__nyxHandlers || {};
+            if (windowImpl.__nyxHandlers["hashchange"]) {
+                windowImpl.removeEventListener("hashchange", windowImpl.__nyxHandlers["hashchange"]);
+                if (windowImpl.__nyxHandlers["hashchange"].__anchor) {
+                    windowImpl.__nyxHandlers["hashchange"].__anchor.release();
+                }
+            }
+            const anchor = nyx.anchorClosure(pairPtr);
+            const cb = () => nyx.turn(() => nyx.finish(() => anchor.call(), () => {
+                if (ref.afterEvent) ref.afterEvent();
+            }));
+            cb.__anchor = anchor;
+            windowImpl.__nyxHandlers["hashchange"] = cb;
+            windowImpl.addEventListener("hashchange", cb);
+        },
     });
     return { imports, ref };
 }
@@ -557,6 +1738,8 @@ export async function runNyxWasm(wasmBytes, opts = {}) {
         memory: null,
         malloc: null,
         table: null,
+        pinTurn: null,
+        unpinTurn: null,
         args: opts.args || ["nyx"],
         stdout: "",
         stderr: "",
@@ -586,9 +1769,39 @@ export async function runNyxWasm(wasmBytes, opts = {}) {
     if (instance.exports.nyx_wasi_malloc) {
         state.malloc = (n) => instance.exports.nyx_wasi_malloc(BigInt(n));
     }
+    // Anclaje del entorno de los cierres asíncronos (nyx.anchorClosure).
+    // Un módulo viejo, compilado sin estos exports, sigue corriendo: sin
+    // arena no hay nada que anclar, y con arena se comporta como antes.
+    if (instance.exports.nyx_arena_pin_turn) {
+        state.pinTurn = () => instance.exports.nyx_arena_pin_turn();
+        state.unpinTurn = (t) => instance.exports.nyx_arena_unpin_turn(t);
+    }
+    // Asyncify (arco async-real-wasm): el módulo pasó por wasm-opt --asyncify
+    // porque usa imports #[suspends]. El buffer donde Asyncify guarda la pila
+    // suspendida se aloca ACÁ, antes de _start y de la arena: es memoria
+    // persistente y la reusan todas las suspensiones (hay una sola a la vez).
+    // 1 MB, como la pila sombra (-z stack-size): desbordarlo es un trap ruidoso.
+    if (instance.exports.asyncify_get_state) {
+        if (!state.malloc) throw new Error("asyncify: el módulo no exporta nyx_wasi_malloc");
+        const bytesAsyncify = 1 << 20;
+        const dataPtr = state.malloc(16 + bytesAsyncify);
+        const dv = new DataView(state.memory.buffer);
+        dv.setUint32(dataPtr, dataPtr + 16, true);                   // posición actual
+        dv.setUint32(dataPtr + 4, dataPtr + 16 + bytesAsyncify, true); // fin
+        state.asy = {
+            ex: instance.exports, dataPtr, dataBytes: bytesAsyncify,
+            pending: null, value: undefined, error: null, suspended: false,
+            depth: 0, turnDepth: 0, busy: false, queue: [],
+        };
+    }
     let exitCode = 0;
     try {
-        instance.exports._start();
+        // Con Asyncify, main puede esperar al anfitrión: runNyxWasm resuelve
+        // cuando _start termina DE VERDAD. Sin Asyncify es la llamada síncrona
+        // de siempre, sin un solo tick de más (un await extra cambiaría el
+        // orden en que corren los callbacks que main dejó registrados).
+        const r = helpers.turn(() => helpers.enterWasm(() => instance.exports._start()));
+        if (r instanceof Promise) await r;
     } catch (e) {
         if (e instanceof NyxExit) { exitCode = e.code; } else { throw e; }
     }
@@ -597,6 +1810,8 @@ export async function runNyxWasm(wasmBytes, opts = {}) {
     // exports.nyx_arena_event_reset() tras cada evento (los bindings lo hacen
     // solos si seteás ref.afterEvent = arenaReset). DISCIPLINA: un handler no
     // debe guardar en globals punteros a Strings/Arrays creados en el evento.
+    // Los CIERRES asíncronos (dom_on_fn, browser_fetch_fn, ...) sí sobreviven:
+    // sus bindings los anclan con nyx.anchorClosure y liberan solos.
     if (opts.arena) {
         if (!instance.exports.nyx_arena_begin) {
             throw new Error("opts.arena: el módulo no exporta nyx_arena_begin (recompilar con runtime/wasi/nyx_arena.c)");
@@ -613,6 +1828,21 @@ export async function runNyxWasm(wasmBytes, opts = {}) {
     const arenaReset = instance.exports.nyx_arena_event_reset
         ? () => instance.exports.nyx_arena_event_reset()
         : () => {};
+    // Con Asyncify, cada fn exportada por el programa es una ENTRADA que puede
+    // suspender: devuelve una Promise si espera al anfitrión, y se encola si ya
+    // hay una pila suspendida (D-3). Los exports internos quedan crudos: el shim
+    // y los drivers los llaman DURANTE una suspensión (malloc, arena). Sin
+    // Asyncify, `exports` es el objeto de siempre, sin envoltorio.
+    let exports = instance.exports;
+    if (state.asy) {
+        const internos = /^(_start|nyx_wasi_malloc|nyx_arena_\w+|asyncify_\w+)$/;
+        exports = {};
+        for (const [k, v] of Object.entries(instance.exports)) {
+            exports[k] = typeof v === "function" && !internos.test(k)
+                ? (...args) => helpers.turn(() => helpers.enterWasm(() => v(...args)))
+                : v;
+        }
+    }
     return { exitCode, stdout: state.stdout, stderr: state.stderr,
-             exports: instance.exports, nyx: helpers, arenaReset };
+             exports, nyx: helpers, arenaReset };
 }

@@ -3,6 +3,10 @@
 // Código WMO → "texto|icono" (tarjeta del clima y página /clima)
 #[export_name = "wdesc"]
 fn wdesc(c: int) -> String {
+    return wdesc_do(c)
+}
+
+pub fn wdesc_do(c: int) -> String {
     if c == 0 { return "Despejado|☀" }
     if c == 1 or c == 2 { return "Parcialmente nublado|⛅" }
     if c == 3 { return "Nublado|☁" }
@@ -30,6 +34,10 @@ fn rel_time(delta_s: int) -> String {
 // round(deg/45) % 8 sobre [N, NE, E, SE, S, SO, O, NO]
 #[export_name = "compass"]
 fn compass(deg: int) -> String {
+    return compass_do(deg)
+}
+
+pub fn compass_do(deg: int) -> String {
     var d: int = deg % 360
     if d < 0 { d = d + 360 }
     let idx: int = ((d + 22) / 45) % 8
@@ -46,6 +54,10 @@ fn compass(deg: int) -> String {
 // AQI (US) → "etiqueta|#color" (calidad del aire en /clima)
 #[export_name = "aqi_label"]
 fn aqi_label(v: int) -> String {
+    return aqi_label_do(v)
+}
+
+pub fn aqi_label_do(v: int) -> String {
     if v <= 50 { return "Buena|#2e7d32" }
     if v <= 100 { return "Moderada|#f9a825" }
     if v <= 150 { return "Danina (sensibles)|#ef6c00" }
@@ -56,7 +68,7 @@ fn aqi_label(v: int) -> String {
 
 // Haversine en km (redondeado a entero). Coordenadas como String porque los
 // floats no cruzan la frontera JS. Usado por /sismos y /sismos/{id}.
-fn hav_f(la1: float, lo1: float, la2: float, lo2: float) -> float {
+pub fn hav_f(la1: float, lo1: float, la2: float, lo2: float) -> float {
     let t: float = 3.141592653589793 / 180.0
     let dla: float = (la2 - la1) * t
     let dlo: float = (lo2 - lo1) * t
@@ -77,7 +89,7 @@ fn hav_km(la1s: String, lo1s: String, la2s: String, lo2s: String) -> String {
 
 // ── Formateo de números estilo es-VE / es-CO ────────────────────────────────
 
-fn pad2(n: int) -> String {
+pub fn pad2(n: int) -> String {
     if n < 10 { return "0" + n.to_string() }
     return n.to_string()
 }
@@ -85,7 +97,7 @@ fn pad2(n: int) -> String {
 // ── Fechas: ISO → epoch UTC y epoch → hora local del navegador ──────────────
 // (algoritmo de días civiles de Hinnant; el offset local viene de js_tz_offset_min)
 
-fn days_from_civil(y: int, m: int, d: int) -> int {
+pub fn days_from_civil(y: int, m: int, d: int) -> int {
     var yy: int = y
     if m <= 2 { yy = yy - 1 }
     let era: int = yy / 400
@@ -100,7 +112,7 @@ fn days_from_civil(y: int, m: int, d: int) -> int {
 // "2026-07-02T13:01[:09[.862]][Z|±HH:MM]" -> epoch UTC en segundos (0 si corto).
 // Sin sufijo de zona se asume UTC (o "tiempo local plano", útil para comparar
 // los ISO locales de Open-Meteo entre sí).
-fn iso_to_epoch(iso: String) -> int {
+pub fn iso_to_epoch(iso: String) -> int {
     if iso.length() < 16 { return 0 }
     let y: int = float_to_int(string_to_float(iso.substring(0, 4)))
     let mo: int = float_to_int(string_to_float(iso.substring(5, 7)))
@@ -126,7 +138,7 @@ fn iso_to_epoch(iso: String) -> int {
 }
 
 // epoch UTC -> "y|m|d|hh|mm" en hora LOCAL del navegador
-fn civil_parts(epoch_utc: int) -> String {
+pub fn civil_parts(epoch_utc: int) -> String {
     let loc: int = epoch_utc + tz_offset() * 60
     var z: int = loc / 86400
     let sod: int = loc % 86400
@@ -162,7 +174,7 @@ fn fmt_dmy_hm(epoch_utc: int) -> String {
 // se extraen a mano. Tolera JSON con espacios/saltos tras los ":" (dolarapi).
 
 // Posición del valor tras "key" (saltando : y whitespace); -1 si no está.
-fn jvalpos(body: String, key: String) -> int {
+pub fn jvalpos(body: String, key: String) -> int {
     let a: String = "\"" + key + "\""
     let p: int = body.indexOf(a)
     if p < 0 { return 0 - 1 }
@@ -180,7 +192,7 @@ fn jvalpos(body: String, key: String) -> int {
 }
 
 // Literal numérico crudo tras "key" ("" si no está o es null).
-fn jnum(body: String, key: String) -> String {
+pub fn jnum(body: String, key: String) -> String {
     let i0: int = jvalpos(body, key)
     if i0 < 0 { return "" }
     var i: int = i0
@@ -199,7 +211,7 @@ fn jnum(body: String, key: String) -> String {
 }
 
 // Valor string tras "key" ("" si no está o no es string).
-fn jstr(body: String, key: String) -> String {
+pub fn jstr(body: String, key: String) -> String {
     let i0: int = jvalpos(body, key)
     if i0 < 0 { return "" }
     if body.substring(i0, i0 + 1) != "\"" { return "" }
@@ -211,7 +223,7 @@ fn jstr(body: String, key: String) -> String {
 
 // Recorte del objeto que EMPIEZA en la primera aparición de marker (hasta su
 // "}"). Suficiente para objetos planos (dolarapi item, binancep2p, bitcoin…).
-fn jseg(body: String, marker: String) -> String {
+pub fn jseg(body: String, marker: String) -> String {
     let p: int = body.indexOf(marker)
     if p < 0 { return "" }
     let rest: String = body.substring(p, body.length())
@@ -239,7 +251,7 @@ fn group_miles(n: int) -> String {
 
 // Formateo estilo toLocaleString es-VE/es-CO: miles con ".", decimales con
 // ",", entre min_d y max_d decimales (los ceros finales se recortan hasta min_d)
-fn fmt_f(v: float, min_d: int, max_d: int) -> String {
+pub fn fmt_f(v: float, min_d: int, max_d: int) -> String {
     var scale: int = 1
     var i: int = 0
     while i < max_d {
@@ -265,12 +277,20 @@ fn fmt_f(v: float, min_d: int, max_d: int) -> String {
 // Float (como String) → "1.234,56" (es-VE, 2 decimales)
 #[export_name = "fmt_bs"]
 fn fmt_bs(vs: String) -> String {
+    return fmt_bs_do(vs)
+}
+
+pub fn fmt_bs_do(vs: String) -> String {
     return fmt_f(string_to_float(vs), 2, 2)
 }
 
 // Float (como String) → "4.124" (es-CO, 0 decimales, redondeado)
 #[export_name = "fmt_cop"]
 fn fmt_cop(vs: String) -> String {
+    return fmt_cop_do(vs)
+}
+
+pub fn fmt_cop_do(vs: String) -> String {
     return fmt_f(string_to_float(vs), 0, 0)
 }
 

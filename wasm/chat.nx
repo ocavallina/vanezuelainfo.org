@@ -52,6 +52,10 @@ fn chat_fmt_time(t: int) -> String {
 // Markup de una fila de mensaje (escapado — mismo shape que chat.js).
 #[export_name = "chat_row_html"]
 fn chat_row_html(t: int, n: String, m: String) -> String {
+    return chat_row_html_do(t, n, m)
+}
+
+fn chat_row_html_do(t: int, n: String, m: String) -> String {
     var sb: StringBuilder = StringBuilder.new()
     sb.append("<div class=\"chat-msg\"><div class=\"chat-msg-head\"><span class=\"chat-msg-nick\">")
     sb.append(esc(n))
@@ -70,7 +74,7 @@ fn chat_add_obj(obj: Array, from_ws: int) {
     let m: String = json_as_string(json_get(obj, "m"))
     if m.length() == 0 { return }
     let key: String = t.to_string() + "|" + n + "|" + m
-    js_chat_add(key, chat_row_html(t, n, m), from_ws)
+    js_chat_add(key, chat_row_html_do(t, n, m), from_ws)
 }
 
 // WS: llega un mensaje (JSON {t,n,m}).
@@ -97,6 +101,10 @@ fn chat_on_list(status: int, body: String) {
 
 #[export_name = "chat_load"]
 fn chat_load() {
+    chat_load_do()
+}
+
+fn chat_load_do() {
     browser_fetch("/api/chat/" + chat_room(), "GET", "", "chat_on_list")
 }
 
@@ -108,7 +116,7 @@ fn chat_stop_poll() {
 }
 fn chat_start_poll() {
     if chat_poll[0] != 0 { return }
-    chat_load()
+    chat_load_do()
     chat_poll[0] = browser_interval(4000, "chat_load")
 }
 fn chat_stop_ping() {
@@ -138,7 +146,7 @@ fn chat_on_open() {
     chat_tries[0] = 0
     chat_set_live(1)
     chat_stop_poll()
-    chat_load()
+    chat_load_do()
     chat_stop_ping()
     chat_ping_id[0] = browser_interval(25000, "chat_ping")
 }
@@ -179,7 +187,7 @@ fn chat_visibility() {
         chat_stop_poll()
     } else {
         if chat_wsok[0] == 1 {
-            chat_load()
+            chat_load_do()
         } else {
             chat_start_poll()
             chat_connect()
@@ -188,8 +196,15 @@ fn chat_visibility() {
 }
 
 // Contador N/280 del textarea.
+// El cuerpo vive en chat_count_do y el export solo delega: con el compilador
+// 0.44, llamar DESDE Nyx a una función con #[export_name] genera una referencia
+// al nombre con prefijo de módulo (@chat__chat_count) que no existe -> clang falla.
 #[export_name = "chat_count"]
 fn chat_count() {
+    chat_count_do()
+}
+
+fn chat_count_do() {
     let t: String = dom_get_value("#chat-text")
     dom_set_html("#chat-count", t.length().to_string() + "/280")
 }
@@ -217,9 +232,9 @@ fn chat_on_send(status: int, body: String) {
     let ok: int = json_as_int(json_get(obj, "ok"))
     if ok == 1 {
         js_set_value("#chat-text", "")
-        chat_count()
+        chat_count_do()
         dom_set_html("#chat-status", "")
-        if chat_wsok[0] == 0 { chat_load() }
+        if chat_wsok[0] == 0 { chat_load_do() }
     } else {
         var err: String = json_as_string(json_get(obj, "error"))
         if err.length() == 0 { err = "No se pudo enviar" }
@@ -230,6 +245,10 @@ fn chat_on_send(status: int, body: String) {
 // Salas: pobla el <select> desde /api/rooms.
 #[export_name = "chat_rooms_load"]
 fn chat_rooms_load() {
+    chat_rooms_load_do()
+}
+
+fn chat_rooms_load_do() {
     browser_fetch("/api/rooms", "GET", "", "chat_on_rooms")
 }
 
@@ -264,22 +283,22 @@ fn chat_room_change() {
     js_chat_clear()
     chat_stop_ping()
     js_ws_close()
-    chat_load()
+    chat_load_do()
     chat_connect()
 }
 
 // Arranque (se llamará desde main() en el go-live para pg=="chat").
-fn chat_boot() {
+pub fn chat_boot() {
     let sn: String = ls_get("chat_nick")
     if sn.length() > 0 { js_set_value("#chat-nick", sn) }
     dom_on("#chat-text", "input", "chat_count")
     dom_on("#chat-room", "change", "chat_room_change")
     js_on_submit("#chat-form", "chat_send")
     js_on_visibility("chat_visibility")
-    chat_count()
-    chat_rooms_load()
+    chat_count_do()
+    chat_rooms_load_do()
     chat_rooms_id[0] = browser_interval(60000, "chat_rooms_load")
-    chat_load()
+    chat_load_do()
     chat_start_poll()
     chat_connect()
 }

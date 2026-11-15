@@ -1,5 +1,5 @@
 // imports.mjs — test headless de veninfo.wasm bajo Node con el mismo shim del
-// navegador: node /home/admin/NyxLang/examples/browser/run-node.mjs \
+// navegador: node ~/nyxlang/examples/browser/run-node.mjs \
 //   static/assets/veninfo.wasm wasm/tests/imports.mjs
 // Mockea el DOM y localStorage (los externs que provee nyx-loader.js) y
 // asevera los exports de cada fase.
@@ -251,6 +251,13 @@ export async function afterStart({ exports, nyx }) {
   if (values["#calc-amt"] !== "14") throw new Error("FALLO mc coma: " + values["#calc-amt"]);
   values["#mc-expr"] = "6×7"; exports.mcalc_eval();           // × normaliza a *
   if (values["#calc-amt"] !== "42") throw new Error("FALLO mc ×: " + values["#calc-amt"]);
+  // Número mal formado: antes llegaba a string_to_float y ABORTABA el módulo.
+  for (const mala of [".", "1.2.3", "..", "5+."]) {
+    values["#calc-amt"] = "77"; values["#mc-expr"] = mala; exports.mcalc_eval();
+    if (values["#calc-amt"] !== "77") throw new Error("FALLO mc '" + mala + "' cambió monto: " + values["#calc-amt"]);
+  }
+  values["#mc-expr"] = "1.5+.5"; exports.mcalc_eval();        // ".5" sigue siendo válido
+  if (values["#calc-amt"] !== "2") throw new Error("FALLO mc 1.5+.5: " + values["#calc-amt"]);
   // Inválida: NO cambia #calc-amt y avisa
   values["#calc-amt"] = "99"; values["#mc-expr"] = "2++"; exports.mcalc_eval();
   if (values["#calc-amt"] !== "99") throw new Error("FALLO mc inválida cambió monto: " + values["#calc-amt"]);

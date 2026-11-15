@@ -77,7 +77,7 @@ fn main() {
         clima_boot()
     }
     if pg == "sismos" {
-        sismos_boot()
+        sismos_boot_do()
     }
     if pg == "noticias" {
         news_boot()

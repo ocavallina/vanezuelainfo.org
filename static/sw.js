@@ -3,7 +3,7 @@
 //  - Navegaciones (paginas): network-first con fallback a caché (y a "/").
 //  - Recursos propios (assets/iconos): cache-first con relleno.
 //  - Recursos de otros origenes (Leaflet CDN, teselas OSM): se dejan a la red.
-const CACHE = 'veninfo-v69';
+const CACHE = 'veninfo-v70';
 const SHELL = ['/', '/calculadora', '/assets/style.css?v=68', '/icon.svg', '/icon-192.png', '/icon-calc.svg', '/icon-calc-192.png', '/icon-calc-512.png', '/manifest-calc.webmanifest'];
 
 self.addEventListener('install', function (e) {
@@ -68,8 +68,12 @@ self.addEventListener('fetch', function (e) {
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req).then(function (resp) {
-        const copy = resp.clone();
-        caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        // Solo se guarda una respuesta correcta: un 502/404 cacheado se quedaba
+        // servido desde cache hasta el siguiente cambio de version.
+        if (resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        }
         return resp;
       }).catch(function () {
         return caches.match(req).then(function (r) { return r || caches.match('/'); });
@@ -81,8 +85,12 @@ self.addEventListener('fetch', function (e) {
   e.respondWith(
     caches.match(req).then(function (cached) {
       return cached || fetch(req).then(function (resp) {
-        const copy = resp.clone();
-        caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        // Solo se guarda una respuesta correcta: un 502/404 cacheado se quedaba
+        // servido desde cache hasta el siguiente cambio de version.
+        if (resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE).then(function (c) { c.put(req, copy); });
+        }
         return resp;
       });
     })
